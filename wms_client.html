@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Klient – PRG WMS</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+    :root {
+      --bg:#f0f2f5; --surface:#fff; --border:#e2e6ed;
+      --accent:#0a7c4e; --accent-light:#e8f7f1;
+      --danger:#c0392b; --danger-light:#fdecea;
+      --warning:#e67e22; --warning-light:#fef3e8;
+      --info:#2980b9; --info-light:#eaf4fb;
+      --text:#1a1d27; --muted:#7a8090;
+      --shadow:0 2px 12px rgba(0,0,0,0.07);
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Inter',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    .topbar { background:var(--surface); border-bottom:1px solid var(--border); padding:14px 28px; display:flex; align-items:center; gap:14px; box-shadow:var(--shadow); position:sticky; top:0; z-index:40; }
+    .back-btn { background:var(--bg); border:1.5px solid var(--border); border-radius:7px; padding:7px 14px; font-size:13px; font-weight:600; color:var(--muted); cursor:pointer; text-decoration:none; display:flex; align-items:center; gap:6px; }
+    .back-btn:hover { border-color:var(--accent); color:var(--accent); }
+    .topbar-title { font-family:'Barlow Condensed',sans-serif; font-size:22px; font-weight:700; flex:1; }
+    .topbar-actions { display:flex; gap:8px; }
+    .btn { padding:9px 18px; border:none; border-radius:8px; cursor:pointer; font-family:'Inter',sans-serif; font-size:13px; font-weight:600; transition:opacity 0.15s; text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
+    .btn:active { opacity:0.8; }
+    .btn-primary { background:var(--accent); color:#fff; }
+    .btn-secondary { background:var(--bg); color:var(--muted); border:1.5px solid var(--border); }
+    .btn-danger { background:var(--danger); color:#fff; }
+    .btn-sm { padding:6px 12px; font-size:12px; }
+    .content { padding:28px; max-width:1100px; margin:0 auto; }
+    .grid-2 { display:grid; grid-template-columns:320px 1fr; gap:24px; align-items:start; }
+    @media(max-width:800px){ .grid-2 { grid-template-columns:1fr; } .content { padding:16px; } }
+    .card { background:var(--surface); border-radius:12px; box-shadow:var(--shadow); border:1px solid var(--border); overflow:hidden; margin-bottom:20px; }
+    .card-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+    .card-header h3 { font-family:'Barlow Condensed',sans-serif; font-size:17px; font-weight:700; }
+    .card-body { padding:20px; }
+    .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .info-item label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.3px; display:block; margin-bottom:4px; font-weight:600; }
+    .info-item span { font-size:14px; font-weight:500; }
+    .info-item.full { grid-column:1/-1; }
+    .badge { display:inline-block; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:600; }
+    .badge-green  { background:var(--accent-light); color:var(--accent); }
+    .badge-orange { background:var(--warning-light); color:var(--warning); }
+    .badge-red    { background:var(--danger-light); color:var(--danger); }
+    .badge-blue   { background:var(--info-light); color:var(--info); }
+    .badge-gray   { background:#f0f2f5; color:var(--muted); }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    thead { background:#f8f9fb; }
+    th { padding:9px 14px; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--muted); border-bottom:1px solid var(--border); font-weight:600; }
+    td { padding:10px 14px; border-bottom:1px solid var(--border); vertical-align:middle; }
+    tbody tr:last-child td { border-bottom:none; }
+    tbody tr:hover { background:#fafbfc; }
+    .empty-row td { text-align:center; color:var(--muted); padding:28px; }
+    .tabs { display:flex; border-bottom:2px solid var(--border); }
+    .tab { padding:12px 20px; cursor:pointer; font-size:14px; font-weight:600; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-2px; }
+    .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+    .form-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+    .form-row.single { grid-template-columns:1fr; }
+    .form-group { display:flex; flex-direction:column; gap:5px; }
+    .form-group label { font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.3px; }
+    .form-group input, .form-group textarea { padding:9px 12px; border:1.5px solid var(--border); border-radius:7px; font-family:'Inter',sans-serif; font-size:13px; outline:none; transition:border-color 0.2s; }
+    .form-group input:focus, .form-group textarea:focus { border-color:var(--accent); }
+    .form-group textarea { resize:vertical; min-height:70px; }
+    .form-section { font-family:'Barlow Condensed',sans-serif; font-size:14px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin:16px 0 10px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+    .avatar { width:80px; height:80px; background:var(--accent-light); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:32px; margin:0 auto 16px; }
+    .client-name { font-family:'Barlow Condensed',sans-serif; font-size:26px; font-weight:700; text-align:center; margin-bottom:4px; }
+    .client-meta { text-align:center; color:var(--muted); font-size:13px; margin-bottom:16px; }
+    #toast { position:fixed; bottom:24px; right:24px; background:#1a1d27; color:#fff; padding:12px 20px; border-radius:9px; font-size:13px; font-weight:500; z-index:999; opacity:0; transition:opacity 0.3s; pointer-events:none; }
+    #toast.show { opacity:1; }
+    .loading { text-align:center; padding:60px; color:var(--muted); font-size:15px; }
+    .stat-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+    .stat-mini { background:var(--bg); border-radius:9px; padding:14px; text-align:center; }
+    .stat-mini .val { font-family:'Barlow Condensed',sans-serif; font-size:28px; font-weight:700; color:var(--accent); }
+    .stat-mini .lbl { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.3px; }
+  </style>
+</head>
+<body>
+
+<div id="loading-screen" class="loading">⏳ Načítám…</div>
+
+<div id="client-content" style="display:none">
+  <div class="topbar">
+    <a href="wms_dashboard.html" class="back-btn">← Zpět</a>
+    <div class="topbar-title" id="client-title">Klient</div>
+    <div class="topbar-actions">
+      <button class="btn btn-danger btn-sm" onclick="deleteClient()">🗑 Smazat</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="grid-2">
+      <!-- LEFT -->
+      <div>
+        <div class="card">
+          <div class="card-body">
+            <div class="avatar">🏢</div>
+            <div class="client-name" id="c-name">–</div>
+            <div class="client-meta" id="c-meta">–</div>
+            <div class="stat-row">
+              <div class="stat-mini"><div class="val" id="c-stock-count">–</div><div class="lbl">Skladové karty</div></div>
+              <div class="stat-mini"><div class="val" id="c-scan-count">–</div><div class="lbl">Skeny celkem</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>📋 Kontaktní info</h3></div>
+          <div class="card-body">
+            <div class="info-grid">
+              <div class="info-item"><label>E-mail</label><span id="c-email">–</span></div>
+              <div class="info-item"><label>Telefon</label><span id="c-phone">–</span></div>
+              <div class="info-item"><label>IČ</label><span id="c-ico" style="font-family:'JetBrains Mono',monospace">–</span></div>
+              <div class="info-item"><label>DIČ</label><span id="c-dic" style="font-family:'JetBrains Mono',monospace">–</span></div>
+              <div class="info-item full"><label>Adresa</label><span id="c-address">–</span></div>
+              <div class="info-item full"><label>Poznámka</label><span id="c-notes" style="color:var(--muted)">–</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT -->
+      <div>
+        <div class="card">
+          <div class="tabs">
+            <div class="tab active" onclick="switchTab('stock')">📦 Sklad</div>
+            <div class="tab" onclick="switchTab('scans')">📱 Skeny</div>
+            <div class="tab" onclick="switchTab('edit')">✏️ Editace</div>
+          </div>
+
+          <!-- Sklad -->
+          <div id="tab-stock">
+            <table>
+              <thead><tr><th>Název</th><th>EAN</th><th>Stav</th><th>Lokace</th><th></th></tr></thead>
+              <tbody id="stock-tbody"><tr class="empty-row"><td colspan="5">Načítám…</td></tr></tbody>
+            </table>
+          </div>
+
+          <!-- Skeny -->
+          <div id="tab-scans" style="display:none">
+            <table>
+              <thead><tr><th>EAN / IoT ID</th><th>Box</th><th>Ověřeno</th><th>Kdo</th><th>Kdy</th></tr></thead>
+              <tbody id="scans-tbody"><tr class="empty-row"><td colspan="5">Načítám…</td></tr></tbody>
+            </table>
+          </div>
+
+          <!-- Edit -->
+          <div id="tab-edit" style="display:none;padding:20px">
+            <div class="form-section">Kontakt</div>
+            <div class="form-row single"><div class="form-group"><label>Název *</label><input id="e-name" type="text"></div></div>
+            <div class="form-row"><div class="form-group"><label>E-mail</label><input id="e-email" type="email"></div><div class="form-group"><label>Telefon</label><input id="e-phone" type="tel"></div></div>
+            <div class="form-section">Fakturační údaje</div>
+            <div class="form-row"><div class="form-group"><label>IČ</label><input id="e-ico" type="text"></div><div class="form-group"><label>DIČ</label><input id="e-dic" type="text"></div></div>
+            <div class="form-row single"><div class="form-group"><label>Adresa</label><input id="e-address" type="text"></div></div>
+            <div class="form-row"><div class="form-group"><label>Město</label><input id="e-city" type="text"></div><div class="form-group"><label>Stát</label><input id="e-country" type="text"></div></div>
+            <div class="form-row single"><div class="form-group"><label>Poznámka</label><textarea id="e-notes"></textarea></div></div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+              <button class="btn btn-secondary" onclick="cancelEdit()">Zrušit</button>
+              <button class="btn btn-primary" onclick="saveEdit()">💾 Uložit změny</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+var SUPA_URL = "https://ujvqanqqhmnfxsfeqixc.supabase.co";
+var SUPA_KEY = "sb_publishable_5o19BnZUEi8j-rU5DDAgBA_HwKB7V-v";
+var supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+var clientId = null;
+var clientData = null;
+var currentUser = null;
+
+async function init() {
+  var res = await supa.auth.getSession();
+  if (!res.data || !res.data.session) { window.location.href='wms_dashboard.html'; return; }
+  currentUser = res.data.session.user;
+  var params = new URLSearchParams(window.location.search);
+  clientId = parseInt(params.get('id'));
+  if (!clientId) { window.location.href='wms_dashboard.html'; return; }
+  await loadClient();
+}
+
+async function loadClient() {
+  var res = await supa.from('clients').select('*').eq('id', clientId).single();
+  if (res.error || !res.data) { toast('❌ Klient nenalezen'); return; }
+  clientData = res.data;
+  renderClient();
+  loadStock();
+  loadScans();
+  document.getElementById('loading-screen').style.display = 'none';
+  document.getElementById('client-content').style.display = 'block';
+}
+
+function renderClient() {
+  var c = clientData;
+  document.title = c.name + ' – PRG WMS';
+  document.getElementById('client-title').textContent = '🏢 '+c.name;
+  document.getElementById('c-name').textContent  = c.name;
+  document.getElementById('c-meta').textContent  = (c.city||'')+(c.city&&c.country?', ':'')+( c.country||'');
+  document.getElementById('c-email').textContent = c.email||'–';
+  document.getElementById('c-phone').textContent = c.phone||'–';
+  document.getElementById('c-ico').textContent   = c.ico||'–';
+  document.getElementById('c-dic').textContent   = c.dic||'–';
+  document.getElementById('c-address').textContent = [c.address,c.city,c.country].filter(Boolean).join(', ')||'–';
+  document.getElementById('c-notes').textContent = c.notes||'–';
+  document.getElementById('e-name').value    = c.name;
+  document.getElementById('e-email').value   = c.email||'';
+  document.getElementById('e-phone').value   = c.phone||'';
+  document.getElementById('e-ico').value     = c.ico||'';
+  document.getElementById('e-dic').value     = c.dic||'';
+  document.getElementById('e-address').value = c.address||'';
+  document.getElementById('e-city').value    = c.city||'';
+  document.getElementById('e-country').value = c.country||'CZ';
+  document.getElementById('e-notes').value   = c.notes||'';
+}
+
+async function loadStock() {
+  var res = await supa.from('stock_items').select('*').eq('client_id', clientId).order('name');
+  var data = res.data || [];
+  document.getElementById('c-stock-count').textContent = data.length;
+  var tbody = document.getElementById('stock-tbody');
+  if (!data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Žádné skladové karty</td></tr>'; return; }
+  tbody.innerHTML = data.map(function(i){
+    var qtyBadge = i.quantity <= i.min_stock
+      ? '<span class="badge badge-orange">'+i.quantity+'</span>'
+      : '<span class="badge badge-green">'+i.quantity+'</span>';
+    return '<tr>'
+      +'<td><a href="wms_item.html?id='+i.id+'" style="font-weight:700;color:var(--accent);text-decoration:none">'+i.name+'</a></td>'
+      +'<td><span style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+(i.ean||'–')+'</span></td>'
+      +'<td>'+qtyBadge+'</td>'
+      +'<td>'+(i.location||'–')+'</td>'
+      +'<td><a href="wms_item.html?id='+i.id+'" class="btn btn-secondary btn-sm">Detail →</a></td>'
+    +'</tr>';
+  }).join('');
+}
+
+async function loadScans() {
+  var stockRes = await supa.from('stock_items').select('ean').eq('client_id', clientId);
+  var eans = (stockRes.data||[]).map(function(i){ return i.ean; }).filter(Boolean);
+  document.getElementById('c-scan-count').textContent = eans.length ? '…' : '0';
+  if (!eans.length) { document.getElementById('scans-tbody').innerHTML = '<tr class="empty-row"><td colspan="5">Žádné EAN – nelze spárovat skeny</td></tr>'; return; }
+  var res = await supa.from('scans').select('*,profiles(name)').in('ean', eans).order('scanned_at',{ascending:false}).limit(50);
+  var data = res.data || [];
+  document.getElementById('c-scan-count').textContent = data.length;
+  var tbody = document.getElementById('scans-tbody');
+  if (!data.length) { tbody.innerHTML = '<tr class="empty-row"><td colspan="5">Žádné skeny</td></tr>'; return; }
+  tbody.innerHTML = data.map(function(s){
+    var uname = (s.profiles&&s.profiles.name) ? s.profiles.name : '–';
+    var verified = s.verified ? '<span class="badge badge-green">✅</span>' : '<span class="badge badge-gray">–</span>';
+    return '<tr>'
+      +'<td><span style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+(s.ean||s.iot_id||'–')+'</span></td>'
+      +'<td>'+(s.box_number||'–')+'</td>'
+      +'<td>'+verified+'</td>'
+      +'<td>'+uname+'</td>'
+      +'<td style="font-size:11px;color:var(--muted)">'+new Date(s.scanned_at).toLocaleString('cs-CZ')+'</td>'
+    +'</tr>';
+  }).join('');
+}
+
+async function saveEdit() {
+  var name = document.getElementById('e-name').value.trim();
+  if (!name) { toast('⚠️ Zadej název'); return; }
+  var payload = {
+    name:    name,
+    email:   document.getElementById('e-email').value.trim()||null,
+    phone:   document.getElementById('e-phone').value.trim()||null,
+    ico:     document.getElementById('e-ico').value.trim()||null,
+    dic:     document.getElementById('e-dic').value.trim()||null,
+    address: document.getElementById('e-address').value.trim()||null,
+    city:    document.getElementById('e-city').value.trim()||null,
+    country: document.getElementById('e-country').value.trim()||'CZ',
+    notes:   document.getElementById('e-notes').value.trim()||null
+  };
+  var res = await supa.from('clients').update(payload).eq('id', clientId);
+  if (res.error) { toast('❌ '+res.error.message); return; }
+  Object.assign(clientData, payload);
+  renderClient();
+  switchTab('stock');
+  toast('✅ Klient uložen');
+}
+
+async function deleteClient() {
+  if (!confirm('Smazat tohoto klienta?')) return;
+  await supa.from('clients').delete().eq('id', clientId);
+  toast('🗑 Klient smazán');
+  setTimeout(function(){ window.location.href='wms_dashboard.html'; }, 1000);
+}
+
+function switchTab(name) {
+  ['stock','scans','edit'].forEach(function(t){
+    document.getElementById('tab-'+t).style.display = t===name?'block':'none';
+  });
+  document.querySelectorAll('.tab').forEach(function(el,i){
+    el.classList.toggle('active', ['stock','scans','edit'][i]===name);
+  });
+}
+function cancelEdit() { switchTab('stock'); }
+
+var toastTimer;
+function toast(msg) {
+  var el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){ el.classList.remove('show'); },2800);
+}
+
+init();
+</script>
+</body>
+</html>
