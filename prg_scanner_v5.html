@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>PRG Scanner</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
+
+    :root {
+      --bg: #f4f6f8;
+      --surface: #ffffff;
+      --border: #dde1e8;
+      --accent: #0a7c4e;
+      --accent-light: #e8f7f1;
+      --danger: #c0392b;
+      --danger-light: #fdecea;
+      --warning: #e67e22;
+      --warning-light: #fef3e8;
+      --info: #2980b9;
+      --info-light: #eaf4fb;
+      --text: #1a1d27;
+      --muted: #7a8090;
+      --shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+    body {
+      font-family: 'Barlow Condensed', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .modal-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100; padding: 20px;
+    }
+    .modal {
+      background: var(--surface);
+      border-radius: 16px;
+      padding: 26px 22px;
+      width: 100%; max-width: 340px;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.22);
+      text-align: center;
+    }
+    .modal h2 { font-size: 22px; font-weight: 700; margin-bottom: 8px; color: var(--accent); }
+    .modal h2.danger { color: var(--danger); }
+    .modal h2.info   { color: var(--info); }
+    .modal p  { font-size: 15px; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+    .info-box {
+      border-radius: 9px; padding: 11px 13px;
+      margin-bottom: 15px; text-align: left;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px; color: var(--text); line-height: 1.7;
+      white-space: pre-wrap;
+    }
+    .info-box.green  { background: var(--accent-light);  border: 1px solid #a0dcc0; }
+    .info-box.orange { background: var(--warning-light); border: 1px solid #f0c890; }
+    .info-box.red    { background: var(--danger-light);  border: 1px solid #f0b0b0; }
+    .info-box.blue   { background: var(--info-light);    border: 1px solid #a0c8e8; }
+
+    .modal input {
+      width: 100%; padding: 13px 14px;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 18px; font-weight: 600;
+      border: 2px solid var(--border); border-radius: 9px;
+      color: var(--text); background: var(--bg);
+      margin-bottom: 14px; outline: none;
+      transition: border-color 0.2s;
+    }
+    .modal input:focus { border-color: var(--accent); }
+
+    .modal-btn {
+      display: block; width: 100%;
+      padding: 13px;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 17px; font-weight: 700; letter-spacing: 1px;
+      border: none; border-radius: 9px; cursor: pointer;
+      background: var(--accent); color: #fff;
+      margin-bottom: 9px; transition: opacity 0.15s;
+    }
+    .modal-btn:active { opacity: 0.8; }
+    .modal-btn:last-child { margin-bottom: 0; }
+    .modal-btn.secondary { background: var(--bg); color: var(--muted); border: 1px solid var(--border); font-weight: 600; }
+    .modal-btn.danger    { background: var(--danger); }
+    .modal-btn.warn      { background: var(--warning); }
+    .modal-btn.info      { background: var(--info); }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 14px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0; box-shadow: var(--shadow); z-index: 10;
+    }
+    header h1 { font-size: 19px; font-weight: 700; letter-spacing: 1.5px; color: var(--accent); }
+    #user-badge {
+      display: flex; align-items: center; gap: 5px;
+      background: var(--accent-light); border-radius: 20px;
+      padding: 5px 11px; font-size: 13px; font-weight: 700; color: var(--accent);
+      cursor: pointer; user-select: none;
+    }
+    #mode-badge {
+      display: none;
+      align-items: center; gap: 5px;
+      background: var(--info-light); border-radius: 20px;
+      padding: 5px 11px; font-size: 12px; font-weight: 700; color: var(--info);
+    }
+
+    #cam-section { flex-shrink: 0; background: #000; position: relative; }
+    #cam-wrap { position: relative; width: 100%; aspect-ratio: 4/3; overflow: hidden; }
+    video { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+    #aim {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 55%; height: 40%;
+      border: 2px solid rgba(10,124,78,0.6);
+      border-radius: 6px; pointer-events: none;
+      transition: border-color 0.3s;
+    }
+    #aim::before, #aim::after, #aim .c2, #aim .c3 {
+      content: ''; position: absolute; width: 18px; height: 18px;
+      border-color: var(--accent); border-style: solid;
+      transition: border-color 0.3s;
+    }
+    #aim::before { top:-2px; left:-2px;    border-width: 3px 0 0 3px; }
+    #aim::after  { top:-2px; right:-2px;   border-width: 3px 3px 0 0; }
+    #aim .c2     { bottom:-2px; left:-2px;  border-width: 0 0 3px 3px; }
+    #aim .c3     { bottom:-2px; right:-2px; border-width: 0 3px 3px 0; }
+    #aim.verify { border-color: rgba(41,128,185,0.7); }
+    #aim.verify::before, #aim.verify::after, #aim.verify .c2, #aim.verify .c3 { border-color: var(--info); }
+    #aim.bad { border-color: rgba(192,57,43,0.8); }
+    #aim.bad::before, #aim.bad::after, #aim.bad .c2, #aim.bad .c3 { border-color: var(--danger); }
+
+    #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; transition: opacity 0.05s; }
+
+    #cam-status {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: rgba(0,0,0,0.6);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; color: #fff;
+      padding: 5px 10px; text-align: center;
+    }
+    #focus-ring {
+      position: absolute; width: 52px; height: 52px;
+      border: 2px solid #fff; border-radius: 50%;
+      pointer-events: none; display: none;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.4);
+      transition: opacity 0.4s;
+    }
+    #focus-ring.active { display: block; }
+
+    #loc-pill, #dev-pill {
+      position: absolute; top: 8px; left: 8px;
+      color: #fff; font-size: 12px; font-weight: 700;
+      padding: 4px 12px; border-radius: 20px;
+      display: none; letter-spacing: 0.5px;
+    }
+    #loc-pill { background: rgba(230,126,34,0.92); }
+    #dev-pill { background: rgba(41,128,185,0.92); }
+
+    #table-area { flex: 1; overflow-y: auto; background: var(--bg); -webkit-overflow-scrolling: touch; }
+    #status-bar {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 7px 12px; font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; color: var(--accent); min-height: 30px;
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead { background: var(--surface); position: sticky; top: 0; z-index: 5; }
+    th {
+      padding: 8px 7px; text-align: left;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 12px; letter-spacing: 1px; color: var(--muted);
+      text-transform: uppercase; border-bottom: 2px solid var(--border);
+    }
+    tbody tr { border-bottom: 1px solid var(--border); background: var(--surface); transition: background 0.4s; }
+    tbody tr:nth-child(even) { background: #fafbfc; }
+    tbody tr.highlight { background: var(--accent-light) !important; }
+
+    td { padding: 7px 7px; vertical-align: middle; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+    td.ean-cell { color: var(--text); word-break: break-all; max-width: 100px; }
+    td.loc-cell { color: var(--warning); font-weight: 700; }
+    td.box-cell { color: var(--info); font-weight: 700; text-align: center; }
+    td.qty-cell { color: var(--accent); font-weight: 700; text-align: center; }
+    td.acts-cell { text-align: right; white-space: nowrap; }
+
+    .qty-btn {
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); width: 26px; height: 26px;
+      border-radius: 5px; font-size: 16px; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      margin-left: 2px;
+    }
+    .qty-btn.minus { color: var(--danger); border-color: #f0c0bb; }
+
+    #empty-state {
+      text-align: center; padding: 30px 20px;
+      color: var(--muted); font-size: 14px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    #bottom-bar {
+      flex-shrink: 0; background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding: 10px 12px;
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
+      box-shadow: 0 -2px 12px rgba(0,0,0,0.07);
+    }
+    #scan-btn {
+      display: block; width: 100%; padding: 16px;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 20px; font-weight: 700; letter-spacing: 2px;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 10px; cursor: pointer;
+      box-shadow: 0 4px 16px rgba(10,124,78,0.22);
+      transition: transform 0.08s, box-shadow 0.08s, background 0.2s;
+      margin-bottom: 8px;
+    }
+    #scan-btn:active { transform: scale(0.97); }
+    #scan-btn:disabled { background: #c8cdd8; color: #fff; box-shadow: none; cursor: not-allowed; }
+    #scan-btn.loc-mode  { background: var(--warning); box-shadow: 0 4px 16px rgba(230,126,34,0.25); }
+    #scan-btn.dev-mode  { background: var(--info);    box-shadow: 0 4px 16px rgba(41,128,185,0.25); }
+    #scan-btn.box-mode  { background: var(--info);    box-shadow: 0 4px 16px rgba(41,128,185,0.25); }
+
+    .ctrl-row { display: flex; gap: 7px; }
+    .ctrl-btn {
+      flex: 1; padding: 9px 4px;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 13px; font-weight: 600; letter-spacing: 0.5px;
+      border: 1px solid var(--border); border-radius: 7px;
+      background: var(--bg); color: var(--text); cursor: pointer;
+    }
+    .ctrl-btn.start { border-color: #a0d4bc; color: var(--accent); }
+    .ctrl-btn.stop  { border-color: #f0c0bb; color: var(--danger); }
+    .ctrl-btn.exp   { border-color: #c8d4a0; color: #4a6a00; }
+    .ctrl-btn.rst   { border-color: #f0d8b0; color: var(--warning); }
+    .ctrl-btn.mydev { border-color: #a0c8e8; color: var(--info); font-weight: 700; }
+  </style>
+</head>
+<body>
+
+<!-- Modal: Login -->
+<div class="modal-backdrop" id="modal-login">
+  <div class="modal">
+    <h2>📦 PRG Scanner</h2>
+    <p id="login-msg">Přihlas se pro pokračování.</p>
+    <input id="login-email" type="email" placeholder="E-mail" autocomplete="off">
+    <input id="login-password" type="password" placeholder="Heslo" autocomplete="off">
+    <button class="modal-btn" onclick="doLogin()">🔐 Přihlásit se</button>
+    <button class="modal-btn secondary" onclick="showRegister()">📝 Registrovat se</button>
+  </div>
+</div>
+
+<!-- Modal: Register -->
+<div class="modal-backdrop" id="modal-register" style="display:none">
+  <div class="modal">
+    <h2>📝 Registrace</h2>
+    <p id="register-msg">Vytvoř si účet.</p>
+    <input id="reg-name" type="text" placeholder="Jméno" maxlength="30" autocomplete="off">
+    <input id="reg-email" type="email" placeholder="E-mail" autocomplete="off">
+    <input id="reg-password" type="password" placeholder="Heslo (min. 6 znaků)" autocomplete="off">
+    <button class="modal-btn" onclick="doRegister()">Vytvořit účet</button>
+    <button class="modal-btn secondary" onclick="showLogin()">← Zpět na přihlášení</button>
+  </div>
+</div>
+
+<!-- Modal: Lokace? -->
+<div class="modal-backdrop" id="modal-loc-choice" style="display:none">
+  <div class="modal">
+    <h2>📍 Režim skenování</h2>
+    <p>Chceš evidovat také lokace ve skladu?<br>Pořadí: EAN → Lokace → EAN → Lokace…</p>
+    <button class="modal-btn" onclick="startWithLoc(true)">✅ Ano – EAN + Lokace</button>
+    <button class="modal-btn secondary" onclick="startWithLoc(false)">➡️ Ne – pouze EAN</button>
+  </div>
+</div>
+
+<!-- Modal: Duplikát -->
+<div class="modal-backdrop" id="modal-dup" style="display:none">
+  <div class="modal">
+    <h2>⚠️ Položka již existuje</h2>
+    <p id="dup-desc"></p>
+    <div class="info-box orange" id="dup-info"></div>
+    <button class="modal-btn" onclick="resolveDup('add')">➕ Přičíst +1 kus</button>
+    <button class="modal-btn warn" onclick="resolveDup('new')">📋 Přidat jako nový řádek</button>
+    <button class="modal-btn secondary" onclick="resolveDup('cancel')">✖ Zrušit</button>
+  </div>
+</div>
+
+<!-- Modal: myDevices upload -->
+<div class="modal-backdrop" id="modal-mydev-upload" style="display:none">
+  <div class="modal">
+    <h2 class="info">📱 myDevices</h2>
+    <p>Nahraj Excel soubor s plánem boxů.<br>Potřebné sloupce: <b>IoT ID</b>, <b>Box #</b>, Building, Floor, Lab / Room.</p>
+    <div class="info-box blue">Postup: naskenuj IoT ID zařízení → aplikace ukáže správný Box # → naskenuj štítek boxu pro potvrzení.</div>
+    <input type="file" id="excel-file-input" accept=".xlsx,.xls" style="display:none" onchange="loadExcelFile(this)">
+    <button class="modal-btn info" onclick="document.getElementById('excel-file-input').click()">📂 Vybrat Excel soubor</button>
+    <button class="modal-btn secondary" onclick="closeModal('modal-mydev-upload')">Zrušit</button>
+  </div>
+</div>
+
+<!-- Modal: Placement mode -->
+<div class="modal-backdrop" id="modal-placement" style="display:none">
+  <div class="modal">
+    <h2 class="info">📦 Typ umístění</h2>
+    <p>Kam budeš zařízení umisťovat?</p>
+    <button class="modal-btn info" onclick="setPlacementMode('outer')">📦 Outer package<br><span style="font-size:13px;font-weight:400;opacity:0.85">Ověření podle Box #</span></button>
+    <button class="modal-btn" style="background:var(--warning)" onclick="setPlacementMode('inner')">🚪 Inner package<br><span style="font-size:13px;font-weight:400;opacity:0.85">Ověření podle Lab / Room</span></button>
+  </div>
+</div>
+
+<!-- Modal: Box verifikace -->
+<div class="modal-backdrop" id="modal-box-verify" style="display:none">
+  <div class="modal">
+    <h2 class="info">📦 Vlož do Boxu</h2>
+    <p id="box-verify-desc">Zařízení nalezeno v databázi.</p>
+    <div class="info-box green" id="box-verify-info"></div>
+    <p style="font-size:14px;color:var(--text);margin-bottom:12px;font-weight:600;">Naskenuj štítek boxu pro potvrzení:</p>
+    <button class="modal-btn info" onclick="confirmBoxScan()">📷 Naskenovat Box štítek</button>
+    <button class="modal-btn secondary" onclick="skipBoxVerify()">⏭ Přeskočit ověření</button>
+  </div>
+</div>
+
+<!-- Modal: Box OK -->
+<div class="modal-backdrop" id="modal-box-ok" style="display:none">
+  <div class="modal">
+    <h2>✅ Box potvrzen!</h2>
+    <div class="info-box green" id="box-ok-info"></div>
+    <button class="modal-btn" onclick="closeModal('modal-box-ok')">Pokračovat →</button>
+  </div>
+</div>
+
+<!-- Modal: Box chyba -->
+<div class="modal-backdrop" id="modal-box-err" style="display:none">
+  <div class="modal">
+    <h2 class="danger">❌ Špatný Box!</h2>
+    <div class="info-box red" id="box-err-info"></div>
+    <button class="modal-btn" onclick="retryBoxScan()">🔄 Zkusit znovu</button>
+    <button class="modal-btn secondary" onclick="skipBoxVerify()">⏭ Přeskočit</button>
+  </div>
+</div>
+
+<!-- Header -->
+<header>
+  <h1>📦 PRG Scanner</h1>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <div id="mode-badge">📱 myDevices</div>
+    <div id="user-badge" onclick="doLogout()">
+      <span>👤</span><span id="user-display">–</span>
+    </div>
+  </div>
+</header>
+
+<!-- Camera -->
+<div id="cam-section">
+  <div id="cam-wrap">
+    <video id="video" autoplay playsinline muted onclick="tapToFocus(event)"></video>
+    <div id="focus-ring"></div>
+    <div id="aim"><span class="c2"></span><span class="c3"></span></div>
+    <div id="flash"></div>
+    <div id="cam-status">Kamera vypnuta</div>
+    <div id="loc-pill">📍 SKENUJ LOKACI</div>
+    <div id="dev-pill">📦 SKENUJ BOX</div>
+  </div>
+</div>
+
+<!-- Table area -->
+<div id="table-area">
+  <div id="status-bar">Čekám na spuštění…</div>
+  <div id="empty-state">Žádná naskenovaná data</div>
+  <table id="main-table" style="display:none">
+    <thead><tr id="table-head-row"></tr></thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+<!-- Bottom bar -->
+<div id="bottom-bar">
+  <button id="scan-btn" disabled onclick="triggerScan()">📷 SKENOVAT</button>
+  <div class="ctrl-row">
+    <button class="ctrl-btn start"  onclick="startCam()">▶ Start</button>
+    <button class="ctrl-btn stop"   onclick="stopCam()">⏹ Stop</button>
+    <button class="ctrl-btn exp"    onclick="exportCSV()">📥 CSV</button>
+    <button class="ctrl-btn rst"    onclick="resetData()">♻ Reset</button>
+    <button class="ctrl-btn mydev"  onclick="openMyDevices()">📱 myDev</button>
+  </div>
+</div>
+
+<script>
+// ── Supabase ──────────────────────────────────────────────
+var SUPA_URL = "https://ujvqanqqhmnfxsfeqixc.supabase.co";
+var SUPA_KEY = "sb_publishable_5o19BnZUEi8j-rU5DDAgBA_HwKB7V-v";
+var supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+var currentUserId = null;
+
+// ── Audio ──────────────────────────────────────────────────
+let audioCtx = null;
+function beep(freq, dur) {
+  freq = freq||1480; dur = dur||0.12;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    var o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.connect(g); g.connect(audioCtx.destination);
+    o.type='square'; o.frequency.setValueAtTime(freq,audioCtx.currentTime);
+    g.gain.setValueAtTime(0.18,audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
+    o.start(); o.stop(audioCtx.currentTime+dur);
+  } catch(e){}
+}
+function beepWarn()  { beep(600,0.18); }
+function beepError() { beep(300,0.25); setTimeout(function(){beep(300,0.25);},320); }
+function beepOk()    { beep(1480,0.08); setTimeout(function(){beep(1760,0.1);},110); }
+
+// ── State ──────────────────────────────────────────────────
+var currentUser = '';
+var useLocation = false;
+var expectingLoc = false;
+var pendingEAN = null;
+var stream = null;
+var detector = null;
+var cameraReady = false;
+var rows = [];
+var dupResolve = null;
+
+// myDevices
+var myDevMode = false;
+var devDatabase = {};
+var devExpectingBox = false;
+var devPendingDevice = null;
+var devScanResults = [];
+var placementMode = 'outer'; // outer=Box#, inner=Lab/Room
+
+var video     = document.getElementById('video');
+var scanBtn   = document.getElementById('scan-btn');
+var camSt     = document.getElementById('cam-status');
+var locPill   = document.getElementById('loc-pill');
+var devPill   = document.getElementById('dev-pill');
+var statusBar = document.getElementById('status-bar');
+
+function setStatus(m) { statusBar.textContent = m; }
+function setCamSt(m)  { camSt.textContent = m; }
+function closeModal(id) { document.getElementById(id).style.display='none'; }
+
+// ── Auth ──────────────────────────────────────────────────
+function showLogin()    { document.getElementById('modal-register').style.display='none'; document.getElementById('modal-login').style.display='flex'; }
+function showRegister() { document.getElementById('modal-login').style.display='none'; document.getElementById('modal-register').style.display='flex'; }
+
+async function doLogin() {
+  var email = document.getElementById('login-email').value.trim();
+  var pass  = document.getElementById('login-password').value;
+  if (!email||!pass) { document.getElementById('login-msg').textContent='⚠️ Zadej e-mail a heslo.'; return; }
+  document.getElementById('login-msg').textContent = '⏳ Přihlašuji...';
+  var res = await supa.auth.signInWithPassword({ email: email, password: pass });
+  if (res.error) { document.getElementById('login-msg').textContent = '❌ '+res.error.message; return; }
+  await onLoggedIn(res.data.user);
+}
+
+async function doRegister() {
+  var name  = document.getElementById('reg-name').value.trim();
+  var email = document.getElementById('reg-email').value.trim();
+  var pass  = document.getElementById('reg-password').value;
+  if (!name||!email||!pass) { document.getElementById('register-msg').textContent='⚠️ Vyplň všechna pole.'; return; }
+  document.getElementById('register-msg').textContent = '⏳ Registruji...';
+  var res = await supa.auth.signUp({ email: email, password: pass, options: { data: { name: name } } });
+  if (res.error) { document.getElementById('register-msg').textContent = '❌ '+res.error.message; return; }
+  document.getElementById('register-msg').textContent = '✅ Účet vytvořen! Nyní se přihlaš.';
+  setTimeout(showLogin, 1500);
+}
+
+async function onLoggedIn(user) {
+  currentUserId = user.id;
+  // Get profile name
+  var prof = await supa.from('profiles').select('name').eq('id', user.id).single();
+  currentUser = (prof.data && prof.data.name) ? prof.data.name : user.email;
+  document.getElementById('user-display').textContent = currentUser;
+  document.getElementById('modal-login').style.display = 'none';
+  setStatus('✅ Přihlášen jako '+currentUser);
+}
+
+async function doLogout() {
+  if (!confirm('Odhlásit se?')) return;
+  await supa.auth.signOut();
+  currentUser=''; currentUserId=null;
+  document.getElementById('user-display').textContent = '–';
+  document.getElementById('login-msg').textContent = 'Přihlas se pro pokračování.';
+  document.getElementById('modal-login').style.display = 'flex';
+  stopCam();
+}
+
+// Check existing session on load
+supa.auth.getSession().then(function(res) {
+  if (res.data && res.data.session) {
+    onLoggedIn(res.data.session.user);
+  }
+});
+
+// ── Camera ────────────────────────────────────────────────
+function startCam() {
+  if (!currentUser) { document.getElementById('modal-login').style.display='flex'; return; }
+  if (myDevMode) { initCamera(); return; }
+  document.getElementById('modal-loc-choice').style.display = 'flex';
+}
+
+function startWithLoc(withLoc) {
+  useLocation = withLoc;
+  expectingLoc = false; pendingEAN = null;
+  closeModal('modal-loc-choice');
+  renderTableHead(); updateScanBtn();
+  initCamera();
+}
+
+async function initCamera() {
+  if (!('BarcodeDetector' in window)) {
+    setStatus('❌ BarcodeDetector není podporován – použij Chrome/Edge');
+    return;
+  }
+  try {
+    var supported = await BarcodeDetector.getSupportedFormats();
+    detector = new BarcodeDetector({ formats: supported });
+  } catch(e) {
+    detector = new BarcodeDetector({ formats: [
+      'qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e','data_matrix','pdf417','itf','aztec'
+    ]});
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } }
+    });
+    video.srcObject = stream;
+    await video.play();
+    try {
+      var track = stream.getVideoTracks()[0];
+      await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+    } catch(e){}
+    cameraReady = true;
+    scanBtn.disabled = false;
+    setCamSt('📷 Kamera připravena');
+    setStatus(myDevMode
+      ? '📱 myDevices – skenuj IoT ID zařízení'
+      : '✅ Kamera spuštěna' + (useLocation ? ' · EAN + Lokace' : ' · pouze EAN'));
+    updateScanBtn();
+  } catch(err) {
+    setStatus('❌ Kamera: ' + err.message);
+  }
+}
+
+async function tapToFocus(e) {
+  if (!stream) return;
+  var track = stream.getVideoTracks()[0];
+  var wrap = document.getElementById('cam-wrap');
+  var rect = wrap.getBoundingClientRect();
+  var x = (e.clientX - rect.left) / rect.width;
+  var y = (e.clientY - rect.top)  / rect.height;
+
+  // Show focus ring at tap position
+  var ring = document.getElementById('focus-ring');
+  ring.style.left = (x * 100) + '%';
+  ring.style.top  = (y * 100) + '%';
+  ring.style.opacity = '1';
+  ring.classList.add('active');
+  setTimeout(function(){ ring.style.opacity='0'; setTimeout(function(){ ring.classList.remove('active'); },400); }, 700);
+
+  // Apply focus constraint
+  try {
+    await track.applyConstraints({
+      advanced: [{ focusMode: 'manual', pointsOfInterest: [{ x: x, y: y }] }]
+    });
+    setTimeout(async function(){
+      try { await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch(e){}
+    }, 1200);
+  } catch(err) {
+    try { await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch(e2){}
+  }
+}
+
+function stopCam() {
+  if (stream) { stream.getTracks().forEach(function(t){t.stop();}); stream=null; }
+  video.srcObject = null;
+  cameraReady=false; detector=null;
+  expectingLoc=false; pendingEAN=null;
+  devExpectingBox=false;
+  scanBtn.disabled=true;
+  locPill.style.display='none';
+  devPill.style.display='none';
+  document.getElementById('aim').className='';
+  setCamSt('Kamera vypnuta');
+  setStatus('⏹ Zastaveno');
+  updateScanBtn();
+}
+
+// ── Main scan trigger ─────────────────────────────────────
+async function triggerScan() {
+  if (!detector || !cameraReady) return;
+  setCamSt('🔍 Detekuji…');
+  try {
+    var barcodes = await detector.detect(video);
+    if (!barcodes.length) {
+      setCamSt('⚠️ Nic nenalezeno – zkus znovu');
+      setStatus('⚠️ Žádný kód – namiř lépe a zkus znovu');
+      return;
+    }
+    var code = barcodes[0].rawValue;
+    flashScreen(); beep();
+    if (myDevMode) {
+      await handleMyDevCode(code);
+    } else {
+      await handleCode(code);
+    }
+    setCamSt('📷 Kamera připravena');
+  } catch(e) { setStatus('❌ Chyba: ' + e.message); }
+}
+
+// ── Supabase sync ─────────────────────────────────────────
+async function sendScan(data) {
+  if (!currentUserId) return;
+  try {
+    await supa.from('scans').insert({
+      user_id: currentUserId,
+      iot_id:  data.iot_id  || null,
+      ean:     data.ean     || null,
+      box_number:     data.box      || null,
+      location:       data.location || null,
+      placement_mode: data.placement_mode || null,
+      verified:       data.verified || false,
+      quantity:       data.quantity || 1
+    });
+  } catch(e) { console.warn('Supabase sync failed:', e); }
+}
+
+// ── Standard mode ─────────────────────────────────────────
+async function handleCode(code) {
+  if (!useLocation) { await processEAN(code, null); return; }
+  if (!expectingLoc) {
+    pendingEAN=code; expectingLoc=true;
+    locPill.style.display='block';
+    updateScanBtn();
+    setStatus('✅ EAN: '+code+' · Nyní naskenuj LOKACI');
+  } else {
+    var ean=pendingEAN, loc=code;
+    pendingEAN=null; expectingLoc=false;
+    locPill.style.display='none';
+    updateScanBtn();
+    await processEAN(ean, loc);
+  }
+}
+
+async function processEAN(ean, loc) {
+  var existing = rows.filter(function(r){ return r.ean===ean; });
+  if (existing.length > 0) {
+    beepWarn();
+    var info = 'EAN: '+ean+'\n\nNalezeno na:\n';
+    existing.forEach(function(r){ info += '• '+(r.loc?'Lokace: '+r.loc:'bez lokace')+' → '+r.qty+' ks\n'; });
+    if (loc) info += '\nNová lokace: '+loc;
+    var action = await showDupModal(ean, loc, info);
+    if (action==='cancel') { setStatus('✖ Skenování zrušeno'); return; }
+    if (action==='add') {
+      var sameLocRow = existing.find(function(r){ return r.loc===loc; });
+      var target = sameLocRow||existing[0];
+      var idx = rows.indexOf(target);
+      rows[idx].qty++;
+      rows[idx].timestamps.push(nowStr());
+      setStatus('➕ '+ean+(loc?'/'+loc:'')+' → '+rows[idx].qty+' ks');
+      renderTable(idx); return;
+    }
+  }
+  rows.push({ ean:ean, loc:loc||'', qty:1, user:currentUser, timestamps:[nowStr()] });
+  sendScan({ ean:ean, location:loc||null, quantity:1 });
+  setStatus('✅ '+ean+(loc?' / '+loc:'')+' · 1 ks  ['+currentUser+']');
+  renderTable(rows.length-1);
+}
+
+function showDupModal(ean, loc, infoText) {
+  return new Promise(function(resolve) {
+    dupResolve = resolve;
+    document.getElementById('dup-desc').textContent =
+      'EAN "'+ean+'" byl v této session již naskenován'+(loc?' (nová lokace: '+loc+')':'')+'.';
+    document.getElementById('dup-info').textContent = infoText;
+    document.getElementById('modal-dup').style.display = 'flex';
+  });
+}
+function resolveDup(action) {
+  closeModal('modal-dup');
+  if (dupResolve) { dupResolve(action); dupResolve=null; }
+}
+
+// ── myDevices ─────────────────────────────────────────────
+function openMyDevices() {
+  if (!currentUser) { document.getElementById('modal-login').style.display='flex'; return; }
+  document.getElementById('modal-mydev-upload').style.display = 'flex';
+}
+
+function loadExcelFile(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(e.target.result, { type: 'array' });
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+      devDatabase = {};
+      var count = 0;
+      data.forEach(function(row) {
+        var iotId = (row['IoT ID']||row['IOT ID']||row['iot_id']||row['IoTID']||'').toString().trim().toUpperCase();
+        var box   = (row['Box #']||row['Box']||row['BOX']||'').toString().trim();
+        var bld   = (row['Building']||'').toString().trim();
+        var floor = (row['Floor']||'').toString().trim();
+        var room  = (row['Lab / Room']||row['Lab/Room']||row['Room']||'').toString().trim();
+        if (iotId && box) {
+          devDatabase[iotId] = { box:box, building:bld, floor:floor, room:room };
+          count++;
+        }
+      });
+
+      closeModal('modal-mydev-upload');
+      if (count === 0) {
+        alert('Soubor nenačten – zkontroluj názvy sloupců (potřebujeme: IoT ID, Box #)');
+        return;
+      }
+
+      myDevMode = true;
+      devScanResults = [];
+      devExpectingBox = false;
+      devPendingDevice = null;
+
+      document.getElementById('mode-badge').style.display = 'flex';
+      renderMyDevTable();
+      setStatus('📱 myDevices – načteno '+count+' zařízení · Vyber typ umístění');
+
+      // Show placement mode selection
+      document.getElementById('modal-placement').style.display = 'flex';
+
+    } catch(err) {
+      alert('Chyba při čtení souboru: '+err.message);
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function setPlacementMode(mode) {
+  placementMode = mode;
+  closeModal('modal-placement');
+  var label = mode === 'outer' ? '📦 Outer package (Box #)' : '🚪 Inner package (Lab/Room)';
+  setStatus('📱 myDevices · ' + label + ' · Spusť kameru');
+  if (!cameraReady) initCamera();
+  else updateScanBtn();
+}
+
+async function handleMyDevCode(code) {
+  var normalizedCode = code.toString().trim().toUpperCase();
+
+  if (devExpectingBox && devPendingDevice) {
+    // This scan is the box label
+    var expected = devPendingDevice.expectedScan.toString().trim();
+    var scanned  = normalizedCode;
+    var matched  = scanned === expected;
+
+    devPill.style.display = 'none';
+    document.getElementById('aim').className = '';
+
+    if (matched) {
+      beepOk();
+      var result = {
+        iotId: devPendingDevice.iotId,
+        box: devPendingDevice.box,
+        building: devPendingDevice.building,
+        floor: devPendingDevice.floor,
+        room: devPendingDevice.room,
+        status: 'ok', ts: nowStr(), user: currentUser
+      };
+      devScanResults.push(result);
+      sendScan({ iot_id:result.iotId, box:result.box, location:result.room, placement_mode:placementMode, verified:true });
+
+      document.getElementById('box-ok-info').textContent =
+        '✅ Zařízení: '+devPendingDevice.iotId+'\n'+
+        '📦 Box #'+devPendingDevice.box+' potvrzeno\n'+
+        '🏢 '+devPendingDevice.building+' · '+devPendingDevice.floor+'\n'+
+        '🚪 '+devPendingDevice.room;
+
+      devPendingDevice = null;
+      devExpectingBox = false;
+      closeModal('modal-box-verify');
+      document.getElementById('modal-box-ok').style.display = 'flex';
+      setStatus('✅ Box potvrzen! Celkem: '+devScanResults.length+' zařízení');
+      renderMyDevTable();
+    } else {
+      beepError();
+      document.getElementById('box-err-info').textContent =
+        '❌ Naskenováno: "'+scanned+'"\n'+
+        '✅ Očekáváno:   Box #'+expected+'\n\n'+
+        'Zařízení: '+devPendingDevice.iotId;
+      document.getElementById('modal-box-err').style.display = 'flex';
+      setStatus('❌ Špatný box! Naskenováno "'+scanned+'", očekáváno Box #'+expected);
+    }
+    updateScanBtn();
+    return;
+  }
+
+  // Scanning a device IoT ID
+  var deviceInfo = devDatabase[normalizedCode];
+  if (!deviceInfo) {
+    beepError();
+    document.getElementById('aim').className = 'bad';
+    setTimeout(function(){ document.getElementById('aim').className=''; }, 1000);
+    setStatus('❌ IoT ID "'+code+'" nenalezeno v databázi!');
+    return;
+  }
+
+  devPendingDevice = {
+    iotId: normalizedCode,
+    box: deviceInfo.box,
+    building: deviceInfo.building,
+    floor: deviceInfo.floor,
+    room: deviceInfo.room,
+    expectedScan: placementMode === 'outer' ? deviceInfo.box : deviceInfo.room
+  };
+  devExpectingBox = true;
+
+  var modeLabel = placementMode === 'outer' ? '📦 Outer package' : '🚪 Inner package';
+  document.getElementById('box-verify-desc').textContent = modeLabel + ' · Zařízení '+normalizedCode+' nalezeno.';
+  document.getElementById('box-verify-info').textContent =
+    (placementMode === 'outer'
+      ? '📦 Box #:     '+deviceInfo.box
+      : '🚪 Lab/Room:  '+deviceInfo.room) + '\n'+
+    '🏢 Building:  '+deviceInfo.building+'\n'+
+    '🏬 Floor:     '+deviceInfo.floor+'\n'+
+    (placementMode === 'outer'
+      ? '🚪 Room:      '+deviceInfo.room
+      : '📦 Box #:     '+deviceInfo.box);
+
+  document.getElementById('modal-box-verify').style.display = 'flex';
+  updateScanBtn();
+}
+
+function confirmBoxScan() {
+  closeModal('modal-box-verify');
+  devPill.style.display = 'block';
+  devPill.textContent = placementMode === 'outer' ? '📦 SKENUJ BOX #'+devPendingDevice.box : '🚪 SKENUJ ROOM: '+devPendingDevice.room;
+  document.getElementById('aim').className = 'verify';
+  setStatus('📦 Naskenuj štítek Boxu #'+devPendingDevice.box);
+  updateScanBtn();
+}
+
+function retryBoxScan() {
+  closeModal('modal-box-err');
+  devPill.style.display = 'block';
+  devPill.textContent = placementMode === 'outer' ? '📦 SKENUJ BOX #'+devPendingDevice.box : '🚪 SKENUJ ROOM: '+devPendingDevice.room;
+  document.getElementById('aim').className = 'verify';
+  setStatus('📦 Znovu naskenuj štítek Boxu #'+devPendingDevice.box);
+  updateScanBtn();
+}
+
+function skipBoxVerify() {
+  closeModal('modal-box-verify');
+  closeModal('modal-box-err');
+  if (devPendingDevice) {
+    var skippedResult = {
+      iotId: devPendingDevice.iotId, box: devPendingDevice.box,
+      building: devPendingDevice.building, floor: devPendingDevice.floor,
+      room: devPendingDevice.room, status: 'skipped', ts: nowStr(), user: currentUser
+    };
+    devScanResults.push(skippedResult);
+    sendScan({ iot_id:skippedResult.iotId, box:skippedResult.box, location:skippedResult.room, placement_mode:placementMode, verified:false });
+    setStatus('⏭ Přeskočeno – '+devPendingDevice.iotId+' přidáno (neověřeno)');
+    renderMyDevTable();
+  }
+  devPendingDevice = null; devExpectingBox = false;
+  devPill.style.display = 'none';
+  document.getElementById('aim').className = '';
+  updateScanBtn();
+}
+
+// ── Render ────────────────────────────────────────────────
+function renderMyDevTable() {
+  var empty = document.getElementById('empty-state');
+  var table = document.getElementById('main-table');
+  var tbody = document.getElementById('tableBody');
+  var headRow = document.getElementById('table-head-row');
+
+  headRow.innerHTML = '<th>IoT ID</th><th>Box</th><th>Room</th><th style="text-align:center">✓</th>';
+
+  if (!devScanResults.length) {
+    empty.style.display='block'; table.style.display='none'; return;
+  }
+  empty.style.display='none'; table.style.display='table';
+  tbody.innerHTML='';
+
+  var reversed = devScanResults.slice().reverse();
+  reversed.forEach(function(r, i) {
+    var tr = document.createElement('tr');
+    if (i===0) { tr.className='highlight'; setTimeout(function(){tr.classList.remove('highlight');},900); }
+    var icon  = r.status==='ok' ? '✅' : '⏭';
+    var color = r.status==='ok' ? 'color:var(--accent)' : 'color:var(--muted)';
+    tr.innerHTML =
+      '<td class="ean-cell">'+r.iotId+'</td>'+
+      '<td class="box-cell">'+r.box+'</td>'+
+      '<td style="font-family:\'JetBrains Mono\',monospace;font-size:10px;color:var(--muted)">'+r.room+'</td>'+
+      '<td style="text-align:center;font-size:15px;'+color+'">'+icon+'</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function renderTableHead() {
+  var tr = document.getElementById('table-head-row');
+  tr.innerHTML = useLocation
+    ? '<th>EAN</th><th>Lokace</th><th style="text-align:center">Ks</th><th style="text-align:right">±</th>'
+    : '<th>EAN</th><th style="text-align:center">Ks</th><th style="text-align:right">±</th>';
+}
+
+function renderTable(highlightIdx) {
+  if (myDevMode) { renderMyDevTable(); return; }
+  var empty = document.getElementById('empty-state');
+  var table = document.getElementById('main-table');
+  var tbody = document.getElementById('tableBody');
+  if (!rows.length) { empty.style.display='block'; table.style.display='none'; return; }
+  empty.style.display='none'; table.style.display='table';
+  tbody.innerHTML='';
+  rows.forEach(function(r,i){
+    var tr = document.createElement('tr');
+    if (i===highlightIdx) { tr.className='highlight'; setTimeout(function(){tr.classList.remove('highlight');},900); }
+    var locCell = useLocation ? '<td class="loc-cell">'+(r.loc||'–')+'</td>' : '';
+    tr.innerHTML =
+      '<td class="ean-cell">'+r.ean+'</td>'+
+      locCell+
+      '<td class="qty-cell">'+r.qty+'</td>'+
+      '<td class="acts-cell">'+
+        '<button class="qty-btn" onclick="changeQty('+i+',1)">+</button>'+
+        '<button class="qty-btn minus" onclick="changeQty('+i+',-1)">−</button>'+
+      '</td>';
+    tbody.appendChild(tr);
+  });
+  var area = document.getElementById('table-area');
+  area.scrollTop = area.scrollHeight;
+}
+
+function changeQty(idx, delta) {
+  rows[idx].qty += delta;
+  if (delta>0) rows[idx].timestamps.push(nowStr());
+  if (rows[idx].qty<=0) { rows.splice(idx,1); setStatus('🗑 Řádek odstraněn'); }
+  else setStatus('✏️ '+rows[idx].ean+' → '+rows[idx].qty+' ks');
+  renderTable();
+}
+
+// ── Export ────────────────────────────────────────────────
+function exportCSV() {
+  if (myDevMode) {
+    if (!devScanResults.length) { setStatus('⚠️ Žádná data k exportu'); return; }
+    var csv = 'IoT_ID,Box,Building,Floor,Room,Status,Uzivatel,Cas\n';
+    devScanResults.forEach(function(r){
+      csv += '"'+r.iotId+'","'+r.box+'","'+r.building+'","'+r.floor+'","'+r.room+'","'+r.status+'","'+r.user+'","'+r.ts+'"\n';
+    });
+    downloadCSV(csv, 'mydevices_scan');
+    setStatus('📥 myDevices CSV exportováno ('+devScanResults.length+' záznamů)');
+    return;
+  }
+  if (!rows.length) { setStatus('⚠️ Žádná data k exportu'); return; }
+  var hasLoc = rows.some(function(r){return r.loc;});
+  var csv = hasLoc ? 'EAN,Lokace,Kusy,Uzivatel,Posledni_scan\n' : 'EAN,Kusy,Uzivatel,Posledni_scan\n';
+  rows.forEach(function(r){
+    var last = r.timestamps[r.timestamps.length-1]||'';
+    csv += hasLoc
+      ? '"'+r.ean+'","'+r.loc+'",'+r.qty+',"'+r.user+'","'+last+'"\n'
+      : '"'+r.ean+'",'+r.qty+',"'+r.user+'","'+last+'"\n';
+  });
+  downloadCSV(csv, 'prg_scan');
+  setStatus('📥 CSV exportováno ('+rows.length+' řádků)');
+}
+
+function downloadCSV(csv, prefix) {
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download = prefix+'_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+
+function resetData() {
+  if (!confirm('Smazat všechna naskenovaná data?')) return;
+  if (myDevMode) {
+    devScanResults=[]; devExpectingBox=false; devPendingDevice=null;
+    devPill.style.display='none';
+    document.getElementById('aim').className='';
+    renderMyDevTable();
+  } else {
+    rows=[]; expectingLoc=false; pendingEAN=null;
+    locPill.style.display='none';
+    renderTable();
+  }
+  updateScanBtn();
+  setStatus('♻ Data smazána');
+}
+
+// ── Helpers ───────────────────────────────────────────────
+function updateScanBtn() {
+  if (!cameraReady) { scanBtn.textContent='📷 SKENOVAT'; scanBtn.className=''; return; }
+  if (myDevMode) {
+    if (devExpectingBox && devPendingDevice &&
+        document.getElementById('modal-box-verify').style.display!=='flex') {
+      scanBtn.textContent = placementMode === 'outer' ? '📦 SKENOVAT BOX #'+devPendingDevice.box : '🚪 SKENOVAT ROOM';
+      scanBtn.className='box-mode';
+    } else {
+      scanBtn.textContent='📱 SKENOVAT IoT ID';
+      scanBtn.className='dev-mode';
+    }
+    return;
+  }
+  if (expectingLoc) { scanBtn.textContent='📍 SKENOVAT LOKACI'; scanBtn.className='loc-mode'; }
+  else { scanBtn.textContent='📷 SKENOVAT EAN'; scanBtn.className=''; }
+}
+
+function flashScreen() {
+  var f=document.getElementById('flash');
+  f.style.opacity='0.45';
+  setTimeout(function(){ f.style.opacity='0'; },120);
+}
+
+function nowStr() {
+  return new Date().toLocaleString('cs-CZ', {
+    day:'2-digit',month:'2-digit',year:'numeric',
+    hour:'2-digit',minute:'2-digit',second:'2-digit'
+  });
+}
+
+renderTable();
+</script>
+</body>
+</html>
