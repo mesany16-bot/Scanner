@@ -1300,7 +1300,9 @@ function startInvScanning(list, meta) {
 
 async function handleInvCode(code) {
   var norm = normalizeCode(code);
-  var item = invList.find(function(r){ return normalizeCode(r.code) === norm; });
+  var item = invList.find(function(r){
+    return normalizeCode(r.code) === norm || (r.name && normalizeCode(r.name) === norm);
+  });
   if (item) {
     if (item.status === 'found') {
       beepWarn();
