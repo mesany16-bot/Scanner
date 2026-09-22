@@ -210,6 +210,24 @@
     #loc-pill { background: rgba(230,126,34,0.92); }
     #dev-pill { background: rgba(41,128,185,0.92); }
 
+    #sleep-overlay {
+      display: none;
+      position: absolute; inset: 0;
+      background: #000;
+      flex-direction: column; align-items: center; justify-content: center;
+      z-index: 20;
+    }
+    #sleep-overlay .sleep-icon { font-size: 56px; margin-bottom: 6px; }
+    #sleep-overlay .sleep-title {
+      color: #fff; font-family: 'Barlow Condensed', sans-serif;
+      font-size: 19px; font-weight: 700; letter-spacing: 1px;
+    }
+    #sleep-overlay .sleep-sub {
+      color: rgba(255,255,255,0.55); font-family: 'JetBrains Mono', monospace;
+      font-size: 12px; margin-top: 4px;
+    }
+    #scan-btn.sleep-mode { background: var(--muted); box-shadow: none; }
+
     #table-area { flex: 1; overflow-y: auto; background: var(--bg); -webkit-overflow-scrolling: touch; }
     #status-bar {
       background: var(--surface); border-bottom: 1px solid var(--border);
@@ -496,6 +514,11 @@
     <div id="cam-status">Kamera vypnuta</div>
     <div id="loc-pill">📍 SKENUJ LOKACI</div>
     <div id="dev-pill">📦 SKENUJ BOX</div>
+    <div id="sleep-overlay" style="display:none">
+      <div class="sleep-icon">🛏️💤</div>
+      <div class="sleep-title">Kamera spí</div>
+      <div class="sleep-sub">šetříme baterku</div>
+    </div>
   </div>
 </div>
 
@@ -783,23 +806,82 @@ function startWithLoc(withLoc) {
   initCamera();
 }
 
+var zxingLastCode = null;
+var zxingLastCodeTime = 0;
+var idleTimer = null;
+var isAsleep = false;
+var IDLE_TIMEOUT_MS = 2000; // uspat kameru po 2s bez skenování/interakce
+
+function resetIdleTimer() {
+  clearTimeout(idleTimer);
+  if (cameraReady && !isAsleep) { idleTimer = setTimeout(enterSleepMode, IDLE_TIMEOUT_MS); }
+}
+
+function enterSleepMode() {
+  isAsleep = true;
+  clearTimeout(idleTimer); idleTimer = null;
+  if (stream) { stream.getTracks().forEach(function(t){t.stop();}); stream=null; }
+  video.srcObject = null;
+  if (zxingReader) { try { zxingReader.stopContinuousDecode(); zxingReader.reset(); } catch(e){} zxingReader=null; }
+  cameraReady = false;
+  detector = null;
+  document.getElementById('sleep-overlay').style.display = 'flex';
+  setCamSt('😴 Kamera spí');
+  setStatus('💤 Kamera uspána (šetření baterie) – klepni na Probudit');
+  scanBtn.disabled = false;
+  scanBtn.className = 'sleep-mode';
+  scanBtn.textContent = '💤 PROBUDIT';
+}
+
+function wakeUp() {
+  isAsleep = false;
+  document.getElementById('sleep-overlay').style.display = 'none';
+  scanBtn.className = '';
+  initCamera();
+}
+
+async function onZXingResult(code) {
+  resetIdleTimer();
+  var now = Date.now();
+  if (code === zxingLastCode && (now - zxingLastCodeTime) < 2500) return; // zabraň opakovanému započítání stejného kódu
+  zxingLastCode = code; zxingLastCodeTime = now;
+  flashScreen(); beep();
+  if (invMode) { await handleInvCode(code); }
+  else if (myDevMode) { await handleMyDevCode(code); }
+  else { await handleCode(code); }
+}
+
 async function initCamera() {
   if (useZXing) {
     try {
       zxingReader = new ZXingBrowser.BrowserMultiFormatReader();
-    } catch(e) {
-      setStatus('❌ Skener se nepodařilo spustit: ' + e.message);
-      return;
+      await zxingReader.decodeFromConstraints(
+        { video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } } },
+        video,
+        function(result, err) { if (result) { onZXingResult(result.getText()); } }
+      );
+      cameraReady = true;
+      resetIdleTimer();
+      scanBtn.disabled = true;
+      scanBtn.textContent = '🔍 Automatické skenování…';
+      setCamSt('📷 Kamera připravena (auto-skenování)');
+      setStatus(invMode
+        ? '📋 Inventura – namiř na kód majetku, naskenuje se automaticky'
+        : (myDevMode
+          ? '📱 myDevices – namiř na IoT ID, naskenuje se automaticky'
+          : '✅ Kamera spuštěna – namiř na kód, naskenuje se automaticky'));
+    } catch(err) {
+      setStatus('❌ Kamera: ' + err.message);
     }
-  } else {
-    try {
-      var supported = await BarcodeDetector.getSupportedFormats();
-      detector = new BarcodeDetector({ formats: supported });
-    } catch(e) {
-      detector = new BarcodeDetector({ formats: [
-        'qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e','data_matrix','pdf417','itf','aztec'
-      ]});
-    }
+    return;
+  }
+  try {
+    var supported = await BarcodeDetector.getSupportedFormats();
+    detector = new BarcodeDetector({ formats: supported });
+  } catch(e) {
+    detector = new BarcodeDetector({ formats: [
+      'qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e','data_matrix','pdf417','itf','aztec'
+    ]});
   }
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -812,6 +894,7 @@ async function initCamera() {
       await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
     } catch(e){}
     cameraReady = true;
+    resetIdleTimer();
     scanBtn.disabled = false;
     setCamSt('📷 Kamera připravena');
     setStatus(invMode
@@ -826,6 +909,7 @@ async function initCamera() {
 }
 
 async function tapToFocus(e) {
+  resetIdleTimer();
   if (!stream) return;
   var track = stream.getVideoTracks()[0];
   var wrap = document.getElementById('cam-wrap');
@@ -858,7 +942,11 @@ function stopCam() {
   if (stream) { stream.getTracks().forEach(function(t){t.stop();}); stream=null; }
   video.srcObject = null;
   cameraReady=false; detector=null;
-  if (zxingReader) { try { zxingReader.reset(); } catch(e){} zxingReader=null; }
+  clearTimeout(idleTimer); idleTimer=null;
+  isAsleep = false;
+  document.getElementById('sleep-overlay').style.display = 'none';
+  if (zxingReader) { try { zxingReader.stopContinuousDecode(); zxingReader.reset(); } catch(e){} zxingReader=null; }
+  zxingLastCode = null;
   expectingLoc=false; pendingEAN=null;
   devExpectingBox=false;
   scanBtn.disabled=true;
@@ -871,43 +959,11 @@ function stopCam() {
 }
 
 // ── Main scan trigger ─────────────────────────────────────
-async function zxingDecodeWithTimeout(timeoutMs) {
-  var timedOut = false;
-  var timer = setTimeout(function(){ timedOut = true; try { zxingReader.stopAsyncDecode(); } catch(e){} }, timeoutMs);
-  try {
-    var result = await zxingReader.decodeOnce(video);
-    clearTimeout(timer);
-    return result.getText();
-  } catch(err) {
-    clearTimeout(timer);
-    if (timedOut) return null;
-    var isNotFound = err && (err.name === 'NotFoundException' || (err.constructor && err.constructor.name === 'NotFoundException'));
-    if (isNotFound) return null;
-    throw err;
-  }
-}
-
 async function triggerScan() {
-  if (!cameraReady) return;
-  if (useZXing) {
-    if (!zxingReader) return;
-    setCamSt('🔍 Detekuji…');
-    try {
-      var code = await zxingDecodeWithTimeout(4000); // 4s aktivního skenování ze živého videa
-      if (!code) {
-        setCamSt('⚠️ Nic nenalezeno – zkus znovu');
-        setStatus('⚠️ Žádný kód – namiř lépe, drž pevně a zkus znovu');
-        return;
-      }
-      flashScreen(); beep();
-      if (invMode) { await handleInvCode(code); }
-      else if (myDevMode) { await handleMyDevCode(code); }
-      else { await handleCode(code); }
-      setCamSt('📷 Kamera připravena');
-    } catch(e) { setStatus('❌ Chyba: ' + e.message); }
-    return;
-  }
+  if (isAsleep) { wakeUp(); return; }
+  if (!cameraReady || useZXing) return; // na iPhonu skenuje appka automaticky na pozadí
   if (!detector) return;
+  resetIdleTimer();
   setCamSt('🔍 Detekuji…');
   try {
     var barcodes = await detector.detect(video);
@@ -917,6 +973,7 @@ async function triggerScan() {
       return;
     }
     var code = barcodes[0].rawValue;
+    resetIdleTimer();
     flashScreen(); beep();
     if (invMode) {
       await handleInvCode(code);
@@ -1503,7 +1560,9 @@ function resetData() {
 
 // ── Helpers ───────────────────────────────────────────────
 function updateScanBtn() {
+  if (isAsleep) { scanBtn.textContent='💤 PROBUDIT'; scanBtn.className='sleep-mode'; scanBtn.disabled=false; return; }
   if (!cameraReady) { scanBtn.textContent='📷 SKENOVAT'; scanBtn.className=''; return; }
+  if (useZXing) { scanBtn.textContent='🔍 Automatické skenování…'; scanBtn.className='dev-mode'; scanBtn.disabled=true; return; }
   if (invMode) { scanBtn.textContent='📋 SKENOVAT MAJETEK'; scanBtn.className='dev-mode'; return; }
   if (myDevMode) {
     if (devExpectingBox && devPendingDevice &&
