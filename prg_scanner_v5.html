@@ -810,7 +810,7 @@ var zxingLastCode = null;
 var zxingLastCodeTime = 0;
 var idleTimer = null;
 var isAsleep = false;
-var IDLE_TIMEOUT_MS = 2000; // uspat kameru po 2s bez skenování/interakce
+var IDLE_TIMEOUT_MS = 10000; // uspat kameru po 10s bez skenování/interakce
 
 function resetIdleTimer() {
   clearTimeout(idleTimer);
@@ -1445,6 +1445,9 @@ async function confirmFinishInventura() {
     }));
     var scansInsert = await supa.from('inventory_scans').insert(scanRows);
     if (scansInsert.error) throw scansInsert.error;
+    if (invListMeta && invListMeta.id) {
+      try { await supa.from('inventory_lists').update({ archived: true }).eq('id', invListMeta.id); } catch(e){}
+    }
     saveMsg = '☁️ Uloženo na server · ';
   } catch(err) {
     saveMsg = '⚠️ Server se nepodařilo uložit (' + err.message + ') · ';
