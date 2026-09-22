@@ -871,23 +871,35 @@ function stopCam() {
 }
 
 // ── Main scan trigger ─────────────────────────────────────
+async function zxingDecodeBurst(maxAttempts, intervalMs) {
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d');
+  for (var i = 0; i < maxAttempts; i++) {
+    if (!video.videoWidth) { await new Promise(function(r){ setTimeout(r, intervalMs); }); continue; }
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    try {
+      var result = await zxingReader.decodeFromCanvas(canvas);
+      return result.getText();
+    } catch(notFound) {
+      await new Promise(function(r){ setTimeout(r, intervalMs); });
+    }
+  }
+  return null;
+}
+
 async function triggerScan() {
   if (!cameraReady) return;
   if (useZXing) {
     if (!zxingReader) return;
     setCamSt('🔍 Detekuji…');
     try {
-      var canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-      var result;
-      try { result = await zxingReader.decodeFromCanvas(canvas); }
-      catch(notFound) {
+      var code = await zxingDecodeBurst(18, 110); // ~2s aktivních pokusů
+      if (!code) {
         setCamSt('⚠️ Nic nenalezeno – zkus znovu');
-        setStatus('⚠️ Žádný kód – namiř lépe a zkus znovu');
+        setStatus('⚠️ Žádný kód – namiř lépe, drž pevně a zkus znovu');
         return;
       }
-      var code = result.getText();
       flashScreen(); beep();
       if (invMode) { await handleInvCode(code); }
       else if (myDevMode) { await handleMyDevCode(code); }
