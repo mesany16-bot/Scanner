@@ -6,6 +6,7 @@
   <title>PRG Scanner</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
 
@@ -552,6 +553,8 @@ var expectingLoc = false;
 var pendingEAN = null;
 var stream = null;
 var detector = null;
+var useZXing = !('BarcodeDetector' in window); // iOS (Safari/Chrome/Edge) nemá nativní BarcodeDetector
+var zxingReader = null;
 var cameraReady = false;
 var rows = [];
 var dupResolve = null;
@@ -781,17 +784,22 @@ function startWithLoc(withLoc) {
 }
 
 async function initCamera() {
-  if (!('BarcodeDetector' in window)) {
-    setStatus('❌ BarcodeDetector není podporován – použij Chrome/Edge');
-    return;
-  }
-  try {
-    var supported = await BarcodeDetector.getSupportedFormats();
-    detector = new BarcodeDetector({ formats: supported });
-  } catch(e) {
-    detector = new BarcodeDetector({ formats: [
-      'qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e','data_matrix','pdf417','itf','aztec'
-    ]});
+  if (useZXing) {
+    try {
+      zxingReader = new ZXing.BrowserMultiFormatReader();
+    } catch(e) {
+      setStatus('❌ Skener se nepodařilo spustit: ' + e.message);
+      return;
+    }
+  } else {
+    try {
+      var supported = await BarcodeDetector.getSupportedFormats();
+      detector = new BarcodeDetector({ formats: supported });
+    } catch(e) {
+      detector = new BarcodeDetector({ formats: [
+        'qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e','data_matrix','pdf417','itf','aztec'
+      ]});
+    }
   }
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -850,6 +858,7 @@ function stopCam() {
   if (stream) { stream.getTracks().forEach(function(t){t.stop();}); stream=null; }
   video.srcObject = null;
   cameraReady=false; detector=null;
+  if (zxingReader) { try { zxingReader.reset(); } catch(e){} zxingReader=null; }
   expectingLoc=false; pendingEAN=null;
   devExpectingBox=false;
   scanBtn.disabled=true;
@@ -863,7 +872,31 @@ function stopCam() {
 
 // ── Main scan trigger ─────────────────────────────────────
 async function triggerScan() {
-  if (!detector || !cameraReady) return;
+  if (!cameraReady) return;
+  if (useZXing) {
+    if (!zxingReader) return;
+    setCamSt('🔍 Detekuji…');
+    try {
+      var canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+      var result;
+      try { result = await zxingReader.decodeFromCanvas(canvas); }
+      catch(notFound) {
+        setCamSt('⚠️ Nic nenalezeno – zkus znovu');
+        setStatus('⚠️ Žádný kód – namiř lépe a zkus znovu');
+        return;
+      }
+      var code = result.getText();
+      flashScreen(); beep();
+      if (invMode) { await handleInvCode(code); }
+      else if (myDevMode) { await handleMyDevCode(code); }
+      else { await handleCode(code); }
+      setCamSt('📷 Kamera připravena');
+    } catch(e) { setStatus('❌ Chyba: ' + e.message); }
+    return;
+  }
+  if (!detector) return;
   setCamSt('🔍 Detekuji…');
   try {
     var barcodes = await detector.detect(video);
