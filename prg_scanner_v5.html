@@ -6,7 +6,7 @@
   <title>PRG Scanner</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5"></script>
+  <script src="https://unpkg.com/@zxing/browser@0.2.1/umd/zxing-browser.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
 
@@ -871,23 +871,20 @@ function stopCam() {
 }
 
 // ── Main scan trigger ─────────────────────────────────────
-async function zxingDecodeBurst(maxAttempts, intervalMs) {
-  var canvas = document.createElement('canvas');
-  var ctx = canvas.getContext('2d');
-  for (var i = 0; i < maxAttempts; i++) {
-    if (!video.videoWidth) { await new Promise(function(r){ setTimeout(r, intervalMs); }); continue; }
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    try {
-      var result = await zxingReader.decodeFromCanvas(canvas);
-      return result.getText();
-    } catch(err) {
-      var isNotFound = err && (err.name === 'NotFoundException' || (err.constructor && err.constructor.name === 'NotFoundException'));
-      if (!isNotFound) { throw new Error('Chyba dekodéru: ' + (err && (err.message || err.name || err))); }
-      await new Promise(function(r){ setTimeout(r, intervalMs); });
-    }
+async function zxingDecodeWithTimeout(timeoutMs) {
+  var timedOut = false;
+  var timer = setTimeout(function(){ timedOut = true; try { zxingReader.stopAsyncDecode(); } catch(e){} }, timeoutMs);
+  try {
+    var result = await zxingReader.decodeOnce(video);
+    clearTimeout(timer);
+    return result.getText();
+  } catch(err) {
+    clearTimeout(timer);
+    if (timedOut) return null;
+    var isNotFound = err && (err.name === 'NotFoundException' || (err.constructor && err.constructor.name === 'NotFoundException'));
+    if (isNotFound) return null;
+    throw err;
   }
-  return null;
 }
 
 async function triggerScan() {
@@ -896,7 +893,7 @@ async function triggerScan() {
     if (!zxingReader) return;
     setCamSt('🔍 Detekuji…');
     try {
-      var code = await zxingDecodeBurst(18, 110); // ~2s aktivních pokusů
+      var code = await zxingDecodeWithTimeout(4000); // 4s aktivního skenování ze živého videa
       if (!code) {
         setCamSt('⚠️ Nic nenalezeno – zkus znovu');
         setStatus('⚠️ Žádný kód – namiř lépe, drž pevně a zkus znovu');
