@@ -806,8 +806,6 @@ function startWithLoc(withLoc) {
   initCamera();
 }
 
-var zxingLastCode = null;
-var zxingLastCodeTime = 0;
 var idleTimer = null;
 var isAsleep = false;
 var IDLE_TIMEOUT_MS = 10000; // uspat kameru po 10s bez skenování/interakce
@@ -819,11 +817,10 @@ function resetIdleTimer() {
 
 function enterSleepMode() {
   isAsleep = true;
-  zxingListening = false;
   clearTimeout(idleTimer); idleTimer = null;
   if (stream) { stream.getTracks().forEach(function(t){t.stop();}); stream=null; }
   video.srcObject = null;
-  if (zxingReader) { try { zxingReader.stopContinuousDecode(); zxingReader.reset(); } catch(e){} zxingReader=null; }
+  zxingReader = null;
   cameraReady = false;
   detector = null;
   document.getElementById('sleep-overlay').style.display = 'flex';
@@ -841,53 +838,50 @@ function wakeUp() {
   initCamera();
 }
 
-var zxingListening = false;
+function getAimCropRect() {
+  var containerW = video.clientWidth, containerH = video.clientHeight;
+  var videoW = video.videoWidth, videoH = video.videoHeight;
+  if (!videoW || !videoH || !containerW || !containerH) return null;
+  var scale = Math.max(containerW / videoW, containerH / videoH);
+  var offsetX = (videoW * scale - containerW) / 2;
+  var offsetY = (videoH * scale - containerH) / 2;
+  // #aim je 55% x 40% kontejneru, vystředěný — s malou rezervou 8% okolo
+  var boxW = containerW * 0.63, boxH = containerH * 0.48;
+  var boxX = (containerW - boxW) / 2, boxY = (containerH - boxH) / 2;
+  var sx = (boxX + offsetX) / scale;
+  var sy = (boxY + offsetY) / scale;
+  var sw = boxW / scale;
+  var sh = boxH / scale;
+  sx = Math.max(0, sx); sy = Math.max(0, sy);
+  sw = Math.min(sw, videoW - sx); sh = Math.min(sh, videoH - sy);
+  return { sx: sx, sy: sy, sw: sw, sh: sh };
+}
 
-async function onZXingResult(code) {
-  if (!zxingListening) return; // ZXing dekóduje potichu na pozadí, ale zpracujeme jen po stisku SKENOVAT
-  zxingListening = false;
-  resetIdleTimer();
-  var now = Date.now();
-  if (code === zxingLastCode && (now - zxingLastCodeTime) < 2500) return; // zabraň opakovanému započítání stejného kódu
-  zxingLastCode = code; zxingLastCodeTime = now;
-  setCamSt('📷 Kamera připravena');
-  flashScreen(); beep();
-  if (invMode) { await handleInvCode(code); }
-  else if (myDevMode) { await handleMyDevCode(code); }
-  else { await handleCode(code); }
+function grabAimCanvas() {
+  var rect = getAimCropRect();
+  var canvas = document.createElement('canvas');
+  if (rect) {
+    canvas.width = rect.sw; canvas.height = rect.sh;
+    canvas.getContext('2d').drawImage(video, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, rect.sw, rect.sh);
+  } else {
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  }
+  return canvas;
 }
 
 async function initCamera() {
   if (useZXing) {
+    zxingReader = new ZXingBrowser.BrowserMultiFormatReader();
+  } else {
     try {
-      zxingReader = new ZXingBrowser.BrowserMultiFormatReader();
-      await zxingReader.decodeFromConstraints(
-        { video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } } },
-        video,
-        function(result, err) { if (result) { onZXingResult(result.getText()); } }
-      );
-      cameraReady = true;
-      resetIdleTimer();
-      scanBtn.disabled = false;
-      setCamSt('📷 Kamera připravena');
-      setStatus(invMode
-        ? '📋 Inventura – skenuj čárový kód majetku'
-        : (myDevMode
-          ? '📱 myDevices – skenuj IoT ID zařízení'
-          : '✅ Kamera spuštěna' + (useLocation ? ' · EAN + Lokace' : ' · pouze EAN')));
-      updateScanBtn();
-    } catch(err) {
-      setStatus('❌ Kamera: ' + err.message);
+      var supported = await BarcodeDetector.getSupportedFormats();
+      detector = new BarcodeDetector({ formats: supported });
+    } catch(e) {
+      detector = new BarcodeDetector({ formats: [
+        'qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e','data_matrix','pdf417','itf','aztec'
+      ]});
     }
-    return;
-  }
-  try {
-    var supported = await BarcodeDetector.getSupportedFormats();
-    detector = new BarcodeDetector({ formats: supported });
-  } catch(e) {
-    detector = new BarcodeDetector({ formats: [
-      'qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e','data_matrix','pdf417','itf','aztec'
-    ]});
   }
   try {
     stream = await navigator.mediaDevices.getUserMedia({
@@ -951,9 +945,7 @@ function stopCam() {
   clearTimeout(idleTimer); idleTimer=null;
   isAsleep = false;
   document.getElementById('sleep-overlay').style.display = 'none';
-  if (zxingReader) { try { zxingReader.stopContinuousDecode(); zxingReader.reset(); } catch(e){} zxingReader=null; }
-  zxingLastCode = null;
-  zxingListening = false;
+  zxingReader = null;
   expectingLoc=false; pendingEAN=null;
   devExpectingBox=false;
   scanBtn.disabled=true;
@@ -969,32 +961,37 @@ function stopCam() {
 async function triggerScan() {
   if (isAsleep) { wakeUp(); return; }
   if (!cameraReady) return;
+  resetIdleTimer();
+  setCamSt('🔍 Detekuji…');
+  var canvas = grabAimCanvas();
   if (useZXing) {
     if (!zxingReader) return;
-    resetIdleTimer();
-    zxingListening = true;
-    setCamSt('🔍 Detekuji…');
-    setTimeout(function(){
-      if (zxingListening) {
-        zxingListening = false;
+    try {
+      var result;
+      try { result = zxingReader.decode(canvas); }
+      catch(notFound) {
         setCamSt('⚠️ Nic nenalezeno – zkus znovu');
         setStatus('⚠️ Žádný kód – namiř lépe a zkus znovu');
+        return;
       }
-    }, 4000);
+      var code = result.getText();
+      flashScreen(); beep();
+      if (invMode) { await handleInvCode(code); }
+      else if (myDevMode) { await handleMyDevCode(code); }
+      else { await handleCode(code); }
+      setCamSt('📷 Kamera připravena');
+    } catch(e) { setStatus('❌ Chyba: ' + e.message); }
     return;
   }
   if (!detector) return;
-  resetIdleTimer();
-  setCamSt('🔍 Detekuji…');
   try {
-    var barcodes = await detector.detect(video);
+    var barcodes = await detector.detect(canvas);
     if (!barcodes.length) {
       setCamSt('⚠️ Nic nenalezeno – zkus znovu');
       setStatus('⚠️ Žádný kód – namiř lépe a zkus znovu');
       return;
     }
     var code = barcodes[0].rawValue;
-    resetIdleTimer();
     flashScreen(); beep();
     if (invMode) {
       await handleInvCode(code);
