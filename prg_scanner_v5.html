@@ -336,6 +336,18 @@
   </div>
 </div>
 
+<!-- Modal: Dokončení registrace (první přihlášení po pozvánce) -->
+<div class="modal-backdrop" id="modal-onboard" style="display:none">
+  <div class="modal">
+    <h2 class="info">👋 Vítej v PRG Scanneru!</h2>
+    <p id="onboard-msg">Dokonči založení účtu.</p>
+    <input id="onboard-name" type="text" placeholder="Jméno" maxlength="30" autocomplete="off">
+    <input id="onboard-username" type="text" placeholder="Přezdívka pro rychlé přihlášení (např. prg-janha)" autocomplete="off">
+    <input id="onboard-password" type="password" placeholder="Nastav si heslo (min. 6 znaků)" autocomplete="off">
+    <button class="modal-btn info" onclick="doCompleteOnboarding()">✅ Dokončit a pokračovat</button>
+  </div>
+</div>
+
 <!-- Modal: Výběr aplikace -->
 <div class="modal-backdrop" id="mode-select-screen" style="display:none">
   <div class="modal" style="max-width:360px">
@@ -635,11 +647,37 @@ async function doRegister() {
 async function onLoggedIn(user) {
   currentUserId = user.id;
   // Get profile name
-  var prof = await supa.from('profiles').select('name').eq('id', user.id).single();
-  currentUser = (prof.data && prof.data.name) ? prof.data.name : user.email;
+  var prof = await supa.from('profiles').select('name,username').eq('id', user.id).single();
+  if (!prof.data || !prof.data.name) {
+    // Nový účet (přijatý pozvánkou) – nemá jméno ani heslo. Dokonči nastavení.
+    document.getElementById('modal-login').style.display = 'none';
+    document.getElementById('modal-forgot').style.display = 'none';
+    document.getElementById('onboard-msg').textContent = 'Dokonči založení účtu.';
+    document.getElementById('modal-onboard').style.display = 'flex';
+    return;
+  }
+  currentUser = prof.data.name;
   document.getElementById('user-display').textContent = currentUser;
   document.getElementById('modal-login').style.display = 'none';
   setStatus('✅ Přihlášen jako '+currentUser);
+  if (!appMode) { document.getElementById('mode-select-screen').style.display = 'flex'; }
+}
+
+async function doCompleteOnboarding() {
+  var name  = document.getElementById('onboard-name').value.trim();
+  var uname = document.getElementById('onboard-username').value.trim().toLowerCase();
+  var pass  = document.getElementById('onboard-password').value;
+  if (!name) { document.getElementById('onboard-msg').textContent = '⚠️ Zadej jméno.'; return; }
+  if (!pass || pass.length < 6) { document.getElementById('onboard-msg').textContent = '⚠️ Nastav heslo (alespoň 6 znaků).'; return; }
+  document.getElementById('onboard-msg').textContent = '⏳ Ukládám...';
+  var upd = await supa.from('profiles').update({ name: name, username: uname || null }).eq('id', currentUserId);
+  if (upd.error) { document.getElementById('onboard-msg').textContent = '❌ '+upd.error.message; return; }
+  var pwRes = await supa.auth.updateUser({ password: pass });
+  if (pwRes.error) { document.getElementById('onboard-msg').textContent = '❌ '+pwRes.error.message; return; }
+  currentUser = name;
+  document.getElementById('user-display').textContent = currentUser;
+  closeModal('modal-onboard');
+  setStatus('✅ Vítej, '+currentUser+'!');
   if (!appMode) { document.getElementById('mode-select-screen').style.display = 'flex'; }
 }
 
