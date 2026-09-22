@@ -29,7 +29,7 @@ input[type=text]:focus{border-color:var(--accent);}
 label{display:block;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;}
 .field{margin-bottom:14px;}
 /* Sidebar */
-#sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);background:#0a7c4e;display:flex;flex-direction:column;z-index:50;transition:transform 0.25s ease;}
+#sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);background:var(--accent);display:flex;flex-direction:column;z-index:50;transition:transform 0.25s ease;}
 .sidebar-logo{padding:20px 18px 14px;font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:#fff;letter-spacing:1.5px;border-bottom:1px solid rgba(255,255,255,0.15);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;}
 .sidebar-logo span{font-size:11px;font-weight:400;opacity:0.7;width:100%;letter-spacing:0;}
 #sidebar-close-btn{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;opacity:0.8;display:none;}
@@ -72,15 +72,9 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 </div>
 <div id="app" style="display:none">
   <div id="sidebar">
-    <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
+    <div class="sidebar-logo">PRG Inventory Tool<span>Asset Inventory</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
     <nav>
-      <div class="nav-item" onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Dashboard</div>
-      <div class="nav-item" onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Inventory</div>
-      <div class="nav-item" onclick="go('wms_warehouses.html')"><span class="nav-icon">🏭</span> Sklady</div>
-      <div class="nav-item" onclick="go('wms_clients.html')"><span class="nav-icon">🏢</span> Klienti</div>
-      <div class="nav-item" onclick="go('wms_receipts.html')"><span class="nav-icon">📥</span> Příjmy</div>
-      <div class="nav-item" onclick="go('wms_deliveries.html')"><span class="nav-icon">📤</span> Výdeje</div>
-      <div class="nav-item" onclick="go('wms_scans.html')"><span class="nav-icon">📱</span> Skeny</div>
+      <div class="nav-item" onclick="go('wms_dashboard.html')"><span class="nav-icon">🏭</span> PRG WMS</div>
       <div class="nav-item active" onclick="go('wms_inventura.html')"><span class="nav-icon">📋</span> Inventura</div>
       <div class="nav-item admin-only" onclick="go('wms_users.html')"><span class="nav-icon">👥</span> Uživatelé</div>
     </nav>
@@ -110,6 +104,7 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
             <label>Excel / CSV soubor</label>
             <input type="file" id="new-list-file" accept=".xlsx,.xls,.csv">
             <div style="font-size:12px;color:var(--muted);margin-top:6px">Sloupce: <b>Kód</b> (nebo Evidenční číslo / Inventární číslo), volitelně <b>Název</b> a <b>Umístění</b>.</div>
+            <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="downloadTemplate()">📥 Stáhnout šablonu (Excel)</button>
           </div>
           <div id="upload-msg" style="font-size:13px;min-height:18px;margin-bottom:8px"></div>
           <button class="btn btn-primary" onclick="uploadInvList()">📂 Vytvořit seznam</button>
@@ -136,7 +131,22 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 var SUPA_URL="https://ujvqanqqhmnfxsfeqixc.supabase.co";
 var SUPA_KEY="sb_publishable_5o19BnZUEi8j-rU5DDAgBA_HwKB7V-v";
 var supa=supabase.createClient(SUPA_URL,SUPA_KEY);
+
+function hexToRgb(hex){hex=hex.replace('#','');if(hex.length===3)hex=hex.split('').map(function(c){return c+c;}).join('');var num=parseInt(hex,16);return{r:(num>>16)&255,g:(num>>8)&255,b:num&255};}
+function lighten(hex,amt){var c=hexToRgb(hex);var r=Math.round(c.r+(255-c.r)*amt),g=Math.round(c.g+(255-c.g)*amt),b=Math.round(c.b+(255-c.b)*amt);return 'rgb('+r+','+g+','+b+')';}
+async function applyTheme(appKey){
+  try{
+    var res=await supa.from('app_theme').select('bg_color,accent_color').eq('app',appKey).single();
+    if(res.data){
+      var root=document.documentElement.style;
+      root.setProperty('--bg',res.data.bg_color);
+      root.setProperty('--accent',res.data.accent_color);
+      root.setProperty('--accent-light',lighten(res.data.accent_color,0.85));
+    }
+  }catch(e){}
+}
 var currentUser=null,currentProfile=null;
+applyTheme('inventura');
 
 async function doLogin(){
   var email=document.getElementById('login-email').value.trim();
@@ -215,6 +225,18 @@ function parseInvColumns(row){
   var name=(row['Název']||row['Nazev']||row['Popis']||row['Description']||'').toString().trim();
   var loc=(row['Umístění']||row['Umisteni']||row['Lokace']||row['Location']||'').toString().trim();
   return {code:code,name:name,location:loc};
+}
+
+function downloadTemplate(){
+  var wsData = [
+    ['Kód', 'Název', 'Umístění'],
+    ['12345', 'Notebook Dell Latitude', 'Sklad A - Regál 3']
+  ];
+  var ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = [{wch:15},{wch:32},{wch:22}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Šablona');
+  XLSX.writeFile(wb, 'sablona_inventura.xlsx');
 }
 
 function uploadInvList(){

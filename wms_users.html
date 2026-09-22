@@ -103,6 +103,25 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
     <table><thead><tr><th>Jméno</th><th>E-mail</th><th>Role</th><th>Stav</th><th>Akce</th></tr></thead>
     <tbody id="tbody"><tr class="empty-row"><td colspan="5">Načítám…</td></tr></tbody></table>
   </div>
+  <div class="card">
+    <div class="card-header"><h3>🎨 Vzhled aplikací</h3></div>
+    <div class="modal-body">
+      <div class="form-section">PRG WMS</div>
+      <div class="form-row">
+        <div class="form-group"><label>Barva pozadí</label><input id="wms-bg" type="color" value="#f0f2f5"></div>
+        <div class="form-group"><label>Barva tlačítek / postranního panelu</label><input id="wms-accent" type="color" value="#0a7c4e"></div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="saveTheme('wms')">💾 Uložit vzhled WMS</button>
+
+      <div class="form-section" style="margin-top:20px">Inventory Tool</div>
+      <div class="form-row">
+        <div class="form-group"><label>Barva pozadí</label><input id="inv-bg" type="color" value="#f0f2f5"></div>
+        <div class="form-group"><label>Barva tlačítek / postranního panelu</label><input id="inv-accent" type="color" value="#0a7c4e"></div>
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="saveTheme('inventura')">💾 Uložit vzhled Inventory Tool</button>
+      <p style="font-size:12px;color:var(--muted);margin-top:10px">Změna se projeví po znovunačtení dané aplikace (u všech, kdo ji mají otevřenou).</p>
+    </div>
+  </div>
 </div>
 <div class="modal-backdrop" id="modal" style="display:none">
   <div class="modal-box">
@@ -139,10 +158,29 @@ var data=[],editId=null;
 async function afterLogin(){
   if(currentProfile&&currentProfile.role!=='admin'){toast('⚠️ Přístup pouze pro administrátory');setTimeout(function(){go('wms_dashboard.html');},1500);return;}
   load();
+  loadTheme();
+}
+async function loadTheme(){
+  var res=await supa.from('app_theme').select('*');
+  var rows=res.data||[];
+  var wms=rows.find(function(r){return r.app==='wms';})||{bg_color:'#f0f2f5',accent_color:'#0a7c4e'};
+  var inv=rows.find(function(r){return r.app==='inventura';})||{bg_color:'#f0f2f5',accent_color:'#0a7c4e'};
+  document.getElementById('wms-bg').value=wms.bg_color;
+  document.getElementById('wms-accent').value=wms.accent_color;
+  document.getElementById('inv-bg').value=inv.bg_color;
+  document.getElementById('inv-accent').value=inv.accent_color;
+}
+async function saveTheme(appKey){
+  var bg=document.getElementById(appKey==='wms'?'wms-bg':'inv-bg').value;
+  var accent=document.getElementById(appKey==='wms'?'wms-accent':'inv-accent').value;
+  var res=await supa.from('app_theme').upsert({app:appKey,bg_color:bg,accent_color:accent});
+  if(res.error){toast('❌ '+res.error.message);return;}
+  toast('✅ Vzhled uložen');
 }
 async function load(){
-  var res=await supa.from('profiles').select('*').order('created_at');
-  data=res.data||[];
+  var res=await supa.rpc('admin_list_users');
+  if(res.error){toast('❌ '+res.error.message);data=[];}
+  else{data=res.data||[];}
   var tb=document.getElementById('tbody');
   if(!data.length){tb.innerHTML='<tr class="empty-row"><td colspan="5">Žádní uživatelé</td></tr>';return;}
   tb.innerHTML=data.map(function(u){
@@ -150,12 +188,23 @@ async function load(){
     var statusBadge=u.is_active!==false?'<span class="badge badge-green">Aktivní</span>':'<span class="badge badge-red">Deaktivován</span>';
     return '<tr>'
       +'<td><strong>'+u.name+'</strong></td>'
-      +'<td style="font-size:12px;color:var(--muted)">'+(u.id||'')+'</td>'
+      +'<td style="font-size:12px;color:var(--muted)">'+(u.email||'')+'</td>'
       +'<td>'+roleBadge+'</td>'
       +'<td>'+statusBadge+'</td>'
-      +'<td><button class="btn btn-secondary btn-sm" onclick="edit(\''+u.id+'\')">✏️ Upravit</button></td>'
+      +'<td style="white-space:nowrap">'
+        +'<button class="btn btn-secondary btn-sm" onclick="edit(\''+u.id+'\')">✏️ Upravit</button> '
+        +'<button class="btn btn-info btn-sm" onclick="resetPw(\''+u.email+'\')">🔑 Reset hesla</button>'
+      +'</td>'
     +'</tr>';
   }).join('');
+}
+async function resetPw(email){
+  if(!email){toast('❌ Neznámý e-mail');return;}
+  if(!confirm('Poslat odkaz na reset hesla na '+email+'?'))return;
+  var redirectTo='https://mesany16-bot.github.io/Scanner/prg_scanner_v5.html';
+  var res=await supa.auth.resetPasswordForEmail(email,{redirectTo:redirectTo});
+  if(res.error){toast('❌ '+res.error.message);return;}
+  toast('✅ Odkaz na reset hesla odeslán na '+email);
 }
 function edit(id){
   var u=data.find(function(x){return x.id===id;});

@@ -23,7 +23,7 @@ td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle
 tbody tr:last-child td{border-bottom:none;}tbody tr:hover{background:#fafbfc;}
 .empty-row td{text-align:center;color:var(--muted);padding:28px;}
 /* Sidebar */
-#sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);background:#0a7c4e;display:flex;flex-direction:column;z-index:50;transition:transform 0.25s ease;}
+#sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);background:var(--accent);display:flex;flex-direction:column;z-index:50;transition:transform 0.25s ease;}
 .sidebar-logo{padding:20px 18px 14px;font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:#fff;letter-spacing:1.5px;border-bottom:1px solid rgba(255,255,255,0.15);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;}
 .sidebar-logo span{font-size:11px;font-weight:400;opacity:0.7;width:100%;letter-spacing:0;}
 #sidebar-close-btn{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;opacity:0.8;display:none;}
@@ -69,15 +69,33 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
     <div id="auth-msg" style="font-size:13px;color:#c0392b;min-height:18px;margin-bottom:8px"></div>
     <input id="login-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
     <input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
-    <button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Přihlásit se</button>
+    <button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px">Přihlásit se</button>
+    <button onclick="showForgot()" style="width:100%;padding:10px;background:none;color:#7a8090;border:none;font-size:13px;font-weight:600;cursor:pointer">🔑 Zapomenuté heslo?</button>
+  </div>
+</div>
+<div id="forgot-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+  <div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
+    <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;color:#0a7c4e;margin-bottom:4px">🔑 Obnovit heslo</h1>
+    <p id="forgot-msg" style="font-size:13px;color:#7a8090;margin-bottom:16px">Zadej e-mail, na který pošleme odkaz pro nastavení nového hesla.</p>
+    <input id="forgot-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
+    <button onclick="doForgotPassword()" style="width:100%;padding:12px;background:#2980b9;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px">✉️ Poslat odkaz</button>
+    <button onclick="document.getElementById('forgot-screen').style.display='none';document.getElementById('auth-screen').style.display='flex';" style="width:100%;padding:10px;background:none;color:#7a8090;border:none;font-size:13px;font-weight:600;cursor:pointer">← Zpět na přihlášení</button>
+  </div>
+</div>
+<div id="reset-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+  <div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
+    <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;color:#0a7c4e;margin-bottom:4px">🔑 Nové heslo</h1>
+    <p id="reset-msg" style="font-size:13px;color:#7a8090;margin-bottom:16px">Zadej nové heslo pro svůj účet.</p>
+    <input id="reset-password" type="password" placeholder="Nové heslo (min. 6 znaků)" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
+    <button onclick="doSetNewPassword()" style="width:100%;padding:12px;background:#2980b9;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">✅ Uložit nové heslo</button>
   </div>
 </div>
 <div id="mode-select-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
   <div style="background:#fff;border-radius:16px;padding:32px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
     <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1>
     <p style="font-size:13px;color:#7a8090;margin-bottom:18px">Co chceš otevřít?</p>
-    <button class="mode-select-btn wms" onclick="enterMode('wms')"><span class="msb-icon">🏭</span><span class="msb-title">WMS</span><span class="msb-sub">Sklad, klienti, příjmy, výdeje</span></button>
-    <button class="mode-select-btn inv" onclick="enterMode('inventura')"><span class="msb-icon">📋</span><span class="msb-title">Inventura</span><span class="msb-sub">Seznamy majetku a výsledky inventur</span></button>
+    <button class="mode-select-btn wms" onclick="enterMode('wms')"><span class="msb-icon">🏭</span><span class="msb-title">PRG WMS</span><span class="msb-sub">Sklad, klienti, příjmy, výdeje</span></button>
+    <button class="mode-select-btn inv" onclick="enterMode('inventura')"><span class="msb-icon">📋</span><span class="msb-title">Inventory Tool</span><span class="msb-sub">Seznamy majetku a výsledky inventur</span></button>
   </div>
 </div>
 <div id="app" style="display:none">
@@ -91,7 +109,8 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
       <div class="nav-item" onclick="go('wms_receipts.html')"><span class="nav-icon">📥</span> Příjmy</div>
       <div class="nav-item" onclick="go('wms_deliveries.html')"><span class="nav-icon">📤</span> Výdeje</div>
       <div class="nav-item" onclick="go('wms_scans.html')"><span class="nav-icon">📱</span> Skeny</div>
-      <div class="nav-item" onclick="go('wms_inventura.html')"><span class="nav-icon">📋</span> Inventura</div>
+      <div style="height:1px;background:rgba(255,255,255,0.15);margin:8px 18px"></div>
+      <div class="nav-item" onclick="go('wms_inventura.html')"><span class="nav-icon">📋</span> Inventory Tool</div>
       <div class="nav-item admin-only" onclick="go('wms_users.html')"><span class="nav-icon">👥</span> Uživatelé</div>
     </nav>
     <div class="sidebar-user">
@@ -136,7 +155,22 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 var SUPA_URL="https://ujvqanqqhmnfxsfeqixc.supabase.co";
 var SUPA_KEY="sb_publishable_5o19BnZUEi8j-rU5DDAgBA_HwKB7V-v";
 var supa=supabase.createClient(SUPA_URL,SUPA_KEY);
+
+function hexToRgb(hex){hex=hex.replace('#','');if(hex.length===3)hex=hex.split('').map(function(c){return c+c;}).join('');var num=parseInt(hex,16);return{r:(num>>16)&255,g:(num>>8)&255,b:num&255};}
+function lighten(hex,amt){var c=hexToRgb(hex);var r=Math.round(c.r+(255-c.r)*amt),g=Math.round(c.g+(255-c.g)*amt),b=Math.round(c.b+(255-c.b)*amt);return 'rgb('+r+','+g+','+b+')';}
+async function applyTheme(appKey){
+  try{
+    var res=await supa.from('app_theme').select('bg_color,accent_color').eq('app',appKey).single();
+    if(res.data){
+      var root=document.documentElement.style;
+      root.setProperty('--bg',res.data.bg_color);
+      root.setProperty('--accent',res.data.accent_color);
+      root.setProperty('--accent-light',lighten(res.data.accent_color,0.85));
+    }
+  }catch(e){}
+}
 var currentUser=null,currentProfile=null;
+applyTheme('wms');
 
 async function doLogin(){
   var email=document.getElementById('login-email').value.trim();
@@ -147,6 +181,44 @@ async function doLogin(){
   if(res.error){document.getElementById('auth-msg').textContent='❌ '+res.error.message;return;}
   await onLoggedIn(res.data.user);
 }
+
+function showForgot(){
+  var typed=document.getElementById('login-email').value.trim();
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('forgot-email').value=typed;
+  document.getElementById('forgot-msg').textContent='Zadej e-mail, na který pošleme odkaz pro nastavení nového hesla.';
+  document.getElementById('forgot-screen').style.display='flex';
+}
+
+async function doForgotPassword(){
+  var email=document.getElementById('forgot-email').value.trim();
+  if(!email){document.getElementById('forgot-msg').textContent='⚠️ Zadej e-mail.';return;}
+  document.getElementById('forgot-msg').textContent='⏳ Posílám odkaz...';
+  var redirectTo=window.location.origin+window.location.pathname;
+  var res=await supa.auth.resetPasswordForEmail(email,{redirectTo:redirectTo});
+  if(res.error){document.getElementById('forgot-msg').textContent='❌ '+res.error.message;return;}
+  document.getElementById('forgot-msg').textContent='✅ Pokud účet s tímto e-mailem existuje, odkaz už je na cestě. Zkontroluj i spam.';
+}
+
+async function doSetNewPassword(){
+  var pass=document.getElementById('reset-password').value;
+  if(!pass||pass.length<6){document.getElementById('reset-msg').textContent='⚠️ Heslo musí mít alespoň 6 znaků.';return;}
+  document.getElementById('reset-msg').textContent='⏳ Ukládám...';
+  var res=await supa.auth.updateUser({password:pass});
+  if(res.error){document.getElementById('reset-msg').textContent='❌ '+res.error.message;return;}
+  document.getElementById('reset-msg').textContent='✅ Heslo změněno!';
+  document.getElementById('reset-screen').style.display='none';
+  if(res.data&&res.data.user){await onLoggedIn(res.data.user);}
+}
+
+supa.auth.onAuthStateChange(function(event,session){
+  if(event==='PASSWORD_RECOVERY'){
+    document.getElementById('auth-screen').style.display='none';
+    document.getElementById('forgot-screen').style.display='none';
+    document.getElementById('reset-msg').textContent='Zadej nové heslo pro svůj účet.';
+    document.getElementById('reset-screen').style.display='flex';
+  }
+});
 
 async function onLoggedIn(user){
   currentUser=user;
