@@ -819,6 +819,7 @@ function resetIdleTimer() {
 
 function enterSleepMode() {
   isAsleep = true;
+  zxingListening = false;
   clearTimeout(idleTimer); idleTimer = null;
   if (stream) { stream.getTracks().forEach(function(t){t.stop();}); stream=null; }
   video.srcObject = null;
@@ -840,11 +841,16 @@ function wakeUp() {
   initCamera();
 }
 
+var zxingListening = false;
+
 async function onZXingResult(code) {
+  if (!zxingListening) return; // ZXing dekóduje potichu na pozadí, ale zpracujeme jen po stisku SKENOVAT
+  zxingListening = false;
   resetIdleTimer();
   var now = Date.now();
   if (code === zxingLastCode && (now - zxingLastCodeTime) < 2500) return; // zabraň opakovanému započítání stejného kódu
   zxingLastCode = code; zxingLastCodeTime = now;
+  setCamSt('📷 Kamera připravena');
   flashScreen(); beep();
   if (invMode) { await handleInvCode(code); }
   else if (myDevMode) { await handleMyDevCode(code); }
@@ -862,14 +868,14 @@ async function initCamera() {
       );
       cameraReady = true;
       resetIdleTimer();
-      scanBtn.disabled = true;
-      scanBtn.textContent = '🔍 Automatické skenování…';
-      setCamSt('📷 Kamera připravena (auto-skenování)');
+      scanBtn.disabled = false;
+      setCamSt('📷 Kamera připravena');
       setStatus(invMode
-        ? '📋 Inventura – namiř na kód majetku, naskenuje se automaticky'
+        ? '📋 Inventura – skenuj čárový kód majetku'
         : (myDevMode
-          ? '📱 myDevices – namiř na IoT ID, naskenuje se automaticky'
-          : '✅ Kamera spuštěna – namiř na kód, naskenuje se automaticky'));
+          ? '📱 myDevices – skenuj IoT ID zařízení'
+          : '✅ Kamera spuštěna' + (useLocation ? ' · EAN + Lokace' : ' · pouze EAN')));
+      updateScanBtn();
     } catch(err) {
       setStatus('❌ Kamera: ' + err.message);
     }
@@ -947,6 +953,7 @@ function stopCam() {
   document.getElementById('sleep-overlay').style.display = 'none';
   if (zxingReader) { try { zxingReader.stopContinuousDecode(); zxingReader.reset(); } catch(e){} zxingReader=null; }
   zxingLastCode = null;
+  zxingListening = false;
   expectingLoc=false; pendingEAN=null;
   devExpectingBox=false;
   scanBtn.disabled=true;
@@ -961,7 +968,21 @@ function stopCam() {
 // ── Main scan trigger ─────────────────────────────────────
 async function triggerScan() {
   if (isAsleep) { wakeUp(); return; }
-  if (!cameraReady || useZXing) return; // na iPhonu skenuje appka automaticky na pozadí
+  if (!cameraReady) return;
+  if (useZXing) {
+    if (!zxingReader) return;
+    resetIdleTimer();
+    zxingListening = true;
+    setCamSt('🔍 Detekuji…');
+    setTimeout(function(){
+      if (zxingListening) {
+        zxingListening = false;
+        setCamSt('⚠️ Nic nenalezeno – zkus znovu');
+        setStatus('⚠️ Žádný kód – namiř lépe a zkus znovu');
+      }
+    }, 4000);
+    return;
+  }
   if (!detector) return;
   resetIdleTimer();
   setCamSt('🔍 Detekuji…');
@@ -1565,7 +1586,6 @@ function resetData() {
 function updateScanBtn() {
   if (isAsleep) { scanBtn.textContent='💤 PROBUDIT'; scanBtn.className='sleep-mode'; scanBtn.disabled=false; return; }
   if (!cameraReady) { scanBtn.textContent='📷 SKENOVAT'; scanBtn.className=''; return; }
-  if (useZXing) { scanBtn.textContent='🔍 Automatické skenování…'; scanBtn.className='dev-mode'; scanBtn.disabled=true; return; }
   if (invMode) { scanBtn.textContent='📋 SKENOVAT MAJETEK'; scanBtn.className='dev-mode'; return; }
   if (myDevMode) {
     if (devExpectingBox && devPendingDevice &&
