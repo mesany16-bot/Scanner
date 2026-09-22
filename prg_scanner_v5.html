@@ -95,6 +95,38 @@
     .modal-btn.warn      { background: var(--warning); }
     .modal-btn.info      { background: var(--info); }
 
+    .mode-select-btn {
+      display: block; width: 100%;
+      padding: 22px 16px;
+      font-family: 'Barlow Condensed', sans-serif;
+      border: none; border-radius: 14px; cursor: pointer;
+      color: #fff; margin-bottom: 12px;
+      text-align: left; transition: opacity 0.15s;
+    }
+    .mode-select-btn:active { opacity: 0.8; }
+    .mode-select-btn .msb-icon  { font-size: 30px; display:block; margin-bottom:4px; }
+    .mode-select-btn .msb-title { font-size: 22px; font-weight: 700; letter-spacing: 0.5px; display:block; }
+    .mode-select-btn .msb-sub   { font-size: 13px; font-weight: 400; opacity: 0.85; display:block; margin-top:2px; }
+    .mode-select-btn.wms { background: var(--accent); }
+    .mode-select-btn.inv { background: var(--info); }
+
+    .inv-list-item {
+      display:flex; justify-content:space-between; align-items:center;
+      width:100%; text-align:left; padding:12px 14px;
+      border:1px solid var(--border); border-radius:9px;
+      background:var(--bg); margin-bottom:8px; cursor:pointer;
+      font-family:'Barlow Condensed',sans-serif;
+    }
+    .inv-list-item b { font-size:15px; color:var(--text); }
+    .inv-list-item span { font-size:12px; color:var(--muted); }
+    .inv-summary { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+    .inv-summary .chip {
+      flex:1; min-width:70px; border-radius:8px; padding:8px 6px; text-align:center;
+      font-family:'JetBrains Mono',monospace;
+    }
+    .inv-summary .chip b { display:block; font-size:18px; }
+    .inv-summary .chip span { font-size:10px; color:var(--muted); }
+
     header {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
@@ -114,6 +146,13 @@
       align-items: center; gap: 5px;
       background: var(--info-light); border-radius: 20px;
       padding: 5px 11px; font-size: 12px; font-weight: 700; color: var(--info);
+    }
+    #switch-badge {
+      display: none;
+      align-items: center; gap: 4px;
+      background: var(--warning-light); border-radius: 20px;
+      padding: 5px 11px; font-size: 12px; font-weight: 700; color: var(--warning);
+      cursor: pointer; user-select: none;
     }
 
     #cam-section { flex-shrink: 0; background: #000; position: relative; }
@@ -276,6 +315,22 @@
   </div>
 </div>
 
+<!-- Modal: Výběr aplikace -->
+<div class="modal-backdrop" id="mode-select-screen" style="display:none">
+  <div class="modal" style="max-width:360px">
+    <h2>📦 PRG Scanner</h2>
+    <p>Vyber, co chceš dělat:</p>
+    <button class="mode-select-btn wms" onclick="selectAppMode('wms')">
+      <span class="msb-icon">🏭</span><span class="msb-title">WMS</span>
+      <span class="msb-sub">Skladové skenování EAN, lokace, myDevices</span>
+    </button>
+    <button class="mode-select-btn inv" onclick="selectAppMode('inventura')">
+      <span class="msb-icon">📋</span><span class="msb-title">Inventura</span>
+      <span class="msb-sub">Inventarizace majetku podle seznamu</span>
+    </button>
+  </div>
+</div>
+
 <!-- Modal: Lokace? -->
 <div class="modal-backdrop" id="modal-loc-choice" style="display:none">
   <div class="modal">
@@ -351,10 +406,45 @@
   </div>
 </div>
 
+<!-- Modal: Inventura - zdroj seznamu -->
+<div class="modal-backdrop" id="modal-inv-source" style="display:none">
+  <div class="modal">
+    <h2 class="info">📋 Inventura</h2>
+    <p>Odkud načíst seznam majetku k inventuře?</p>
+    <input type="file" id="inv-excel-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="loadInvExcelFile(this)">
+    <button class="modal-btn info" onclick="document.getElementById('inv-excel-input').click()">📂 Nahrát Excel/CSV ze zařízení</button>
+    <button class="modal-btn" style="background:var(--accent)" onclick="openInvServerPick()">☁️ Načíst uložený seznam ze serveru</button>
+    <button class="modal-btn secondary" onclick="closeModal('modal-inv-source')">Zrušit</button>
+  </div>
+</div>
+
+<!-- Modal: Inventura - výběr seznamu ze serveru -->
+<div class="modal-backdrop" id="modal-inv-server-pick" style="display:none">
+  <div class="modal" style="max-width:380px">
+    <h2 class="info">☁️ Seznamy na serveru</h2>
+    <div id="inv-server-list-wrap" style="max-height:340px;overflow-y:auto;margin-bottom:14px;">
+      <p style="color:var(--muted);font-size:14px;">Načítám…</p>
+    </div>
+    <button class="modal-btn secondary" onclick="closeModal('modal-inv-server-pick')">Zpět</button>
+  </div>
+</div>
+
+<!-- Modal: Inventura - dokončení -->
+<div class="modal-backdrop" id="modal-inv-finish" style="display:none">
+  <div class="modal">
+    <h2 class="info">🧾 Dokončit inventuru?</h2>
+    <div class="inv-summary" id="inv-finish-summary"></div>
+    <p style="font-size:13px;">Uloží se výsledek do serveru (pokud je dostupný) a zároveň stáhne CSV export.</p>
+    <button class="modal-btn info" onclick="confirmFinishInventura()">💾 Uložit a exportovat</button>
+    <button class="modal-btn secondary" onclick="closeModal('modal-inv-finish')">Zpět ke skenování</button>
+  </div>
+</div>
+
 <!-- Header -->
 <header>
   <h1>📦 PRG Scanner</h1>
   <div style="display:flex;gap:8px;align-items:center;">
+    <div id="switch-badge" onclick="switchAppMode(appMode==='inventura'?'wms':'inventura')">🔀 <span id="switch-badge-label">Inventura</span></div>
     <div id="mode-badge">📱 myDevices</div>
     <div id="user-badge" onclick="doLogout()">
       <span>👤</span><span id="user-display">–</span>
@@ -393,7 +483,7 @@
     <button class="ctrl-btn stop"   onclick="stopCam()">⏹ Stop</button>
     <button class="ctrl-btn exp"    onclick="exportCSV()">📥 CSV</button>
     <button class="ctrl-btn rst"    onclick="resetData()">♻ Reset</button>
-    <button class="ctrl-btn mydev"  onclick="openMyDevices()">📱 myDev</button>
+    <button class="ctrl-btn mydev" id="mode-action-btn" onclick="bottomModeBtn()">📱 myDev</button>
   </div>
 </div>
 
@@ -441,6 +531,14 @@ var devPendingDevice = null;
 var devScanResults = [];
 var placementMode = 'outer'; // outer=Box#, inner=Lab/Room
 
+var appMode = null; // 'wms' | 'inventura'
+
+// Inventura (reuses the `supa` client created above)
+var invMode = false;
+var invList = [];
+var invExtra = [];
+var invListMeta = null;
+
 var video     = document.getElementById('video');
 var scanBtn   = document.getElementById('scan-btn');
 var camSt     = document.getElementById('cam-status');
@@ -486,6 +584,64 @@ async function onLoggedIn(user) {
   document.getElementById('user-display').textContent = currentUser;
   document.getElementById('modal-login').style.display = 'none';
   setStatus('✅ Přihlášen jako '+currentUser);
+  if (!appMode) { document.getElementById('mode-select-screen').style.display = 'flex'; }
+}
+
+// ── Přepínání WMS ↔ Inventura ───────────────────────────────
+function selectAppMode(mode) {
+  appMode = mode;
+  closeModal('mode-select-screen');
+  refreshModeUI();
+  if (mode === 'inventura' && !invList.length) {
+    document.getElementById('modal-inv-source').style.display = 'flex';
+  }
+}
+
+function refreshModeUI() {
+  var badge = document.getElementById('mode-badge');
+  var btn = document.getElementById('mode-action-btn');
+  var sw = document.getElementById('switch-badge');
+  var swLabel = document.getElementById('switch-badge-label');
+  if (sw) sw.style.display = 'flex';
+  if (appMode === 'inventura') {
+    badge.style.display = 'flex';
+    if (invMode) updateInvSummaryBadge(); else badge.textContent = '📋 Inventura';
+    if (btn) btn.textContent = '✅ Dokončit';
+    if (swLabel) swLabel.textContent = 'WMS';
+  } else {
+    badge.style.display = myDevMode ? 'flex' : 'none';
+    badge.textContent = '📱 myDevices';
+    if (btn) btn.textContent = '📱 myDev';
+    if (swLabel) swLabel.textContent = 'Inventura';
+  }
+}
+
+function switchAppMode(target) {
+  if (!currentUser || target === appMode) return;
+  stopCam();
+  appMode = target;
+  if (target === 'inventura') {
+    if (invList.length) {
+      invMode = true;
+      renderInvTable();
+      setStatus('📋 Inventura · pokračuj – spusť kameru');
+    } else {
+      invMode = false;
+      setStatus('📋 Inventura · vyber zdroj seznamu');
+      document.getElementById('modal-inv-source').style.display = 'flex';
+    }
+  } else {
+    invMode = false;
+    if (myDevMode) { renderMyDevTable(); setStatus('📱 myDevices · spusť kameru'); }
+    else { renderTableHead(); renderTable(); setStatus('🏭 WMS · spusť kameru'); }
+  }
+  refreshModeUI();
+  updateScanBtn();
+}
+
+function bottomModeBtn() {
+  if (appMode === 'inventura') finishInventura();
+  else openMyDevices();
 }
 
 async function doLogout() {
@@ -508,7 +664,7 @@ supa.auth.getSession().then(function(res) {
 // ── Camera ────────────────────────────────────────────────
 function startCam() {
   if (!currentUser) { document.getElementById('modal-login').style.display='flex'; return; }
-  if (myDevMode) { initCamera(); return; }
+  if (invMode || myDevMode) { initCamera(); return; }
   document.getElementById('modal-loc-choice').style.display = 'flex';
 }
 
@@ -546,9 +702,11 @@ async function initCamera() {
     cameraReady = true;
     scanBtn.disabled = false;
     setCamSt('📷 Kamera připravena');
-    setStatus(myDevMode
-      ? '📱 myDevices – skenuj IoT ID zařízení'
-      : '✅ Kamera spuštěna' + (useLocation ? ' · EAN + Lokace' : ' · pouze EAN'));
+    setStatus(invMode
+      ? '📋 Inventura – skenuj čárový kód majetku'
+      : (myDevMode
+        ? '📱 myDevices – skenuj IoT ID zařízení'
+        : '✅ Kamera spuštěna' + (useLocation ? ' · EAN + Lokace' : ' · pouze EAN')));
     updateScanBtn();
   } catch(err) {
     setStatus('❌ Kamera: ' + err.message);
@@ -612,7 +770,9 @@ async function triggerScan() {
     }
     var code = barcodes[0].rawValue;
     flashScreen(); beep();
-    if (myDevMode) {
+    if (invMode) {
+      await handleInvCode(code);
+    } else if (myDevMode) {
       await handleMyDevCode(code);
     } else {
       await handleCode(code);
@@ -912,6 +1072,191 @@ function renderMyDevTable() {
   });
 }
 
+// ── Inventura ─────────────────────────────────────────────
+function normalizeCode(c) { return c.toString().trim().toUpperCase(); }
+
+function loadInvExcelFile(input) {
+  var file = input.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var wb = XLSX.read(e.target.result, { type: 'array' });
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      var list = [];
+      data.forEach(function(row) {
+        var code = (row['Kód']||row['Kod']||row['Evidenční číslo']||row['Evidencni cislo']||row['Inventární číslo']||row['Inventarni cislo']||row['ID']||row['Code']||'').toString().trim();
+        var name = (row['Název']||row['Nazev']||row['Popis']||row['Description']||'').toString().trim();
+        var loc  = (row['Umístění']||row['Umisteni']||row['Lokace']||row['Location']||'').toString().trim();
+        if (code) list.push({ code: code, name: name, loc: loc, status: 'pending', ts: '', user: '' });
+      });
+      closeModal('modal-inv-source');
+      if (!list.length) { alert('Soubor nenačten – zkontroluj sloupce (potřebujeme aspoň Kód / Evidenční číslo).'); return; }
+      startInvScanning(list, null);
+    } catch(err) { alert('Chyba při čtení souboru: '+err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function openInvServerPick() {
+  document.getElementById('modal-inv-source').style.display = 'none';
+  document.getElementById('modal-inv-server-pick').style.display = 'flex';
+  var wrap = document.getElementById('inv-server-list-wrap');
+  wrap.innerHTML = '<p style="color:var(--muted);font-size:14px;">Načítám…</p>';
+  try {
+    var res = await supa.from('inventory_lists').select('id,name,created_at').order('created_at', {ascending:false}).limit(30);
+    if (res.error) throw res.error;
+    var lists = res.data || [];
+    if (!lists.length) { wrap.innerHTML = '<p style="color:var(--muted);font-size:14px;">Žádné uložené seznamy na serveru.</p>'; return; }
+    wrap.innerHTML = '';
+    lists.forEach(function(l) {
+      var d = document.createElement('div');
+      d.className = 'inv-list-item';
+      d.onclick = function(){ selectInvList(l.id, l.name); };
+      d.innerHTML = '<div><b>'+l.name+'</b></div><span>'+new Date(l.created_at).toLocaleDateString('cs-CZ')+'</span>';
+      wrap.appendChild(d);
+    });
+  } catch(err) {
+    wrap.innerHTML = '<p style="color:var(--danger);font-size:13px;">Chyba načítání: '+err.message+'</p>';
+  }
+}
+
+async function selectInvList(listId, listName) {
+  var wrap = document.getElementById('inv-server-list-wrap');
+  wrap.innerHTML = '<p style="color:var(--muted);font-size:14px;">Načítám položky…</p>';
+  try {
+    var res = await supa.from('inventory_list_items').select('code,name,location').eq('list_id', listId);
+    if (res.error) throw res.error;
+    var items = res.data || [];
+    if (!items.length) { alert('Seznam "'+listName+'" neobsahuje žádné položky.'); return; }
+    var list = items.map(function(it){ return { code: (it.code||'').toString().trim(), name: it.name||'', loc: it.location||'', status:'pending', ts:'', user:'' }; });
+    closeModal('modal-inv-server-pick');
+    startInvScanning(list, { id: listId, name: listName });
+  } catch(err) {
+    alert('Chyba načítání položek: '+err.message);
+  }
+}
+
+function startInvScanning(list, meta) {
+  invMode = true;
+  invList = list;
+  invExtra = [];
+  invListMeta = meta;
+  renderInvTable();
+  refreshModeUI();
+  setStatus('📋 Inventura načtena ('+list.length+' položek)'+(meta?(' · '+meta.name):'')+' · Spusť kameru');
+  if (!cameraReady) initCamera(); else updateScanBtn();
+}
+
+async function handleInvCode(code) {
+  var norm = normalizeCode(code);
+  var item = invList.find(function(r){ return normalizeCode(r.code) === norm; });
+  if (item) {
+    if (item.status === 'found') {
+      beepWarn();
+      setStatus('⚠️ '+item.code+' už byl naskenován ('+item.ts+')');
+      return;
+    }
+    item.status = 'found'; item.ts = nowStr(); item.user = currentUser;
+    beepOk();
+    setStatus('✅ '+item.code+(item.name?' · '+item.name:'')+' nalezeno');
+  } else {
+    var already = invExtra.find(function(r){ return normalizeCode(r.code)===norm; });
+    if (already) { beepWarn(); setStatus('⚠️ '+code+' (navíc) už byl zaznamenán'); return; }
+    invExtra.push({ code: code, ts: nowStr(), user: currentUser });
+    beepError();
+    setStatus('➕ '+code+' není v seznamu – zaznamenáno jako NAVÍC');
+  }
+  renderInvTable(); updateInvSummaryBadge();
+}
+
+function updateInvSummaryBadge() {
+  var found = invList.filter(function(r){return r.status==='found';}).length;
+  var total = invList.length;
+  document.getElementById('mode-badge').textContent = '📋 '+found+'/'+total+' · +'+invExtra.length;
+}
+
+function renderInvTable() {
+  var empty = document.getElementById('empty-state');
+  var table = document.getElementById('main-table');
+  var tbody = document.getElementById('tableBody');
+  var headRow = document.getElementById('table-head-row');
+  headRow.innerHTML = '<th>Kód</th><th>Název</th><th style="text-align:center">Stav</th>';
+
+  var events = invList.filter(function(r){return r.status==='found';})
+    .concat(invExtra.map(function(r){ return {code:r.code, name:'', status:'extra', ts:r.ts}; }))
+    .sort(function(a,b){ return (b.ts||'').localeCompare(a.ts||''); });
+
+  if (!events.length) { empty.style.display='block'; table.style.display='none'; return; }
+  empty.style.display='none'; table.style.display='table';
+  tbody.innerHTML = '';
+  events.forEach(function(r, i) {
+    var tr = document.createElement('tr');
+    if (i===0) { tr.className='highlight'; setTimeout(function(){tr.classList.remove('highlight');},900); }
+    var icon = r.status==='found' ? '✅' : '➕';
+    var color = r.status==='found' ? 'color:var(--accent)' : 'color:var(--warning)';
+    tr.innerHTML = '<td class="ean-cell">'+r.code+'</td><td style="font-size:12px;color:var(--muted)">'+(r.name||'')+'</td><td style="text-align:center;'+color+'">'+icon+'</td>';
+    tbody.appendChild(tr);
+  });
+}
+
+function finishInventura() {
+  var found = invList.filter(function(r){return r.status==='found';}).length;
+  var total = invList.length;
+  var missing = total - found;
+  var extra = invExtra.length;
+  document.getElementById('inv-finish-summary').innerHTML =
+    '<div class="chip" style="background:var(--bg)"><b>'+total+'</b><span>Celkem</span></div>'+
+    '<div class="chip" style="background:var(--accent-light)"><b style="color:var(--accent)">'+found+'</b><span>Nalezeno</span></div>'+
+    '<div class="chip" style="background:var(--danger-light)"><b style="color:var(--danger)">'+missing+'</b><span>Chybí</span></div>'+
+    '<div class="chip" style="background:var(--warning-light)"><b style="color:var(--warning)">'+extra+'</b><span>Navíc</span></div>';
+  document.getElementById('modal-inv-finish').style.display = 'flex';
+}
+
+async function confirmFinishInventura() {
+  closeModal('modal-inv-finish');
+  setStatus('💾 Ukládám výsledky…');
+  var saveMsg = '';
+  try {
+    var sessionInsert = await supa.from('inventory_sessions').insert({
+      list_id: invListMeta ? invListMeta.id : null,
+      list_name: invListMeta ? invListMeta.name : 'Nahráno ze zařízení',
+      user_name: currentUser,
+      total_items: invList.length,
+      found_count: invList.filter(function(r){return r.status==='found';}).length,
+      missing_count: invList.filter(function(r){return r.status!=='found';}).length,
+      extra_count: invExtra.length,
+      finished_at: new Date().toISOString()
+    }).select().single();
+    if (sessionInsert.error) throw sessionInsert.error;
+    var sessionId = sessionInsert.data.id;
+    var scanRows = invList.map(function(r){
+      return { session_id: sessionId, code: r.code, name: r.name, status: r.status==='found' ? 'found' : 'missing', ts: r.ts || null, user_name: r.user || null };
+    }).concat(invExtra.map(function(r){
+      return { session_id: sessionId, code: r.code, name: '', status: 'extra', ts: r.ts, user_name: r.user };
+    }));
+    var scansInsert = await supa.from('inventory_scans').insert(scanRows);
+    if (scansInsert.error) throw scansInsert.error;
+    saveMsg = '☁️ Uloženo na server · ';
+  } catch(err) {
+    saveMsg = '⚠️ Server se nepodařilo uložit (' + err.message + ') · ';
+  }
+  exportInvCSV();
+  setStatus(saveMsg + '📥 CSV exportováno');
+}
+
+function exportInvCSV() {
+  var csv = 'Kod,Nazev,Umisteni,Stav,Cas,Uzivatel\n';
+  invList.forEach(function(r){
+    csv += '"'+r.code+'","'+(r.name||'')+'","'+(r.loc||'')+'","'+(r.status==='found'?'Nalezeno':'Chybi')+'","'+(r.ts||'')+'","'+(r.user||'')+'"\n';
+  });
+  invExtra.forEach(function(r){
+    csv += '"'+r.code+'","","","Navic","'+r.ts+'","'+r.user+'"\n';
+  });
+  downloadCSV(csv, 'inventura');
+}
+
 function renderTableHead() {
   var tr = document.getElementById('table-head-row');
   tr.innerHTML = useLocation
@@ -955,6 +1300,7 @@ function changeQty(idx, delta) {
 
 // ── Export ────────────────────────────────────────────────
 function exportCSV() {
+  if (invMode) { exportInvCSV(); setStatus('📥 Inventura CSV exportováno'); return; }
   if (myDevMode) {
     if (!devScanResults.length) { setStatus('⚠️ Žádná data k exportu'); return; }
     var csv = 'IoT_ID,Box,Building,Floor,Room,Status,Uzivatel,Cas\n';
@@ -987,7 +1333,11 @@ function downloadCSV(csv, prefix) {
 
 function resetData() {
   if (!confirm('Smazat všechna naskenovaná data?')) return;
-  if (myDevMode) {
+  if (invMode) {
+    invList.forEach(function(r){ r.status='pending'; r.ts=''; r.user=''; });
+    invExtra = [];
+    renderInvTable(); updateInvSummaryBadge();
+  } else if (myDevMode) {
     devScanResults=[]; devExpectingBox=false; devPendingDevice=null;
     devPill.style.display='none';
     document.getElementById('aim').className='';
@@ -1004,6 +1354,7 @@ function resetData() {
 // ── Helpers ───────────────────────────────────────────────
 function updateScanBtn() {
   if (!cameraReady) { scanBtn.textContent='📷 SKENOVAT'; scanBtn.className=''; return; }
+  if (invMode) { scanBtn.textContent='📋 SKENOVAT MAJETEK'; scanBtn.className='dev-mode'; return; }
   if (myDevMode) {
     if (devExpectingBox && devPendingDevice &&
         document.getElementById('modal-box-verify').style.display!=='flex') {
