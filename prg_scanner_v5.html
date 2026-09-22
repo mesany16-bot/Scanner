@@ -295,14 +295,14 @@
   <div class="modal">
     <h2>📦 PRG Scanner</h2>
     <p id="login-msg">Přihlas se pro pokračování.</p>
-    <input id="login-email" type="email" placeholder="E-mail" autocomplete="off">
+    <input id="login-email" type="text" placeholder="E-mail nebo přezdívka" autocomplete="off">
     <input id="login-password" type="password" placeholder="Heslo" autocomplete="off">
     <button class="modal-btn" onclick="doLogin()">🔐 Přihlásit se</button>
-    <button class="modal-btn secondary" onclick="showRegister()">📝 Registrovat se</button>
+    <button class="modal-btn secondary" onclick="showForgot()">🔑 Zapomenuté heslo?</button>
   </div>
 </div>
 
-<!-- Modal: Register -->
+<!-- Modal: Register (bez tlačítka v UI – registrace jen na pozvání přes Supabase Dashboard) -->
 <div class="modal-backdrop" id="modal-register" style="display:none">
   <div class="modal">
     <h2>📝 Registrace</h2>
@@ -312,6 +312,27 @@
     <input id="reg-password" type="password" placeholder="Heslo (min. 6 znaků)" autocomplete="off">
     <button class="modal-btn" onclick="doRegister()">Vytvořit účet</button>
     <button class="modal-btn secondary" onclick="showLogin()">← Zpět na přihlášení</button>
+  </div>
+</div>
+
+<!-- Modal: Zapomenuté heslo -->
+<div class="modal-backdrop" id="modal-forgot" style="display:none">
+  <div class="modal">
+    <h2 class="info">🔑 Obnovit heslo</h2>
+    <p id="forgot-msg">Zadej e-mail, na který pošleme odkaz pro nastavení nového hesla.</p>
+    <input id="forgot-email" type="email" placeholder="E-mail" autocomplete="off">
+    <button class="modal-btn info" onclick="doForgotPassword()">✉️ Poslat odkaz</button>
+    <button class="modal-btn secondary" onclick="closeModal('modal-forgot');document.getElementById('modal-login').style.display='flex'">← Zpět na přihlášení</button>
+  </div>
+</div>
+
+<!-- Modal: Nové heslo (otevře se po kliknutí na odkaz z e-mailu) -->
+<div class="modal-backdrop" id="modal-reset" style="display:none">
+  <div class="modal">
+    <h2 class="info">🔑 Nastav nové heslo</h2>
+    <p id="reset-msg">Zadej nové heslo pro svůj účet.</p>
+    <input id="reset-password" type="password" placeholder="Nové heslo (min. 6 znaků)" autocomplete="off">
+    <button class="modal-btn info" onclick="doSetNewPassword()">✅ Uložit nové heslo</button>
   </div>
 </div>
 
@@ -555,13 +576,48 @@ function showLogin()    { document.getElementById('modal-register').style.displa
 function showRegister() { document.getElementById('modal-login').style.display='none'; document.getElementById('modal-register').style.display='flex'; }
 
 async function doLogin() {
-  var email = document.getElementById('login-email').value.trim();
+  var input = document.getElementById('login-email').value.trim();
   var pass  = document.getElementById('login-password').value;
-  if (!email||!pass) { document.getElementById('login-msg').textContent='⚠️ Zadej e-mail a heslo.'; return; }
+  if (!input||!pass) { document.getElementById('login-msg').textContent='⚠️ Zadej e-mail/přezdívku a heslo.'; return; }
   document.getElementById('login-msg').textContent = '⏳ Přihlašuji...';
+  var email = input;
+  if (input.indexOf('@') === -1) {
+    var lookup = await supa.rpc('get_email_by_username', { uname: input.toLowerCase() });
+    if (lookup.error || !lookup.data) { document.getElementById('login-msg').textContent = '❌ Neznámá přezdívka nebo e-mail.'; return; }
+    email = lookup.data;
+  }
   var res = await supa.auth.signInWithPassword({ email: email, password: pass });
   if (res.error) { document.getElementById('login-msg').textContent = '❌ '+res.error.message; return; }
   await onLoggedIn(res.data.user);
+}
+
+function showForgot() {
+  var typed = document.getElementById('login-email').value.trim();
+  document.getElementById('modal-login').style.display = 'none';
+  document.getElementById('forgot-email').value = typed.indexOf('@') !== -1 ? typed : '';
+  document.getElementById('forgot-msg').textContent = 'Zadej e-mail, na který pošleme odkaz pro nastavení nového hesla.';
+  document.getElementById('modal-forgot').style.display = 'flex';
+}
+
+async function doForgotPassword() {
+  var email = document.getElementById('forgot-email').value.trim();
+  if (!email) { document.getElementById('forgot-msg').textContent = '⚠️ Zadej e-mail.'; return; }
+  document.getElementById('forgot-msg').textContent = '⏳ Posílám odkaz...';
+  var redirectTo = window.location.origin + window.location.pathname;
+  var res = await supa.auth.resetPasswordForEmail(email, { redirectTo: redirectTo });
+  if (res.error) { document.getElementById('forgot-msg').textContent = '❌ '+res.error.message; return; }
+  document.getElementById('forgot-msg').textContent = '✅ Pokud účet s tímto e-mailem existuje, odkaz už je na cestě. Zkontroluj i spam.';
+}
+
+async function doSetNewPassword() {
+  var pass = document.getElementById('reset-password').value;
+  if (!pass || pass.length < 6) { document.getElementById('reset-msg').textContent = '⚠️ Heslo musí mít alespoň 6 znaků.'; return; }
+  document.getElementById('reset-msg').textContent = '⏳ Ukládám...';
+  var res = await supa.auth.updateUser({ password: pass });
+  if (res.error) { document.getElementById('reset-msg').textContent = '❌ '+res.error.message; return; }
+  document.getElementById('reset-msg').textContent = '✅ Heslo změněno!';
+  closeModal('modal-reset');
+  if (res.data && res.data.user) { await onLoggedIn(res.data.user); }
 }
 
 async function doRegister() {
@@ -658,6 +714,16 @@ async function doLogout() {
 supa.auth.getSession().then(function(res) {
   if (res.data && res.data.session) {
     onLoggedIn(res.data.session.user);
+  }
+});
+
+// Odkaz z e-mailu na obnovu hesla otevře tuto stránku se speciální session
+supa.auth.onAuthStateChange(function(event, session) {
+  if (event === 'PASSWORD_RECOVERY') {
+    document.getElementById('modal-login').style.display = 'none';
+    document.getElementById('modal-forgot').style.display = 'none';
+    document.getElementById('reset-msg').textContent = 'Zadej nové heslo pro svůj účet.';
+    document.getElementById('modal-reset').style.display = 'flex';
   }
 });
 
