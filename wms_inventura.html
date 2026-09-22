@@ -2,8 +2,9 @@
 <html lang="cs">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Dashboard – PRG WMS</title>
+<title>Inventura – PRG WMS</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
 :root{--bg:#f0f2f5;--surface:#fff;--border:#e2e6ed;--accent:#0a7c4e;--accent-light:#e8f7f1;--danger:#c0392b;--danger-light:#fdecea;--warning:#e67e22;--warning-light:#fef3e8;--info:#2980b9;--info-light:#eaf4fb;--text:#1a1d27;--muted:#7a8090;--shadow:0 2px 12px rgba(0,0,0,0.07);--sidebar-w:220px;}
@@ -16,12 +17,17 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-h
 .card{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden;margin-bottom:20px;}
 .card-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
 .card-header h3{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;}
+.card-body{padding:18px 20px;}
 table{width:100%;border-collapse:collapse;font-size:13px;}
 thead{background:#f8f9fb;}
 th{padding:9px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;}
 td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
 tbody tr:last-child td{border-bottom:none;}tbody tr:hover{background:#fafbfc;}
 .empty-row td{text-align:center;color:var(--muted);padding:28px;}
+input[type=text],input[type=file]{width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:'Inter',sans-serif;outline:none;}
+input[type=text]:focus{border-color:var(--accent);}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:6px;}
+.field{margin-bottom:14px;}
 /* Sidebar */
 #sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);background:#0a7c4e;display:flex;flex-direction:column;z-index:50;transition:transform 0.25s ease;}
 .sidebar-logo{padding:20px 18px 14px;font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:#fff;letter-spacing:1.5px;border-bottom:1px solid rgba(255,255,255,0.15);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;}
@@ -47,18 +53,10 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 .stat-card .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;}
 .stat-card .value{font-family:'Barlow Condensed',sans-serif;font-size:32px;font-weight:700;color:var(--accent);}
 .stat-card .sub{font-size:12px;color:var(--muted);margin-top:4px;}
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
 @media(min-width:901px){.hamburger-btn{display:none;}#sidebar-close-btn{display:none !important;}}
-@media(max-width:900px){:root{--sidebar-w:0px;}#sidebar{transform:translateX(-220px);width:220px;}#sidebar.open{transform:translateX(0);}#sidebar-close-btn{display:block !important;}#main{margin-left:0;}.content{padding:14px;}.topbar{padding:11px 14px;}.stat-grid{grid-template-columns:repeat(2,1fr);}.two-col{grid-template-columns:1fr;}}
+@media(max-width:900px){:root{--sidebar-w:0px;}#sidebar{transform:translateX(-220px);width:220px;}#sidebar.open{transform:translateX(0);}#sidebar-close-btn{display:block !important;}#main{margin-left:0;}.content{padding:14px;}.topbar{padding:11px 14px;}.stat-grid{grid-template-columns:repeat(2,1fr);}}
 #toast{position:fixed;bottom:24px;right:24px;background:#1a1d27;color:#fff;padding:12px 20px;border-radius:9px;font-size:13px;font-weight:500;z-index:999;opacity:0;transition:opacity 0.3s;pointer-events:none;}
 #toast.show{opacity:1;}
-.mode-select-btn{display:block;width:100%;padding:20px 16px;font-family:'Inter',sans-serif;border:none;border-radius:14px;cursor:pointer;color:#fff;margin-bottom:12px;text-align:left;transition:opacity 0.15s;}
-.mode-select-btn:active{opacity:0.8;}
-.mode-select-btn .msb-icon{font-size:26px;display:block;margin-bottom:4px;}
-.mode-select-btn .msb-title{font-size:18px;font-weight:700;letter-spacing:0.3px;display:block;font-family:'Barlow Condensed',sans-serif;}
-.mode-select-btn .msb-sub{font-size:12px;font-weight:400;opacity:0.85;display:block;margin-top:2px;}
-.mode-select-btn.wms{background:var(--accent);}
-.mode-select-btn.inv{background:var(--info);}
 </style>
 </head>
 <body>
@@ -72,26 +70,18 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
     <button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Přihlásit se</button>
   </div>
 </div>
-<div id="mode-select-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
-  <div style="background:#fff;border-radius:16px;padding:32px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
-    <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1>
-    <p style="font-size:13px;color:#7a8090;margin-bottom:18px">Co chceš otevřít?</p>
-    <button class="mode-select-btn wms" onclick="enterMode('wms')"><span class="msb-icon">🏭</span><span class="msb-title">WMS</span><span class="msb-sub">Sklad, klienti, příjmy, výdeje</span></button>
-    <button class="mode-select-btn inv" onclick="enterMode('inventura')"><span class="msb-icon">📋</span><span class="msb-title">Inventura</span><span class="msb-sub">Seznamy majetku a výsledky inventur</span></button>
-  </div>
-</div>
 <div id="app" style="display:none">
   <div id="sidebar">
     <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
     <nav>
-      <div class="nav-item active" onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Dashboard</div>
+      <div class="nav-item" onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Dashboard</div>
       <div class="nav-item" onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Inventory</div>
       <div class="nav-item" onclick="go('wms_warehouses.html')"><span class="nav-icon">🏭</span> Sklady</div>
       <div class="nav-item" onclick="go('wms_clients.html')"><span class="nav-icon">🏢</span> Klienti</div>
       <div class="nav-item" onclick="go('wms_receipts.html')"><span class="nav-icon">📥</span> Příjmy</div>
       <div class="nav-item" onclick="go('wms_deliveries.html')"><span class="nav-icon">📤</span> Výdeje</div>
       <div class="nav-item" onclick="go('wms_scans.html')"><span class="nav-icon">📱</span> Skeny</div>
-      <div class="nav-item" onclick="go('wms_inventura.html')"><span class="nav-icon">📋</span> Inventura</div>
+      <div class="nav-item active" onclick="go('wms_inventura.html')"><span class="nav-icon">📋</span> Inventura</div>
       <div class="nav-item admin-only" onclick="go('wms_users.html')"><span class="nav-icon">👥</span> Uživatelé</div>
     </nav>
     <div class="sidebar-user">
@@ -104,30 +94,40 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
   <div id="main">
     <div class="topbar">
       <button class="hamburger-btn" onclick="toggleSidebar()">☰</button>
-      <h2>📊 Dashboard</h2>
-      <div class="topbar-actions"><span id="last-refresh" style="font-size:12px;color:var(--muted)"></span><button class="btn btn-secondary btn-sm" onclick="loadDashboard()">↻ Obnovit</button></div>
+      <h2>📋 Inventura</h2>
+      <div class="topbar-actions"><button class="btn btn-secondary btn-sm" onclick="loadInvPage()">🔄 Obnovit</button></div>
     </div>
     <div class="content">
-      <div class="stat-grid">
-        <div class="stat-card"><div class="label">SKU položky</div><div class="value" id="stat-stock">–</div><div class="sub">celkem karet</div></div>
-        <div class="stat-card"><div class="label">Klienti</div><div class="value" id="stat-clients">–</div><div class="sub">registrovaných</div></div>
-        <div class="stat-card"><div class="label">Skeny dnes</div><div class="value" id="stat-scans">–</div><div class="sub">naskenováno</div></div>
-        <div class="stat-card"><div class="label">Nízký stav</div><div class="value" id="stat-low" style="color:var(--warning)">–</div><div class="sub">pod minimem</div></div>
-      </div>
-      <div class="two-col">
-        <div>
-          <div class="card"><div class="card-header"><h3>📥 Poslední příjmy</h3><a href="wms_receipts.html" class="btn btn-secondary btn-sm">Všechny →</a></div>
-          <table><thead><tr><th>Číslo</th><th>Dodavatel</th><th>Stav</th><th>Datum</th></tr></thead><tbody id="t-receipts"><tr class="empty-row"><td colspan="4">Načítám…</td></tr></tbody></table></div>
-          <div class="card"><div class="card-header"><h3>⚠️ Nízký stav</h3><a href="wms_stock.html" class="btn btn-secondary btn-sm">Sklad →</a></div>
-          <table><thead><tr><th>SKU</th><th>Stav</th><th>Min.</th></tr></thead><tbody id="t-low"><tr class="empty-row"><td colspan="3">Načítám…</td></tr></tbody></table></div>
-        </div>
-        <div>
-          <div class="card"><div class="card-header"><h3>📤 Poslední výdeje</h3><a href="wms_deliveries.html" class="btn btn-secondary btn-sm">Všechny →</a></div>
-          <table><thead><tr><th>Číslo</th><th>Klient</th><th>Stav</th><th>Datum</th></tr></thead><tbody id="t-deliveries"><tr class="empty-row"><td colspan="4">Načítám…</td></tr></tbody></table></div>
-          <div class="card"><div class="card-header"><h3>📱 Poslední skeny</h3><a href="wms_scans.html" class="btn btn-secondary btn-sm">Všechny →</a></div>
-          <table><thead><tr><th>EAN/IoT</th><th>Kdo</th><th>Kdy</th></tr></thead><tbody id="t-scans"><tr class="empty-row"><td colspan="3">Načítám…</td></tr></tbody></table></div>
+
+      <div class="card">
+        <div class="card-header"><h3>➕ Nový seznam majetku</h3></div>
+        <div class="card-body">
+          <div class="field">
+            <label>Název seznamu</label>
+            <input type="text" id="new-list-name" placeholder="např. Inventura sklad Praha – Q1 2027">
+          </div>
+          <div class="field">
+            <label>Excel / CSV soubor</label>
+            <input type="file" id="new-list-file" accept=".xlsx,.xls,.csv">
+            <div style="font-size:12px;color:var(--muted);margin-top:6px">Sloupce: <b>Kód</b> (nebo Evidenční číslo / Inventární číslo), volitelně <b>Název</b> a <b>Umístění</b>.</div>
+          </div>
+          <div id="upload-msg" style="font-size:13px;min-height:18px;margin-bottom:8px"></div>
+          <button class="btn btn-primary" onclick="uploadInvList()">📂 Vytvořit seznam</button>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-header"><h3>📂 Uložené seznamy</h3></div>
+        <table><thead><tr><th>Název</th><th>Položek</th><th>Vytvořeno</th><th style="text-align:right">Akce</th></tr></thead>
+        <tbody id="t-lists"><tr class="empty-row"><td colspan="4">Načítám…</td></tr></tbody></table>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>🧾 Poslední inventury</h3></div>
+        <table><thead><tr><th>Seznam</th><th>Uživatel</th><th>Nalezeno</th><th>Chybí</th><th>Navíc</th><th>Kdy</th></tr></thead>
+        <tbody id="t-sessions"><tr class="empty-row"><td colspan="6">Načítám…</td></tr></tbody></table>
+      </div>
+
     </div>
   </div>
 </div>
@@ -158,14 +158,8 @@ async function onLoggedIn(user){
   rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';
   document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});
   document.getElementById('auth-screen').style.display='none';
-  document.getElementById('mode-select-screen').style.display='flex';
-}
-
-function enterMode(mode){
-  if(mode==='inventura'){ window.location.href='wms_inventura.html'; return; }
-  document.getElementById('mode-select-screen').style.display='none';
   document.getElementById('app').style.display='block';
-  loadDashboard();
+  loadInvPage();
 }
 
 async function doLogout(){await supa.auth.signOut();window.location.reload();}
@@ -173,38 +167,93 @@ function go(u){window.location.href=u;}
 function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
 var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(_tt);_tt=setTimeout(function(){e.classList.remove('show');},2800);}
 
-async function loadDashboard(){
-  var today=new Date().toISOString().slice(0,10);
-  var [sr,cr,scr,lr,rr,dr]=await Promise.all([
-    supa.from('stock_items').select('id',{count:'exact'}),
-    supa.from('clients').select('id',{count:'exact'}),
-    supa.from('scans').select('id',{count:'exact'}).gte('scanned_at',today),
-    supa.from('stock_items').select('id,sku,quantity,min_stock').order('quantity'),
-    supa.from('receipts').select('*').order('created_at',{ascending:false}).limit(5),
-    supa.from('deliveries').select('*,clients(name)').order('created_at',{ascending:false}).limit(5)
-  ]);
-  document.getElementById('stat-stock').textContent=sr.count||0;
-  document.getElementById('stat-clients').textContent=cr.count||0;
-  document.getElementById('stat-scans').textContent=scr.count||0;
-  var low=(lr.data||[]).filter(function(i){return i.quantity<=i.min_stock;});
-  document.getElementById('stat-low').textContent=low.length;
-  // Low stock table
-  var lt=document.getElementById('t-low');
-  lt.innerHTML=low.length?low.slice(0,6).map(function(i){return '<tr><td><a href="wms_item.html?id='+i.id+'" style="color:var(--accent);font-weight:600">'+i.sku+'</a></td><td><span class="badge badge-orange">'+i.quantity+'</span></td><td>'+i.min_stock+'</td></tr>';}).join(''):'<tr class="empty-row"><td colspan="3">✅ Vše OK</td></tr>';
-  // Receipts
-  var rt=document.getElementById('t-receipts');
-  var rdata=rr.data||[];
-  rt.innerHTML=rdata.length?rdata.map(function(r){var st=r.status==='confirmed'?'<span class="badge badge-green">Potvrzeno</span>':'<span class="badge badge-gray">Koncept</span>';return '<tr><td><a href="wms_receipt.html?id='+r.id+'" style="color:var(--accent);font-weight:600">'+r.receipt_number+'</a></td><td>'+(r.supplier||'–')+'</td><td>'+st+'</td><td style="font-size:11px;color:var(--muted)">'+new Date(r.created_at).toLocaleDateString('cs-CZ')+'</td></tr>';}).join(''):'<tr class="empty-row"><td colspan="4">Žádné příjmy</td></tr>';
-  // Deliveries
-  var det=document.getElementById('t-deliveries');
-  var ddata=dr.data||[];
-  det.innerHTML=ddata.length?ddata.map(function(d){var st=d.status==='confirmed'?'<span class="badge badge-green">Potvrzeno</span>':'<span class="badge badge-gray">Koncept</span>';var cn=(d.clients&&d.clients.name)||'–';return '<tr><td><a href="wms_delivery.html?id='+d.id+'" style="color:var(--accent);font-weight:600">'+d.delivery_number+'</a></td><td>'+cn+'</td><td>'+st+'</td><td style="font-size:11px;color:var(--muted)">'+new Date(d.created_at).toLocaleDateString('cs-CZ')+'</td></tr>';}).join(''):'<tr class="empty-row"><td colspan="4">Žádné výdeje</td></tr>';
-  // Recent scans
-  var sc=await supa.from('scans').select('ean,iot_id,scanned_at,profiles(name)').order('scanned_at',{ascending:false}).limit(6);
-  var st=document.getElementById('t-scans');
-  var sd=sc.data||[];
-  st.innerHTML=sd.length?sd.map(function(s){return '<tr><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+(s.ean||s.iot_id||'–')+'</td><td>'+((s.profiles&&s.profiles.name)||'–')+'</td><td style="font-size:11px;color:var(--muted)">'+new Date(s.scanned_at).toLocaleString('cs-CZ')+'</td></tr>';}).join(''):'<tr class="empty-row"><td colspan="3">Žádné skeny</td></tr>';
-  document.getElementById('last-refresh').textContent='Obnoveno: '+new Date().toLocaleTimeString('cs-CZ');
+// ── Seznamy ──────────────────────────────────────────────
+async function loadInvPage(){
+  var lt=document.getElementById('t-lists');
+  lt.innerHTML='<tr class="empty-row"><td colspan="4">Načítám…</td></tr>';
+  var lr=await supa.from('inventory_lists').select('id,name,created_at').order('created_at',{ascending:false});
+  if(lr.error){lt.innerHTML='<tr class="empty-row"><td colspan="4">Chyba: '+lr.error.message+'</td></tr>';}
+  else{
+    var lists=lr.data||[];
+    if(!lists.length){lt.innerHTML='<tr class="empty-row"><td colspan="4">Zatím žádné seznamy</td></tr>';}
+    else{
+      var ir=await supa.from('inventory_list_items').select('list_id');
+      var counts={};
+      (ir.data||[]).forEach(function(row){counts[row.list_id]=(counts[row.list_id]||0)+1;});
+      lt.innerHTML=lists.map(function(l){
+        return '<tr><td><b>'+l.name+'</b></td><td>'+(counts[l.id]||0)+'</td>'+
+          '<td style="font-size:12px;color:var(--muted)">'+new Date(l.created_at).toLocaleDateString('cs-CZ')+'</td>'+
+          '<td style="text-align:right"><button class="btn btn-danger btn-sm" onclick="deleteInvList('+l.id+',\''+l.name.replace(/'/g,"\\'")+'\')">🗑 Smazat</button></td></tr>';
+      }).join('');
+    }
+  }
+
+  var st=document.getElementById('t-sessions');
+  st.innerHTML='<tr class="empty-row"><td colspan="6">Načítám…</td></tr>';
+  var sr=await supa.from('inventory_sessions').select('*').order('finished_at',{ascending:false}).limit(20);
+  if(sr.error){st.innerHTML='<tr class="empty-row"><td colspan="6">Chyba: '+sr.error.message+'</td></tr>';return;}
+  var sessions=sr.data||[];
+  st.innerHTML=sessions.length?sessions.map(function(s){
+    return '<tr><td>'+(s.list_name||'–')+'</td><td>'+(s.user_name||'–')+'</td>'+
+      '<td><span class="badge badge-green">'+s.found_count+'</span></td>'+
+      '<td><span class="badge '+(s.missing_count>0?'badge-red':'badge-gray')+'">'+s.missing_count+'</span></td>'+
+      '<td><span class="badge '+(s.extra_count>0?'badge-orange':'badge-gray')+'">'+s.extra_count+'</span></td>'+
+      '<td style="font-size:12px;color:var(--muted)">'+new Date(s.finished_at).toLocaleString('cs-CZ')+'</td></tr>';
+  }).join(''):'<tr class="empty-row"><td colspan="6">Zatím žádné dokončené inventury</td></tr>';
+}
+
+async function deleteInvList(id,name){
+  if(!confirm('Smazat seznam "'+name+'" včetně všech jeho položek?'))return;
+  var res=await supa.from('inventory_lists').delete().eq('id',id);
+  if(res.error){toast('❌ '+res.error.message);return;}
+  toast('🗑 Seznam smazán');
+  loadInvPage();
+}
+
+function parseInvColumns(row){
+  var code=(row['Kód']||row['Kod']||row['Evidenční číslo']||row['Evidencni cislo']||row['Inventární číslo']||row['Inventarni cislo']||row['ID']||row['Code']||'').toString().trim();
+  var name=(row['Název']||row['Nazev']||row['Popis']||row['Description']||'').toString().trim();
+  var loc=(row['Umístění']||row['Umisteni']||row['Lokace']||row['Location']||'').toString().trim();
+  return {code:code,name:name,location:loc};
+}
+
+function uploadInvList(){
+  var nameEl=document.getElementById('new-list-name');
+  var fileEl=document.getElementById('new-list-file');
+  var msg=document.getElementById('upload-msg');
+  var listName=nameEl.value.trim();
+  var file=fileEl.files[0];
+  if(!listName){msg.style.color='var(--danger)';msg.textContent='⚠️ Zadej název seznamu';return;}
+  if(!file){msg.style.color='var(--danger)';msg.textContent='⚠️ Vyber soubor';return;}
+  msg.style.color='var(--muted)';msg.textContent='⏳ Čtu soubor…';
+  var reader=new FileReader();
+  reader.onload=async function(e){
+    try{
+      var wb=XLSX.read(e.target.result,{type:'array'});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var data=XLSX.utils.sheet_to_json(ws,{defval:''});
+      var items=data.map(parseInvColumns).filter(function(it){return it.code;});
+      if(!items.length){msg.style.color='var(--danger)';msg.textContent='❌ V souboru nebyl nalezen žádný sloupec s kódem.';return;}
+      msg.textContent='⏳ Ukládám '+items.length+' položek…';
+      var listIns=await supa.from('inventory_lists').insert({name:listName}).select().single();
+      if(listIns.error)throw listIns.error;
+      var listId=listIns.data.id;
+      var rows=items.map(function(it){return {list_id:listId,code:it.code,name:it.name,location:it.location};});
+      var chunkSize=500;
+      for(var i=0;i<rows.length;i+=chunkSize){
+        var chunk=rows.slice(i,i+chunkSize);
+        var ins=await supa.from('inventory_list_items').insert(chunk);
+        if(ins.error)throw ins.error;
+      }
+      msg.style.color='var(--accent)';msg.textContent='✅ Seznam "'+listName+'" vytvořen ('+items.length+' položek)';
+      nameEl.value='';fileEl.value='';
+      toast('✅ Seznam uložen');
+      loadInvPage();
+    }catch(err){
+      msg.style.color='var(--danger)';msg.textContent='❌ '+err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
 }
 
 supa.auth.getSession().then(function(res){if(res.data&&res.data.session)onLoggedIn(res.data.session.user);});
