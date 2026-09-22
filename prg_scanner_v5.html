@@ -6,7 +6,7 @@
   <title>PRG Scanner</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&display=swap');
 
@@ -786,7 +786,7 @@ function startWithLoc(withLoc) {
 async function initCamera() {
   if (useZXing) {
     try {
-      zxingReader = new ZXing.BrowserMultiFormatReader();
+      zxingReader = new ZXingBrowser.BrowserMultiFormatReader();
     } catch(e) {
       setStatus('❌ Skener se nepodařilo spustit: ' + e.message);
       return;
@@ -881,7 +881,9 @@ async function zxingDecodeBurst(maxAttempts, intervalMs) {
     try {
       var result = await zxingReader.decodeFromCanvas(canvas);
       return result.getText();
-    } catch(notFound) {
+    } catch(err) {
+      var isNotFound = err && (err.name === 'NotFoundException' || (err.constructor && err.constructor.name === 'NotFoundException'));
+      if (!isNotFound) { throw new Error('Chyba dekodéru: ' + (err && (err.message || err.name || err))); }
       await new Promise(function(r){ setTimeout(r, intervalMs); });
     }
   }
