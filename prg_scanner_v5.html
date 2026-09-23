@@ -859,15 +859,21 @@ function getAimCropRect() {
 
 function grabAimCanvas() {
   var rect = getAimCropRect();
+  var sx, sy, sw, sh;
+  if (rect) { sx = rect.sx; sy = rect.sy; sw = rect.sw; sh = rect.sh; }
+  else { sx = 0; sy = 0; sw = video.videoWidth; sh = video.videoHeight; }
+  var maxDim = 1000; // dost na přečtení kódu, ale rychlé na synchronní dekódování
+  var scale = Math.min(1, maxDim / Math.max(sw, sh));
+  var destW = Math.max(1, Math.round(sw * scale));
+  var destH = Math.max(1, Math.round(sh * scale));
   var canvas = document.createElement('canvas');
-  if (rect) {
-    canvas.width = rect.sw; canvas.height = rect.sh;
-    canvas.getContext('2d').drawImage(video, rect.sx, rect.sy, rect.sw, rect.sh, 0, 0, rect.sw, rect.sh);
-  } else {
-    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-  }
+  canvas.width = destW; canvas.height = destH;
+  canvas.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, destW, destH);
   return canvas;
+}
+
+function nextFrame() {
+  return new Promise(function(resolve){ requestAnimationFrame(function(){ setTimeout(resolve, 0); }); });
 }
 
 async function initCamera() {
@@ -963,10 +969,12 @@ async function triggerScan() {
   if (!cameraReady) return;
   resetIdleTimer();
   setCamSt('🔍 Detekuji…');
-  var canvas = grabAimCanvas();
-  if (useZXing) {
-    if (!zxingReader) return;
-    try {
+  scanBtn.disabled = true;
+  try {
+    await nextFrame();
+    var canvas = grabAimCanvas();
+    if (useZXing) {
+      if (!zxingReader) return;
       var result;
       try { result = zxingReader.decode(canvas); }
       catch(notFound) {
@@ -980,11 +988,9 @@ async function triggerScan() {
       else if (myDevMode) { await handleMyDevCode(code); }
       else { await handleCode(code); }
       setCamSt('📷 Kamera připravena');
-    } catch(e) { setStatus('❌ Chyba: ' + e.message); }
-    return;
-  }
-  if (!detector) return;
-  try {
+      return;
+    }
+    if (!detector) return;
     var barcodes = await detector.detect(canvas);
     if (!barcodes.length) {
       setCamSt('⚠️ Nic nenalezeno – zkus znovu');
@@ -1001,7 +1007,11 @@ async function triggerScan() {
       await handleCode(code);
     }
     setCamSt('📷 Kamera připravena');
-  } catch(e) { setStatus('❌ Chyba: ' + e.message); }
+  } catch(e) {
+    setStatus('❌ Chyba: ' + e.message);
+  } finally {
+    scanBtn.disabled = false;
+  }
 }
 
 // ── Supabase sync ─────────────────────────────────────────
