@@ -525,10 +525,6 @@
 <!-- Table area -->
 <div id="table-area">
   <div id="status-bar">Čekám na spuštění…</div>
-  <div id="debug-preview-wrap" style="display:none;padding:8px 12px;background:#fffbe6;border-bottom:1px solid var(--border);">
-    <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">🔍 Co appka právě zkoušela přečíst:</div>
-    <img id="debug-preview" style="max-width:100%;border:1px solid var(--border);border-radius:4px;">
-  </div>
   <div id="empty-state">Žádná naskenovaná data</div>
   <table id="main-table" style="display:none">
     <thead><tr id="table-head-row"></tr></thead>
@@ -866,13 +862,9 @@ function grabAimCanvas() {
   var sx, sy, sw, sh;
   if (rect) { sx = rect.sx; sy = rect.sy; sw = rect.sw; sh = rect.sh; }
   else { sx = 0; sy = 0; sw = video.videoWidth; sh = video.videoHeight; }
-  var maxDim = 1000; // dost na přečtení kódu, ale rychlé na synchronní dekódování
-  var scale = Math.min(1, maxDim / Math.max(sw, sh));
-  var destW = Math.max(1, Math.round(sw * scale));
-  var destH = Math.max(1, Math.round(sh * scale));
   var canvas = document.createElement('canvas');
-  canvas.width = destW; canvas.height = destH;
-  canvas.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, destW, destH);
+  canvas.width = sw; canvas.height = sh;
+  canvas.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
   return canvas;
 }
 
@@ -978,10 +970,6 @@ async function triggerScan() {
     await nextFrame();
     var canvas = grabAimCanvas();
     var dataUrl = canvas.toDataURL('image/png');
-    try {
-      document.getElementById('debug-preview').src = dataUrl;
-      document.getElementById('debug-preview-wrap').style.display = 'block';
-    } catch(dbgErr) {}
     if (useZXing) {
       if (!zxingReader) return;
       var result;
