@@ -119,8 +119,14 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 
       <div class="card">
         <div class="card-header"><h3>🧾 Poslední inventury</h3></div>
-        <table><thead><tr><th>Seznam</th><th>Uživatel</th><th>Nalezeno</th><th>Chybí</th><th>Navíc</th><th>Kdy</th></tr></thead>
-        <tbody id="t-sessions"><tr class="empty-row"><td colspan="6">Načítám…</td></tr></tbody></table>
+        <table><thead><tr><th>Seznam</th><th>Uživatel</th><th>Nalezeno</th><th>Chybí</th><th>Navíc</th><th>Kdy</th><th style="text-align:right">Akce</th></tr></thead>
+        <tbody id="t-sessions"><tr class="empty-row"><td colspan="7">Načítám…</td></tr></tbody></table>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><h3>✅ Dokončené inventury</h3></div>
+        <table><thead><tr><th>Název</th><th>Položek</th><th>Vytvořeno</th><th style="text-align:right">Akce</th></tr></thead>
+        <tbody id="t-archived"><tr class="empty-row"><td colspan="4">Načítám…</td></tr></tbody></table>
       </div>
 
     </div>
@@ -180,36 +186,69 @@ var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m
 // ── Seznamy ──────────────────────────────────────────────
 async function loadInvPage(){
   var lt=document.getElementById('t-lists');
+  var at=document.getElementById('t-archived');
   lt.innerHTML='<tr class="empty-row"><td colspan="4">Načítám…</td></tr>';
-  var lr=await supa.from('inventory_lists').select('id,name,created_at').order('created_at',{ascending:false});
-  if(lr.error){lt.innerHTML='<tr class="empty-row"><td colspan="4">Chyba: '+lr.error.message+'</td></tr>';}
+  at.innerHTML='<tr class="empty-row"><td colspan="4">Načítám…</td></tr>';
+  var lr=await supa.from('inventory_lists').select('id,name,created_at,archived').order('created_at',{ascending:false});
+  if(lr.error){lt.innerHTML='<tr class="empty-row"><td colspan="4">Chyba: '+lr.error.message+'</td></tr>';at.innerHTML=lt.innerHTML;}
   else{
-    var lists=lr.data||[];
-    if(!lists.length){lt.innerHTML='<tr class="empty-row"><td colspan="4">Zatím žádné seznamy</td></tr>';}
-    else{
-      var ir=await supa.from('inventory_list_items').select('list_id');
-      var counts={};
-      (ir.data||[]).forEach(function(row){counts[row.list_id]=(counts[row.list_id]||0)+1;});
-      lt.innerHTML=lists.map(function(l){
-        return '<tr><td><b>'+l.name+'</b></td><td>'+(counts[l.id]||0)+'</td>'+
-          '<td style="font-size:12px;color:var(--muted)">'+new Date(l.created_at).toLocaleDateString('cs-CZ')+'</td>'+
-          '<td style="text-align:right"><button class="btn btn-danger btn-sm" onclick="deleteInvList('+l.id+',\''+l.name.replace(/'/g,"\\'")+'\')">🗑 Smazat</button></td></tr>';
-      }).join('');
-    }
+    var all=lr.data||[];
+    var active=all.filter(function(l){return !l.archived;});
+    var archived=all.filter(function(l){return l.archived;});
+    var ir=await supa.from('inventory_list_items').select('list_id');
+    var counts={};
+    (ir.data||[]).forEach(function(row){counts[row.list_id]=(counts[row.list_id]||0)+1;});
+
+    lt.innerHTML=active.length?active.map(function(l){
+      return '<tr><td><b>'+l.name+'</b></td><td>'+(counts[l.id]||0)+'</td>'+
+        '<td style="font-size:12px;color:var(--muted)">'+new Date(l.created_at).toLocaleDateString('cs-CZ')+'</td>'+
+        '<td style="text-align:right"><button class="btn btn-danger btn-sm" onclick="deleteInvList('+l.id+',\''+l.name.replace(/'/g,"\\'")+'\')">🗑 Smazat</button></td></tr>';
+    }).join(''):'<tr class="empty-row"><td colspan="4">Zatím žádné seznamy</td></tr>';
+
+    at.innerHTML=archived.length?archived.map(function(l){
+      return '<tr><td><b>'+l.name+'</b></td><td>'+(counts[l.id]||0)+'</td>'+
+        '<td style="font-size:12px;color:var(--muted)">'+new Date(l.created_at).toLocaleDateString('cs-CZ')+'</td>'+
+        '<td style="text-align:right"><button class="btn btn-secondary btn-sm" onclick="reviveInvList('+l.id+')">🔄 Oživit inventuru</button></td></tr>';
+    }).join(''):'<tr class="empty-row"><td colspan="4">Zatím žádné dokončené inventury</td></tr>';
   }
 
   var st=document.getElementById('t-sessions');
-  st.innerHTML='<tr class="empty-row"><td colspan="6">Načítám…</td></tr>';
+  st.innerHTML='<tr class="empty-row"><td colspan="7">Načítám…</td></tr>';
   var sr=await supa.from('inventory_sessions').select('*').order('finished_at',{ascending:false}).limit(20);
-  if(sr.error){st.innerHTML='<tr class="empty-row"><td colspan="6">Chyba: '+sr.error.message+'</td></tr>';return;}
+  if(sr.error){st.innerHTML='<tr class="empty-row"><td colspan="7">Chyba: '+sr.error.message+'</td></tr>';return;}
   var sessions=sr.data||[];
   st.innerHTML=sessions.length?sessions.map(function(s){
     return '<tr><td>'+(s.list_name||'–')+'</td><td>'+(s.user_name||'–')+'</td>'+
       '<td><span class="badge badge-green">'+s.found_count+'</span></td>'+
       '<td><span class="badge '+(s.missing_count>0?'badge-red':'badge-gray')+'">'+s.missing_count+'</span></td>'+
       '<td><span class="badge '+(s.extra_count>0?'badge-orange':'badge-gray')+'">'+s.extra_count+'</span></td>'+
-      '<td style="font-size:12px;color:var(--muted)">'+new Date(s.finished_at).toLocaleString('cs-CZ')+'</td></tr>';
-  }).join(''):'<tr class="empty-row"><td colspan="6">Zatím žádné dokončené inventury</td></tr>';
+      '<td style="font-size:12px;color:var(--muted)">'+new Date(s.finished_at).toLocaleString('cs-CZ')+'</td>'+
+      '<td style="text-align:right"><button class="btn btn-secondary btn-sm" onclick="downloadSessionCsv('+s.id+',\''+(s.list_name||'inventura').replace(/'/g,"\\'")+'\')">📥 CSV</button></td></tr>';
+  }).join(''):'<tr class="empty-row"><td colspan="7">Zatím žádné dokončené inventury</td></tr>';
+}
+
+async function downloadSessionCsv(sessionId, listName){
+  var res=await supa.from('inventory_scans').select('*').eq('session_id',sessionId).order('code');
+  if(res.error){toast('❌ '+res.error.message);return;}
+  var rows=res.data||[];
+  var stavMap={found:'Nalezeno',missing:'Chybi',extra:'Navic'};
+  var csv='Kod,Nazev,Stav,Cas,Uzivatel\n';
+  rows.forEach(function(r){
+    csv+='"'+(r.code||'')+'","'+(r.name||'')+'","'+(stavMap[r.status]||r.status||'')+'","'+(r.ts||'')+'","'+(r.user_name||'')+'"\n';
+  });
+  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url; a.download='inventura_'+listName.replace(/[^a-z0-9_-]/gi,'_')+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+async function reviveInvList(id){
+  var res=await supa.from('inventory_lists').update({archived:false}).eq('id',id);
+  if(res.error){toast('❌ '+res.error.message);return;}
+  toast('🔄 Inventura oživena – zpět v Uložených seznamech');
+  loadInvPage();
 }
 
 async function deleteInvList(id,name){

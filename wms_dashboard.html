@@ -2,7 +2,7 @@
 <html lang="cs">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Dashboard – PRG WMS</title>
+<title>PRG Systems</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
@@ -64,8 +64,8 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 <body>
 <div id="auth-screen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
   <div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
-    <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1>
-    <p style="font-size:13px;color:#7a8090;margin-bottom:20px">Warehouse Management System</p>
+    <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG Systems</h1>
+    <p style="font-size:13px;color:#7a8090;margin-bottom:20px">Přihlas se pro pokračování</p>
     <div id="auth-msg" style="font-size:13px;color:#c0392b;min-height:18px;margin-bottom:8px"></div>
     <input id="login-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
     <input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
@@ -92,7 +92,7 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 </div>
 <div id="mode-select-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
   <div style="background:#fff;border-radius:16px;padding:32px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
-    <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1>
+    <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG Systems</h1>
     <p style="font-size:13px;color:#7a8090;margin-bottom:18px">Co chceš otevřít?</p>
     <button class="mode-select-btn wms" onclick="enterMode('wms')"><span class="msb-icon">🏭</span><span class="msb-title">PRG WMS</span><span class="msb-sub">Sklad, klienti, příjmy, výdeje</span></button>
     <button class="mode-select-btn inv" onclick="enterMode('inventura')"><span class="msb-icon">📋</span><span class="msb-title">Inventory Tool</span><span class="msb-sub">Seznamy majetku a výsledky inventur</span></button>
