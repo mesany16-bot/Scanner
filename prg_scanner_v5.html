@@ -745,6 +745,8 @@ function switchAppMode(target) {
       invMode = true;
       renderInvTable();
       setStatus('📋 Inventura · pokračuj – spusť kameru');
+      clearInterval(invPollTimer);
+      if (invListMeta && invListMeta.id) { invPollTimer = setInterval(pollInvServerState, 8000); }
     } else {
       invMode = false;
       setStatus('📋 Inventura · vyber zdroj seznamu');
@@ -949,6 +951,7 @@ function stopCam() {
   video.srcObject = null;
   cameraReady=false; detector=null;
   clearTimeout(idleTimer); idleTimer=null;
+  clearInterval(invPollTimer); invPollTimer=null;
   isAsleep = false;
   document.getElementById('sleep-overlay').style.display = 'none';
   zxingReader = null;
@@ -1310,6 +1313,7 @@ function renderMyDevTable() {
 
 // ── Inventura ─────────────────────────────────────────────
 function normalizeCode(c) { return c.toString().trim().toUpperCase(); }
+var invPollTimer = null;
 
 function loadInvExcelFile(input) {
   var file = input.files[0];
@@ -1325,7 +1329,7 @@ function loadInvExcelFile(input) {
         var code = (row['Kód']||row['Kod']||row['Evidenční číslo']||row['Evidencni cislo']||row['Inventární číslo']||row['Inventarni cislo']||row['ID']||row['Code']||'').toString().trim();
         var name = (row['Název']||row['Nazev']||row['Popis']||row['Description']||'').toString().trim();
         var loc  = (row['Umístění']||row['Umisteni']||row['Lokace']||row['Location']||'').toString().trim();
-        if (code) list.push({ code: code, name: name, loc: loc, status: 'pending', ts: '', user: '' });
+        if (code) list.push({ id: null, code: code, name: name, loc: loc, status: 'pending', ts: '', user: '' });
       });
       closeModal('modal-inv-source');
       if (!list.length) { alert('Soubor nenačten – zkontroluj sloupce (potřebujeme aspoň Kód / Evidenční číslo).'); return; }
@@ -1341,16 +1345,17 @@ async function openInvServerPick() {
   var wrap = document.getElementById('inv-server-list-wrap');
   wrap.innerHTML = '<p style="color:var(--muted);font-size:14px;">Načítám…</p>';
   try {
-    var res = await supa.from('inventory_lists').select('id,name,created_at').order('created_at', {ascending:false}).limit(30);
+    var res = await supa.from('inventory_lists').select('id,name,created_at,status,started_by').in('status', ['uploaded','active']).order('created_at', {ascending:false}).limit(30);
     if (res.error) throw res.error;
     var lists = res.data || [];
-    if (!lists.length) { wrap.innerHTML = '<p style="color:var(--muted);font-size:14px;">Žádné uložené seznamy na serveru.</p>'; return; }
+    if (!lists.length) { wrap.innerHTML = '<p style="color:var(--muted);font-size:14px;">Žádné dostupné seznamy na serveru.</p>'; return; }
     wrap.innerHTML = '';
     lists.forEach(function(l) {
       var d = document.createElement('div');
       d.className = 'inv-list-item';
       d.onclick = function(){ selectInvList(l.id, l.name); };
-      d.innerHTML = '<div><b>'+l.name+'</b></div><span>'+new Date(l.created_at).toLocaleDateString('cs-CZ')+'</span>';
+      var badge = l.status==='active' ? ' · 🟢 skenuje '+(l.started_by||'někdo') : '';
+      d.innerHTML = '<div><b>'+l.name+'</b></div><span>'+new Date(l.created_at).toLocaleDateString('cs-CZ')+badge+'</span>';
       wrap.appendChild(d);
     });
   } catch(err) {
@@ -1362,12 +1367,22 @@ async function selectInvList(listId, listName) {
   var wrap = document.getElementById('inv-server-list-wrap');
   wrap.innerHTML = '<p style="color:var(--muted);font-size:14px;">Načítám položky…</p>';
   try {
-    var res = await supa.from('inventory_list_items').select('code,name,location').eq('list_id', listId);
+    var res = await supa.from('inventory_list_items').select('id,code,name,location,status,found_by,found_at').eq('list_id', listId);
     if (res.error) throw res.error;
     var items = res.data || [];
     if (!items.length) { alert('Seznam "'+listName+'" neobsahuje žádné položky.'); return; }
-    var list = items.map(function(it){ return { code: (it.code||'').toString().trim(), name: it.name||'', loc: it.location||'', status:'pending', ts:'', user:'' }; });
+    var list = items.map(function(it){
+      return { id: it.id, code: (it.code||'').toString().trim(), name: it.name||'', loc: it.location||'',
+        status: it.status==='found' ? 'found' : 'pending', ts: it.found_at||'', user: it.found_by||'' };
+    });
     closeModal('modal-inv-server-pick');
+    // Označ seznam jako aktivní (nebo se jen připoj, pokud už aktivní je) — start info nastav jen poprvé
+    try {
+      var cur = await supa.from('inventory_lists').select('started_by,started_at').eq('id', listId).single();
+      var patch = { status: 'active' };
+      if (!cur.data || !cur.data.started_by) { patch.started_by = currentUser; patch.started_at = new Date().toISOString(); }
+      await supa.from('inventory_lists').update(patch).eq('id', listId);
+    } catch(e){}
     startInvScanning(list, { id: listId, name: listName });
   } catch(err) {
     alert('Chyba načítání položek: '+err.message);
@@ -1383,6 +1398,37 @@ function startInvScanning(list, meta) {
   refreshModeUI();
   setStatus('📋 Inventura načtena ('+list.length+' položek)'+(meta?(' · '+meta.name):'')+' · Spusť kameru');
   if (!cameraReady) initCamera(); else updateScanBtn();
+  clearInterval(invPollTimer);
+  if (meta && meta.id) { invPollTimer = setInterval(pollInvServerState, 8000); }
+}
+
+async function pollInvServerState() {
+  if (!invMode || !invListMeta || !invListMeta.id) { clearInterval(invPollTimer); return; }
+  try {
+    var res = await supa.from('inventory_list_items').select('id,status,found_by,found_at').eq('list_id', invListMeta.id);
+    if (res.error) return;
+    var byId = {};
+    (res.data||[]).forEach(function(r){ byId[r.id] = r; });
+    var changed = false;
+    invList.forEach(function(item){
+      var srv = byId[item.id];
+      if (srv && srv.status==='found' && item.status!=='found') {
+        item.status='found'; item.ts=srv.found_at||''; item.user=srv.found_by||'';
+        changed = true;
+      }
+    });
+    var extraRes = await supa.from('inventory_extra_scans').select('code,found_by,found_at').eq('list_id', invListMeta.id);
+    if (!extraRes.error) {
+      (extraRes.data||[]).forEach(function(r){
+        var norm = normalizeCode(r.code);
+        if (!invExtra.find(function(e){ return normalizeCode(e.code)===norm; })) {
+          invExtra.push({ code: r.code, ts: r.found_at||'', user: r.found_by||'' });
+          changed = true;
+        }
+      });
+    }
+    if (changed) { renderInvTable(); updateInvSummaryBadge(); }
+  } catch(e){}
 }
 
 async function handleInvCode(code) {
@@ -1393,18 +1439,24 @@ async function handleInvCode(code) {
   if (item) {
     if (item.status === 'found') {
       beepWarn();
-      setStatus('⚠️ '+item.code+' už byl naskenován ('+item.ts+')');
+      setStatus('⚠️ '+item.code+' už byl naskenován ('+(item.user?item.user+' · ':'')+item.ts+')');
       return;
     }
     item.status = 'found'; item.ts = nowStr(); item.user = currentUser;
     beepOk();
     setStatus('✅ '+item.code+(item.name?' · '+item.name:'')+' nalezeno');
+    if (invListMeta && invListMeta.id && item.id) {
+      supa.from('inventory_list_items').update({ status:'found', found_by: currentUser, found_at: new Date().toISOString() }).eq('id', item.id).then(function(){});
+    }
   } else {
     var already = invExtra.find(function(r){ return normalizeCode(r.code)===norm; });
     if (already) { beepWarn(); setStatus('⚠️ '+code+' (navíc) už byl zaznamenán'); return; }
     invExtra.push({ code: code, ts: nowStr(), user: currentUser });
     beepError();
     setStatus('➕ '+code+' není v seznamu – zaznamenáno jako NAVÍC');
+    if (invListMeta && invListMeta.id) {
+      supa.from('inventory_extra_scans').insert({ list_id: invListMeta.id, code: code, found_by: currentUser }).then(function(){});
+    }
   }
   renderInvTable(); updateInvSummaryBadge();
 }
@@ -1454,34 +1506,18 @@ function finishInventura() {
 
 async function confirmFinishInventura() {
   closeModal('modal-inv-finish');
-  setStatus('💾 Ukládám výsledky…');
+  setStatus('💾 Uzavírám inventuru…');
+  clearInterval(invPollTimer);
   var saveMsg = '';
-  try {
-    var sessionInsert = await supa.from('inventory_sessions').insert({
-      list_id: invListMeta ? invListMeta.id : null,
-      list_name: invListMeta ? invListMeta.name : 'Nahráno ze zařízení',
-      user_name: currentUser,
-      total_items: invList.length,
-      found_count: invList.filter(function(r){return r.status==='found';}).length,
-      missing_count: invList.filter(function(r){return r.status!=='found';}).length,
-      extra_count: invExtra.length,
-      finished_at: new Date().toISOString()
-    }).select().single();
-    if (sessionInsert.error) throw sessionInsert.error;
-    var sessionId = sessionInsert.data.id;
-    var scanRows = invList.map(function(r){
-      return { session_id: sessionId, code: r.code, name: r.name, status: r.status==='found' ? 'found' : 'missing', ts: r.ts || null, user_name: r.user || null };
-    }).concat(invExtra.map(function(r){
-      return { session_id: sessionId, code: r.code, name: '', status: 'extra', ts: r.ts, user_name: r.user };
-    }));
-    var scansInsert = await supa.from('inventory_scans').insert(scanRows);
-    if (scansInsert.error) throw scansInsert.error;
-    if (invListMeta && invListMeta.id) {
-      try { await supa.from('inventory_lists').update({ archived: true }).eq('id', invListMeta.id); } catch(e){}
+  if (invListMeta && invListMeta.id) {
+    try {
+      await supa.from('inventory_lists').update({
+        status: 'completed', completed_by: currentUser, completed_at: new Date().toISOString()
+      }).eq('id', invListMeta.id);
+      saveMsg = '☁️ Inventura uzavřena na serveru · ';
+    } catch(err) {
+      saveMsg = '⚠️ Server se nepodařilo aktualizovat (' + err.message + ') · ';
     }
-    saveMsg = '☁️ Uloženo na server · ';
-  } catch(err) {
-    saveMsg = '⚠️ Server se nepodařilo uložit (' + err.message + ') · ';
   }
   exportInvCSV();
   setStatus(saveMsg + '📥 CSV exportováno');
@@ -1573,11 +1609,19 @@ function downloadCSV(csv, prefix) {
 }
 
 function resetData() {
-  if (!confirm('Smazat všechna naskenovaná data?')) return;
+  if (invMode && invListMeta && invListMeta.id) {
+    if (!confirm('Smazat průběh CELÉ sdílené inventury "'+invListMeta.name+'"? Smaže se i to, co naskenovali ostatní.')) return;
+  } else {
+    if (!confirm('Smazat všechna naskenovaná data?')) return;
+  }
   if (invMode) {
     invList.forEach(function(r){ r.status='pending'; r.ts=''; r.user=''; });
     invExtra = [];
     renderInvTable(); updateInvSummaryBadge();
+    if (invListMeta && invListMeta.id) {
+      supa.from('inventory_list_items').update({status:'pending', found_by:null, found_at:null}).eq('list_id', invListMeta.id).then(function(){});
+      supa.from('inventory_extra_scans').delete().eq('list_id', invListMeta.id).then(function(){});
+    }
   } else if (myDevMode) {
     devScanResults=[]; devExpectingBox=false; devPendingDevice=null;
     devPill.style.display='none';
