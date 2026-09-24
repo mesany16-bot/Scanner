@@ -845,8 +845,8 @@ function getAimCropRect() {
   var scale = Math.max(containerW / videoW, containerH / videoH);
   var offsetX = (videoW * scale - containerW) / 2;
   var offsetY = (videoH * scale - containerH) / 2;
-  // #aim je 55% x 40% kontejneru, vystředěný — s malou rezervou 8% okolo
-  var boxW = containerW * 0.63, boxH = containerH * 0.48;
+  // #aim je 55% x 40% kontejneru, vystředěný — s velkorysou rezervou, ať se neuřízne okraj kódu
+  var boxW = containerW * 0.85, boxH = containerH * 0.65;
   var boxX = (containerW - boxW) / 2, boxY = (containerH - boxH) / 2;
   var sx = (boxX + offsetX) / scale;
   var sy = (boxY + offsetY) / scale;
@@ -862,9 +862,13 @@ function grabAimCanvas() {
   var sx, sy, sw, sh;
   if (rect) { sx = rect.sx; sy = rect.sy; sw = rect.sw; sh = rect.sh; }
   else { sx = 0; sy = 0; sw = video.videoWidth; sh = video.videoHeight; }
+  var maxDim = 1800; // dost detailu na přečtení kódu, ale ať toDataURL/dekódování nezamrzne stránku
+  var scale = Math.min(1, maxDim / Math.max(sw, sh));
+  var destW = Math.max(1, Math.round(sw * scale));
+  var destH = Math.max(1, Math.round(sh * scale));
   var canvas = document.createElement('canvas');
-  canvas.width = sw; canvas.height = sh;
-  canvas.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+  canvas.width = destW; canvas.height = destH;
+  canvas.getContext('2d').drawImage(video, sx, sy, sw, sh, 0, 0, destW, destH);
   return canvas;
 }
 
@@ -969,7 +973,7 @@ async function triggerScan() {
   try {
     await nextFrame();
     var canvas = grabAimCanvas();
-    var dataUrl = canvas.toDataURL('image/png');
+    var dataUrl = canvas.toDataURL('image/jpeg', 0.9);
     if (useZXing) {
       if (!zxingReader) return;
       var result;
