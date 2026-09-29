@@ -108,7 +108,7 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
     <div class="content">
 
       <div class="card">
-        <div class="card-header"><h3>➕ Vytvořit inventuru</h3></div>
+        <div class="card-header"><h3>➕ Nahrát inventuru</h3></div>
         <div class="card-body">
           <div class="field">
             <label>Název inventury</label>
@@ -121,26 +121,32 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
             <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="downloadTemplate()">📥 Stáhnout šablonu (Excel)</button>
           </div>
           <div id="upload-msg" style="font-size:13px;min-height:18px;margin-bottom:8px"></div>
-          <button class="btn btn-primary" onclick="uploadInvList()">✅ Vytvořit inventuru</button>
+          <button class="btn btn-primary" onclick="uploadInvList()">✅ Nahrát inventuru</button>
         </div>
       </div>
 
       <div class="card">
         <div class="card-header"><h3>📤 Nahrané inventury</h3></div>
+        <div style="overflow-x:auto;">
         <table><thead><tr><th>Název</th><th>Položek</th><th>Vytvořeno</th><th style="text-align:right">Akce</th></tr></thead>
         <tbody id="t-uploaded"><tr class="empty-row"><td colspan="4">Načítám…</td></tr></tbody></table>
+        </div>
       </div>
 
       <div class="card">
         <div class="card-header"><h3>▶️ Aktivní inventury</h3></div>
-        <table><thead><tr><th>Název</th><th>Kdo skenuje</th><th>Postup</th><th>Navíc</th><th>Spuštěno</th><th style="text-align:right">Stáhnout</th></tr></thead>
-        <tbody id="t-active"><tr class="empty-row"><td colspan="6">Načítám…</td></tr></tbody></table>
+        <div style="overflow-x:auto;">
+        <table><thead><tr><th>Název</th><th>Kdo skenuje</th><th>Postup</th><th>Navíc</th><th>Spuštěno</th><th style="text-align:right">Akce</th><th style="text-align:right">Stáhnout</th></tr></thead>
+        <tbody id="t-active"><tr class="empty-row"><td colspan="7">Načítám…</td></tr></tbody></table>
+        </div>
       </div>
 
       <div class="card">
         <div class="card-header"><h3>✅ Dokončené inventury</h3></div>
-        <table><thead><tr><th>Název</th><th>Kdo dokončil</th><th>Nalezeno</th><th>Chybí</th><th>Navíc</th><th>Kdy</th><th style="text-align:right">Akce</th></tr></thead>
-        <tbody id="t-completed"><tr class="empty-row"><td colspan="7">Načítám…</td></tr></tbody></table>
+        <div style="overflow-x:auto;">
+        <table><thead><tr><th>Název</th><th>Kdo dokončil</th><th>Nalezeno</th><th>Chybí</th><th>Navíc</th><th>Kdy</th><th style="text-align:right">Akce</th><th style="text-align:right">Stáhnout</th></tr></thead>
+        <tbody id="t-completed"><tr class="empty-row"><td colspan="8">Načítám…</td></tr></tbody></table>
+        </div>
       </div>
 
     </div>
@@ -242,13 +248,14 @@ async function loadInvPage(){
   var at=document.getElementById('t-active');
   var ct=document.getElementById('t-completed');
   ut.innerHTML='<tr class="empty-row"><td colspan="4">Načítám…</td></tr>';
-  at.innerHTML='<tr class="empty-row"><td colspan="6">Načítám…</td></tr>';
-  ct.innerHTML='<tr class="empty-row"><td colspan="7">Načítám…</td></tr>';
+  at.innerHTML='<tr class="empty-row"><td colspan="7">Načítám…</td></tr>';
+  ct.innerHTML='<tr class="empty-row"><td colspan="8">Načítám…</td></tr>';
 
   var lr=await supa.from('inventory_lists').select('id,name,created_at,status,started_by,started_at,completed_by,completed_at').order('created_at',{ascending:false});
   if(lr.error){
-    var errMsg='<tr class="empty-row"><td colspan="7">Chyba: '+lr.error.message+'</td></tr>';
-    ut.innerHTML=errMsg; at.innerHTML=errMsg; ct.innerHTML=errMsg;
+    ut.innerHTML='<tr class="empty-row"><td colspan="4">Chyba: '+lr.error.message+'</td></tr>';
+    at.innerHTML='<tr class="empty-row"><td colspan="7">Chyba: '+lr.error.message+'</td></tr>';
+    ct.innerHTML='<tr class="empty-row"><td colspan="8">Chyba: '+lr.error.message+'</td></tr>';
     return;
   }
   var all=lr.data||[];
@@ -278,12 +285,12 @@ async function loadInvPage(){
       '<td>'+found+' / '+total+'</td>'+
       '<td><span class="badge '+(extra>0?'badge-orange':'badge-gray')+'">'+extra+'</span></td>'+
       '<td style="font-size:12px;color:var(--muted)">'+(l.started_at?new Date(l.started_at).toLocaleString('cs-CZ'):'–')+'</td>'+
+      '<td style="text-align:right;white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="finishInvFromDashboard('+l.id+',\''+esc(l.name)+'\')">✅ Dokončit</button></td>'+
       '<td style="text-align:right;white-space:nowrap">'+
         '<button class="btn btn-secondary btn-sm" onclick="downloadInvCsv('+l.id+',\''+esc(l.name)+'\')">📥 CSV</button> '+
-        '<button class="btn btn-secondary btn-sm" onclick="downloadInvXlsx('+l.id+',\''+esc(l.name)+'\')">📊 XLSX</button> '+
-        '<button class="btn btn-primary btn-sm" onclick="finishInvFromDashboard('+l.id+',\''+esc(l.name)+'\')">✅ Dokončit</button>'+
+        '<button class="btn btn-secondary btn-sm" onclick="downloadInvXlsx('+l.id+',\''+esc(l.name)+'\')">📊 XLSX</button>'+
       '</td></tr>';
-  }).join(''):'<tr class="empty-row"><td colspan="6">Právě nikdo neskenuje</td></tr>';
+  }).join(''):'<tr class="empty-row"><td colspan="7">Právě nikdo neskenuje</td></tr>';
 
   ct.innerHTML=completed.length?completed.map(function(l){
     var total=totalCounts[l.id]||0, found=foundCounts[l.id]||0, missing=total-found, extra=extraCounts[l.id]||0;
@@ -292,12 +299,12 @@ async function loadInvPage(){
       '<td><span class="badge '+(missing>0?'badge-red':'badge-gray')+'">'+missing+'</span></td>'+
       '<td><span class="badge '+(extra>0?'badge-orange':'badge-gray')+'">'+extra+'</span></td>'+
       '<td style="font-size:12px;color:var(--muted)">'+(l.completed_at?new Date(l.completed_at).toLocaleString('cs-CZ'):'–')+'</td>'+
+      '<td style="text-align:right;white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="reviveInvList('+l.id+')">🔄 Oživit</button></td>'+
       '<td style="text-align:right;white-space:nowrap">'+
         '<button class="btn btn-secondary btn-sm" onclick="downloadInvCsv('+l.id+',\''+esc(l.name)+'\')">📥 CSV</button> '+
-        '<button class="btn btn-secondary btn-sm" onclick="downloadInvXlsx('+l.id+',\''+esc(l.name)+'\')">📊 XLSX</button> '+
-        '<button class="btn btn-secondary btn-sm" onclick="reviveInvList('+l.id+')">🔄 Oživit</button>'+
+        '<button class="btn btn-secondary btn-sm" onclick="downloadInvXlsx('+l.id+',\''+esc(l.name)+'\')">📊 XLSX</button>'+
       '</td></tr>';
-  }).join(''):'<tr class="empty-row"><td colspan="7">Zatím žádné dokončené inventury</td></tr>';
+  }).join(''):'<tr class="empty-row"><td colspan="8">Zatím žádné dokončené inventury</td></tr>';
 }
 
 async function fetchInvExportRows(listId){
