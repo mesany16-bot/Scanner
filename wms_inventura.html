@@ -133,7 +133,7 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 
       <div class="card">
         <div class="card-header"><h3>▶️ Aktivní inventury</h3></div>
-        <table><thead><tr><th>Název</th><th>Kdo skenuje</th><th>Postup</th><th>Navíc</th><th>Spuštěno</th><th style="text-align:right">Akce</th></tr></thead>
+        <table><thead><tr><th>Název</th><th>Kdo skenuje</th><th>Postup</th><th>Navíc</th><th>Spuštěno</th><th style="text-align:right">Stáhnout</th></tr></thead>
         <tbody id="t-active"><tr class="empty-row"><td colspan="6">Načítám…</td></tr></tbody></table>
       </div>
 
@@ -207,6 +207,7 @@ async function doLogin(){
 }
 
 async function onLoggedIn(user){
+  document.getElementById('session-check').style.display='none';
   currentUser=user;
   var prof=await supa.from('profiles').select('*').eq('id',user.id).single();
   currentProfile=prof.data||{name:user.email,role:'user'};
@@ -279,7 +280,8 @@ async function loadInvPage(){
       '<td style="font-size:12px;color:var(--muted)">'+(l.started_at?new Date(l.started_at).toLocaleString('cs-CZ'):'–')+'</td>'+
       '<td style="text-align:right;white-space:nowrap">'+
         '<button class="btn btn-secondary btn-sm" onclick="downloadInvCsv('+l.id+',\''+esc(l.name)+'\')">📥 CSV</button> '+
-        '<button class="btn btn-secondary btn-sm" onclick="downloadInvXlsx('+l.id+',\''+esc(l.name)+'\')">📊 XLSX</button>'+
+        '<button class="btn btn-secondary btn-sm" onclick="downloadInvXlsx('+l.id+',\''+esc(l.name)+'\')">📊 XLSX</button> '+
+        '<button class="btn btn-primary btn-sm" onclick="finishInvFromDashboard('+l.id+',\''+esc(l.name)+'\')">✅ Dokončit</button>'+
       '</td></tr>';
   }).join(''):'<tr class="empty-row"><td colspan="6">Právě nikdo neskenuje</td></tr>';
 
@@ -331,6 +333,15 @@ async function downloadInvXlsx(listId, listName){
   var wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Inventura');
   XLSX.writeFile(wb, 'inventura_'+listName.replace(/[^a-z0-9_-]/gi,'_')+'.xlsx');
+}
+
+async function finishInvFromDashboard(id, name){
+  if(!confirm('Dokončit inventuru "'+name+'"? Přesune se do Dokončených.'))return;
+  var who=(currentProfile&&currentProfile.name)||(currentUser&&currentUser.email)||'admin';
+  var res=await supa.from('inventory_lists').update({status:'completed', completed_by:who, completed_at:new Date().toISOString()}).eq('id',id);
+  if(res.error){toast('❌ '+res.error.message);return;}
+  toast('✅ Inventura dokončena');
+  loadInvPage();
 }
 
 async function reviveInvList(id){

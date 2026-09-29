@@ -264,6 +264,7 @@ supa.auth.onAuthStateChange(function(event,session){
 });
 
 async function onLoggedIn(user){
+  document.getElementById('session-check').style.display='none';
   currentUser=user;
   var prof=await supa.from('profiles').select('*').eq('id',user.id).single();
   currentProfile=prof.data||{name:user.email,role:'user'};
