@@ -60,7 +60,10 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 </style>
 </head>
 <body>
-<div id="auth-screen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+<div id="session-check" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+  <div style="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:16px;opacity:0.85;">Načítám…</div>
+</div>
+<div id="auth-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
   <div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
     <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1>
     <p style="font-size:13px;color:#7a8090;margin-bottom:20px">Warehouse Management System</p>
@@ -207,6 +210,14 @@ async function onLoggedIn(user){
   currentUser=user;
   var prof=await supa.from('profiles').select('*').eq('id',user.id).single();
   currentProfile=prof.data||{name:user.email,role:'user'};
+  var allowed=currentProfile.allowed_apps;
+  if(currentProfile.role!=='admin' && Array.isArray(allowed) && allowed.indexOf('inventura')===-1){
+    document.getElementById('session-check').style.display='none';
+    alert('Nemáš přístup do Inventory Tool. Kontaktuj administrátora.');
+    await supa.auth.signOut();
+    window.location.reload();
+    return;
+  }
   document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;
   var rb=document.getElementById('sidebar-user-role');
   rb.textContent=currentProfile.role==='admin'?'Admin':'User';
@@ -323,9 +334,9 @@ async function downloadInvXlsx(listId, listName){
 }
 
 async function reviveInvList(id){
-  var res=await supa.from('inventory_lists').update({status:'active'}).eq('id',id);
+  var res=await supa.from('inventory_lists').update({status:'uploaded'}).eq('id',id);
   if(res.error){toast('❌ '+res.error.message);return;}
-  toast('🔄 Inventura oživena – zpět v Aktivních');
+  toast('🔄 Inventura oživena – zpět v Nahraných');
   loadInvPage();
 }
 
@@ -395,6 +406,9 @@ function uploadInvList(){
   reader.readAsArrayBuffer(file);
 }
 
-supa.auth.getSession().then(function(res){if(res.data&&res.data.session)onLoggedIn(res.data.session.user);});
+supa.auth.getSession().then(function(res){
+  if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}
+  else{document.getElementById('session-check').style.display='none';document.getElementById('auth-screen').style.display='flex';}
+});
 </script>
 </body></html>

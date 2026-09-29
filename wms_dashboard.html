@@ -62,7 +62,10 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 </style>
 </head>
 <body>
-<div id="auth-screen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+<div id="session-check" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+  <div style="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:16px;opacity:0.85;">Načítám…</div>
+</div>
+<div id="auth-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
   <div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
     <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG Systems</h1>
     <p style="font-size:13px;color:#7a8090;margin-bottom:20px">Přihlas se pro pokračování</p>
@@ -124,7 +127,19 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
     <div class="topbar">
       <button class="hamburger-btn" onclick="toggleSidebar()">☰</button>
       <h2>📊 Dashboard</h2>
-      <div class="topbar-actions"><span id="last-refresh" style="font-size:12px;color:var(--muted)"></span><button class="btn btn-secondary btn-sm" onclick="loadDashboard()">↻ Obnovit</button></div>
+      <div class="topbar-actions">
+        <span id="last-refresh" style="font-size:12px;color:var(--muted)"></span>
+        <button class="btn btn-secondary btn-sm" onclick="toggleThemePopover()">🎨</button>
+        <button class="btn btn-secondary btn-sm" onclick="loadDashboard()">↻ Obnovit</button>
+      </div>
+    </div>
+    <div id="theme-popover" style="display:none;position:fixed;top:60px;right:16px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);padding:16px;width:240px;z-index:100;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:10px;">🎨 Vzhled PRG WMS</div>
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Barva pozadí</label>
+      <input id="theme-bg" type="color" value="#f0f2f5" style="width:100%;height:34px;border:1px solid var(--border);border-radius:6px;margin-bottom:10px;">
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px;">Barva tlačítek / panelu</label>
+      <input id="theme-accent" type="color" value="#0a7c4e" style="width:100%;height:34px;border:1px solid var(--border);border-radius:6px;margin-bottom:12px;">
+      <button class="btn btn-primary btn-sm" style="width:100%" onclick="saveOwnTheme()">💾 Uložit</button>
     </div>
     <div class="content">
       <div class="stat-grid">
@@ -171,6 +186,34 @@ async function applyTheme(appKey){
 }
 var currentUser=null,currentProfile=null;
 applyTheme('wms');
+
+function toggleThemePopover(){
+  var el=document.getElementById('theme-popover');
+  var show=(el.style.display==='none'||!el.style.display);
+  if(show){
+    var cs=getComputedStyle(document.documentElement);
+    document.getElementById('theme-bg').value = rgbToHex(cs.getPropertyValue('--bg')) || '#f0f2f5';
+    document.getElementById('theme-accent').value = rgbToHex(cs.getPropertyValue('--accent')) || '#0a7c4e';
+  }
+  el.style.display = show ? 'block' : 'none';
+}
+function rgbToHex(val){
+  val=(val||'').trim();
+  if(!val) return null;
+  if(val[0]==='#') return val;
+  var m=val.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if(!m) return null;
+  return '#'+[1,2,3].map(function(i){return ('0'+parseInt(m[i]).toString(16)).slice(-2);}).join('');
+}
+async function saveOwnTheme(){
+  var bg=document.getElementById('theme-bg').value;
+  var accent=document.getElementById('theme-accent').value;
+  var res=await supa.from('app_theme').upsert({app:'wms',bg_color:bg,accent_color:accent});
+  if(res.error){toast('❌ '+res.error.message);return;}
+  toast('✅ Vzhled uložen');
+  applyTheme('wms');
+  document.getElementById('theme-popover').style.display='none';
+}
 
 async function doLogin(){
   var email=document.getElementById('login-email').value.trim();
@@ -224,6 +267,14 @@ async function onLoggedIn(user){
   currentUser=user;
   var prof=await supa.from('profiles').select('*').eq('id',user.id).single();
   currentProfile=prof.data||{name:user.email,role:'user'};
+  var allowed=currentProfile.allowed_apps;
+  if(currentProfile.role!=='admin' && Array.isArray(allowed) && allowed.indexOf('wms')===-1){
+    document.getElementById('session-check').style.display='none';
+    alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');
+    await supa.auth.signOut();
+    window.location.reload();
+    return;
+  }
   document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;
   var rb=document.getElementById('sidebar-user-role');
   rb.textContent=currentProfile.role==='admin'?'Admin':'User';
@@ -279,6 +330,9 @@ async function loadDashboard(){
   document.getElementById('last-refresh').textContent='Obnoveno: '+new Date().toLocaleTimeString('cs-CZ');
 }
 
-supa.auth.getSession().then(function(res){if(res.data&&res.data.session)onLoggedIn(res.data.session.user);});
+supa.auth.getSession().then(function(res){
+  if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}
+  else{document.getElementById('session-check').style.display='none';document.getElementById('auth-screen').style.display='flex';}
+});
 </script>
 </body></html>

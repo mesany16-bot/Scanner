@@ -486,9 +486,19 @@
   <div class="modal">
     <h2 class="info">🧾 Dokončit inventuru?</h2>
     <div class="inv-summary" id="inv-finish-summary"></div>
-    <p style="font-size:13px;">Uloží se výsledek do serveru (pokud je dostupný) a zároveň stáhne CSV export.</p>
-    <button class="modal-btn info" onclick="confirmFinishInventura()">💾 Uložit a exportovat</button>
+    <p style="font-size:13px;">Uloží se výsledek do serveru (pokud je dostupný).</p>
+    <button class="modal-btn info" onclick="confirmFinishInventura()">💾 Uložit</button>
     <button class="modal-btn secondary" onclick="closeModal('modal-inv-finish')">Zpět ke skenování</button>
+  </div>
+</div>
+
+<!-- Modal: Inventura - nabídka exportu po uložení -->
+<div class="modal-backdrop" id="modal-inv-export-prompt" style="display:none">
+  <div class="modal">
+    <h2 class="info">📥 Stáhnout CSV export?</h2>
+    <p style="font-size:13px;">Inventura je uložená. Chceš si k ní rovnou stáhnout CSV se všemi položkami?</p>
+    <button class="modal-btn info" onclick="promptInvExportYes()">✅ Ano, stáhnout CSV</button>
+    <button class="modal-btn secondary" onclick="closeModal('modal-inv-export-prompt')">Ne, díky</button>
   </div>
 </div>
 
@@ -1514,13 +1524,21 @@ async function confirmFinishInventura() {
       await supa.from('inventory_lists').update({
         status: 'completed', completed_by: currentUser, completed_at: new Date().toISOString()
       }).eq('id', invListMeta.id);
-      saveMsg = '☁️ Inventura uzavřena na serveru · ';
+      saveMsg = '☁️ Inventura uzavřena na serveru';
     } catch(err) {
-      saveMsg = '⚠️ Server se nepodařilo aktualizovat (' + err.message + ') · ';
+      saveMsg = '⚠️ Server se nepodařilo aktualizovat (' + err.message + ')';
     }
+  } else {
+    saveMsg = '💾 Inventura uložena lokálně';
   }
+  setStatus(saveMsg);
+  document.getElementById('modal-inv-export-prompt').style.display = 'flex';
+}
+
+function promptInvExportYes() {
+  closeModal('modal-inv-export-prompt');
   exportInvCSV();
-  setStatus(saveMsg + '📥 CSV exportováno');
+  setStatus('📥 CSV exportováno');
 }
 
 function exportInvCSV() {

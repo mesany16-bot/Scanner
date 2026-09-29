@@ -65,7 +65,10 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 </style>
 </head>
 <body>
-<div id="auth-screen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+<div id="session-check" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+  <div style="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:16px;opacity:0.85;">Načítám…</div>
+</div>
+<div id="auth-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
   <div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
     <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1>
     <p style="font-size:13px;color:#7a8090;margin-bottom:20px">Warehouse Management System</p>
@@ -77,15 +80,10 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 </div>
 <div id="app" style="display:none">
   <div id="sidebar">
-    <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
+    <div class="sidebar-logo">PRG Systems<span>Sdílená správa</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
     <nav>
-      <div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Dashboard</div>
-      <div class="nav-item " onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Sklad</div>
-      <div class="nav-item " onclick="go('wms_warehouses.html')"><span class="nav-icon">🏭</span> Sklady</div>
-      <div class="nav-item " onclick="go('wms_clients.html')"><span class="nav-icon">🏢</span> Klienti</div>
-      <div class="nav-item " onclick="go('wms_receipts.html')"><span class="nav-icon">📥</span> Příjmy</div>
-      <div class="nav-item " onclick="go('wms_deliveries.html')"><span class="nav-icon">📤</span> Výdeje</div>
-      <div class="nav-item " onclick="go('wms_scans.html')"><span class="nav-icon">📱</span> Skeny</div>
+      <div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">🏭</span> PRG WMS</div>
+      <div class="nav-item " onclick="go('wms_inventura.html')"><span class="nav-icon">📋</span> Inventory Tool</div>
       <div class="nav-item admin-only active" onclick="go('wms_users.html')"><span class="nav-icon">👥</span> Uživatelé</div>
     </nav>
     <div class="sidebar-user">
@@ -103,25 +101,6 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
     <table><thead><tr><th>Jméno</th><th>E-mail</th><th>Role</th><th>Stav</th><th>Akce</th></tr></thead>
     <tbody id="tbody"><tr class="empty-row"><td colspan="5">Načítám…</td></tr></tbody></table>
   </div>
-  <div class="card">
-    <div class="card-header"><h3>🎨 Vzhled aplikací</h3></div>
-    <div class="modal-body">
-      <div class="form-section">PRG WMS</div>
-      <div class="form-row">
-        <div class="form-group"><label>Barva pozadí</label><input id="wms-bg" type="color" value="#f0f2f5"></div>
-        <div class="form-group"><label>Barva tlačítek / postranního panelu</label><input id="wms-accent" type="color" value="#0a7c4e"></div>
-      </div>
-      <button class="btn btn-primary btn-sm" onclick="saveTheme('wms')">💾 Uložit vzhled WMS</button>
-
-      <div class="form-section" style="margin-top:20px">Inventory Tool</div>
-      <div class="form-row">
-        <div class="form-group"><label>Barva pozadí</label><input id="inv-bg" type="color" value="#f0f2f5"></div>
-        <div class="form-group"><label>Barva tlačítek / postranního panelu</label><input id="inv-accent" type="color" value="#0a7c4e"></div>
-      </div>
-      <button class="btn btn-primary btn-sm" onclick="saveTheme('inventura')">💾 Uložit vzhled Inventory Tool</button>
-      <p style="font-size:12px;color:var(--muted);margin-top:10px">Změna se projeví po znovunačtení dané aplikace (u všech, kdo ji mají otevřenou).</p>
-    </div>
-  </div>
 </div>
 <div class="modal-backdrop" id="modal" style="display:none">
   <div class="modal-box">
@@ -130,6 +109,7 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
       <div class="form-row single"><div class="form-group"><label>Jméno</label><input id="f-name" type="text"></div></div>
       <div class="form-row"><div class="form-group"><label>Role</label><select id="f-role"><option value="user">User – může editovat</option><option value="admin">Admin – plná práva</option></select></div>
       <div class="form-group"><label>Stav</label><select id="f-active"><option value="true">Aktivní</option><option value="false">Deaktivován</option></select></div></div>
+      <div class="form-row single"><div class="form-group"><label>Přístup do prostředí</label><div id="f-apps" style="display:flex;gap:16px;margin-top:4px;"></div></div></div>
     </div>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal')">Zrušit</button><button class="btn btn-primary" onclick="save()">Uložit</button></div>
   </div>
@@ -152,30 +132,15 @@ var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m
 function closeModal(id){document.getElementById(id).style.display='none';}
 function fmt(dt){return new Date(dt).toLocaleString('cs-CZ');}
 function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
-supa.auth.getSession().then(function(res){if(res.data&&res.data.session)onLoggedIn(res.data.session.user);});
+supa.auth.getSession().then(function(res){
+  if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}
+  else{document.getElementById('session-check').style.display='none';document.getElementById('auth-screen').style.display='flex';}
+});
 
 var data=[],editId=null;
 async function afterLogin(){
   if(currentProfile&&currentProfile.role!=='admin'){toast('⚠️ Přístup pouze pro administrátory');setTimeout(function(){go('wms_dashboard.html');},1500);return;}
   load();
-  loadTheme();
-}
-async function loadTheme(){
-  var res=await supa.from('app_theme').select('*');
-  var rows=res.data||[];
-  var wms=rows.find(function(r){return r.app==='wms';})||{bg_color:'#f0f2f5',accent_color:'#0a7c4e'};
-  var inv=rows.find(function(r){return r.app==='inventura';})||{bg_color:'#f0f2f5',accent_color:'#0a7c4e'};
-  document.getElementById('wms-bg').value=wms.bg_color;
-  document.getElementById('wms-accent').value=wms.accent_color;
-  document.getElementById('inv-bg').value=inv.bg_color;
-  document.getElementById('inv-accent').value=inv.accent_color;
-}
-async function saveTheme(appKey){
-  var bg=document.getElementById(appKey==='wms'?'wms-bg':'inv-bg').value;
-  var accent=document.getElementById(appKey==='wms'?'wms-accent':'inv-accent').value;
-  var res=await supa.from('app_theme').upsert({app:appKey,bg_color:bg,accent_color:accent});
-  if(res.error){toast('❌ '+res.error.message);return;}
-  toast('✅ Vzhled uložen');
 }
 async function load(){
   var res=await supa.rpc('admin_list_users');
@@ -206,6 +171,14 @@ async function resetPw(email){
   if(res.error){toast('❌ '+res.error.message);return;}
   toast('✅ Odkaz na reset hesla odeslán na '+email);
 }
+var APP_LIST=[{key:'wms',label:'PRG WMS'},{key:'inventura',label:'Inventory Tool'}];
+function renderAppCheckboxes(allowed){
+  var wrap=document.getElementById('f-apps');
+  wrap.innerHTML=APP_LIST.map(function(a){
+    var checked=(!allowed||allowed.indexOf(a.key)!==-1)?'checked':'';
+    return '<label style="display:flex;align-items:center;gap:6px;font-weight:400;text-transform:none;font-size:13px;color:var(--text);cursor:pointer;"><input type="checkbox" class="f-app-cb" value="'+a.key+'" '+checked+'> '+a.label+'</label>';
+  }).join('');
+}
 function edit(id){
   var u=data.find(function(x){return x.id===id;});
   if(!u)return;
@@ -213,10 +186,12 @@ function edit(id){
   document.getElementById('f-name').value=u.name||'';
   document.getElementById('f-role').value=u.role||'user';
   document.getElementById('f-active').value=u.is_active===false?'false':'true';
+  renderAppCheckboxes(u.allowed_apps);
   document.getElementById('modal').style.display='flex';
 }
 async function save(){
-  var res=await supa.from('profiles').update({name:document.getElementById('f-name').value.trim(),role:document.getElementById('f-role').value,is_active:document.getElementById('f-active').value==='true'}).eq('id',editId);
+  var allowedApps=Array.prototype.slice.call(document.querySelectorAll('.f-app-cb:checked')).map(function(cb){return cb.value;});
+  var res=await supa.from('profiles').update({name:document.getElementById('f-name').value.trim(),role:document.getElementById('f-role').value,is_active:document.getElementById('f-active').value==='true',allowed_apps:allowedApps}).eq('id',editId);
   if(res.error){toast('❌ '+res.error.message);return;}
   toast('✅ Uživatel uložen');closeModal('modal');load();
 }
