@@ -23,16 +23,18 @@ table{width:100%;border-collapse:collapse;font-size:13px;}thead{background:#f8f9
 @media(min-width:901px){.hamburger-btn{display:none;}#sidebar-close-btn{display:none !important;}}
 @media(max-width:900px){:root{--sidebar-w:0px;}#sidebar{transform:translateX(-220px);width:220px;}#sidebar.open{transform:translateX(0);}#sidebar-close-btn{display:block !important;}#main{margin-left:0;}.content{padding:14px;}.topbar{padding:11px 14px;}}
 </style></head><body>
-<div id="auth-screen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)"><div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)"><h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1><p style="font-size:13px;color:#7a8090;margin-bottom:20px">Warehouse Management System</p><div id="auth-msg" style="font-size:13px;color:#c0392b;min-height:18px;margin-bottom:8px"></div><input id="login-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none"><input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none"><button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Přihlásit se</button></div></div>
+<div id="session-check" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)"><div style="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:16px;opacity:0.85;">Načítám…</div></div><div id="auth-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)"><div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)"><h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1><p style="font-size:13px;color:#7a8090;margin-bottom:20px">Warehouse Management System</p><div id="auth-msg" style="font-size:13px;color:#c0392b;min-height:18px;margin-bottom:8px"></div><input id="login-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none"><input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none"><button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Přihlásit se</button></div></div>
 <div id="app" style="display:none">
   <div id="sidebar"><div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">&#x2715;</button></div>
-  <nav><div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Dashboard</div>
+  <nav><div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Hub</div>
 <div class="nav-item " onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Sklad</div>
 <div class="nav-item " onclick="go('wms_warehouses.html')"><span class="nav-icon">🏭</span> Sklady</div>
 <div class="nav-item " onclick="go('wms_clients.html')"><span class="nav-icon">🏢</span> Klienti</div>
 <div class="nav-item active " onclick="go('wms_receipts.html')"><span class="nav-icon">📥</span> Příjmy</div>
 <div class="nav-item " onclick="go('wms_deliveries.html')"><span class="nav-icon">📤</span> Výdeje</div>
 <div class="nav-item " onclick="go('wms_scans.html')"><span class="nav-icon">📱</span> Skeny</div>
+<div style="height:1px;background:rgba(255,255,255,0.15);margin:8px 18px"></div>
+      <div class="nav-item " onclick="go('wms_inventura.html')"><span class="nav-icon">📋</span> Inventory Tool</div>
 <div class="nav-item admin-only " onclick="go('wms_users.html')"><span class="nav-icon">👥</span> Uživatelé</div>
 </nav>
   <div class="sidebar-user"><strong id="sidebar-user-name">-</strong><span id="sidebar-user-role" class="badge badge-gray"></span><button onclick="doLogout()">Odhlasit se</button></div></div>
@@ -45,8 +47,10 @@ table{width:100%;border-collapse:collapse;font-size:13px;}thead{background:#f8f9
       <input id="search" type="text" placeholder="Hledat cislo dokladu..." oninput="filterDocs()" style="flex:1;min-width:150px;padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none">
       <select id="f-status" onchange="filterDocs()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"><option value="">Vsechny stavy</option><option value="draft">Koncept</option><option value="confirmed">Potvrzeno</option></select>
     </div>
+    <div style="overflow-x:auto;">
     <table><thead><tr><th>Cislo</th><th>Dodavatel</th><th>Sklad</th><th>Stav</th><th>Vytvoril</th><th>Datum</th><th>Akce</th></tr></thead>
     <tbody id="tbody"><tr class="empty-row"><td colspan="7">Nacitam...</td></tr></tbody></table>
+    </div>
   </div>
 </div>
 </div>
@@ -57,14 +61,16 @@ var SUPA_URL="https://ujvqanqqhmnfxsfeqixc.supabase.co";var SUPA_KEY="sb_publish
 var supa=supabase.createClient(SUPA_URL,SUPA_KEY);
 var currentUser=null,currentProfile=null;
 async function doLogin(){var email=document.getElementById('login-email').value.trim();var pass=document.getElementById('login-pass').value;if(!email||!pass){document.getElementById('auth-msg').textContent='Vyplnte pole';return;}document.getElementById('auth-msg').textContent='Prihlasovani...';var res=await supa.auth.signInWithPassword({email,password:pass});if(res.error){document.getElementById('auth-msg').textContent='Chyba: '+res.error.message;return;}await onLoggedIn(res.data.user);}
-async function onLoggedIn(user){currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();currentProfile=prof.data||{name:user.email,role:'user'};document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';if(typeof afterLogin==='function')afterLogin();}
+// idle logout
+var SESSION_IDLE_MS=2*60*60*1000;var sessionIdleTimer=null;function startSessionIdleWatch(){function reset(){clearTimeout(sessionIdleTimer);sessionIdleTimer=setTimeout(async function(){await supa.auth.signOut();alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');window.location.reload();},SESSION_IDLE_MS);}['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){document.addEventListener(evt,reset,{passive:true});});reset();}
+async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}var allowed=currentProfile.allowed_apps;if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1){alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';if(typeof afterLogin==='function')afterLogin();startSessionIdleWatch();}
 async function doLogout(){await supa.auth.signOut();window.location.href='wms_dashboard.html';}
 function go(u){window.location.href=u;}
 function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
 var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(_tt);_tt=setTimeout(function(){e.classList.remove('show');},2800);}
 function closeModal(id){document.getElementById(id).style.display='none';}
 function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
-supa.auth.getSession().then(function(res){if(res.data&&res.data.session)onLoggedIn(res.data.session.user);});
+supa.auth.getSession().then(function(res){if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}else{document.getElementById('session-check').style.display='none';document.getElementById('auth-screen').style.display='flex';}});
 
 var data=[];
 async function afterLogin(){load();}

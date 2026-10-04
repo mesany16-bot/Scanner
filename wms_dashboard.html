@@ -105,7 +105,7 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
   <div id="sidebar">
     <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
     <nav>
-      <div class="nav-item active" onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Dashboard</div>
+      <div class="nav-item active" onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Hub</div>
       <div class="nav-item" onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Inventory</div>
       <div class="nav-item" onclick="go('wms_warehouses.html')"><span class="nav-icon">🏭</span> Sklady</div>
       <div class="nav-item" onclick="go('wms_clients.html')"><span class="nav-icon">🏢</span> Klienti</div>
@@ -151,15 +151,15 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
       <div class="two-col">
         <div>
           <div class="card"><div class="card-header"><h3>📥 Poslední příjmy</h3><a href="wms_receipts.html" class="btn btn-secondary btn-sm">Všechny →</a></div>
-          <table><thead><tr><th>Číslo</th><th>Dodavatel</th><th>Stav</th><th>Datum</th></tr></thead><tbody id="t-receipts"><tr class="empty-row"><td colspan="4">Načítám…</td></tr></tbody></table></div>
+          <div style="overflow-x:auto;"><table><thead><tr><th>Číslo</th><th>Dodavatel</th><th>Stav</th><th>Datum</th></tr></thead><tbody id="t-receipts"><tr class="empty-row"><td colspan="4">Načítám…</td></tr></tbody></table></div></div>
           <div class="card"><div class="card-header"><h3>⚠️ Nízký stav</h3><a href="wms_stock.html" class="btn btn-secondary btn-sm">Sklad →</a></div>
-          <table><thead><tr><th>SKU</th><th>Stav</th><th>Min.</th></tr></thead><tbody id="t-low"><tr class="empty-row"><td colspan="3">Načítám…</td></tr></tbody></table></div>
+          <div style="overflow-x:auto;"><table><thead><tr><th>SKU</th><th>Stav</th><th>Min.</th></tr></thead><tbody id="t-low"><tr class="empty-row"><td colspan="3">Načítám…</td></tr></tbody></table></div></div>
         </div>
         <div>
           <div class="card"><div class="card-header"><h3>📤 Poslední výdeje</h3><a href="wms_deliveries.html" class="btn btn-secondary btn-sm">Všechny →</a></div>
-          <table><thead><tr><th>Číslo</th><th>Klient</th><th>Stav</th><th>Datum</th></tr></thead><tbody id="t-deliveries"><tr class="empty-row"><td colspan="4">Načítám…</td></tr></tbody></table></div>
+          <div style="overflow-x:auto;"><table><thead><tr><th>Číslo</th><th>Klient</th><th>Stav</th><th>Datum</th></tr></thead><tbody id="t-deliveries"><tr class="empty-row"><td colspan="4">Načítám…</td></tr></tbody></table></div></div>
           <div class="card"><div class="card-header"><h3>📱 Poslední skeny</h3><a href="wms_scans.html" class="btn btn-secondary btn-sm">Všechny →</a></div>
-          <table><thead><tr><th>EAN/IoT</th><th>Kdo</th><th>Kdy</th></tr></thead><tbody id="t-scans"><tr class="empty-row"><td colspan="3">Načítám…</td></tr></tbody></table></div>
+          <div style="overflow-x:auto;"><table><thead><tr><th>EAN/IoT</th><th>Kdo</th><th>Kdy</th></tr></thead><tbody id="t-scans"><tr class="empty-row"><td colspan="3">Načítám…</td></tr></tbody></table></div></div>
         </div>
       </div>
     </div>
@@ -263,11 +263,42 @@ supa.auth.onAuthStateChange(function(event,session){
   }
 });
 
+
+// ── Automatické odhlášení po 2h nečinnosti ──────────────────
+var SESSION_IDLE_MS = 2*60*60*1000;
+var sessionIdleTimer = null;
+function startSessionIdleWatch(){
+  function reset(){
+    clearTimeout(sessionIdleTimer);
+    sessionIdleTimer = setTimeout(async function(){
+      await supa.auth.signOut();
+      alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');
+      window.location.reload();
+    }, SESSION_IDLE_MS);
+  }
+  ['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){
+    document.addEventListener(evt, reset, {passive:true});
+  });
+  reset();
+}
+
 async function onLoggedIn(user){
   document.getElementById('session-check').style.display='none';
   currentUser=user;
   var prof=await supa.from('profiles').select('*').eq('id',user.id).single();
-  currentProfile=prof.data||{name:user.email,role:'user'};
+  if(!prof.data){
+    alert('Tento účet už není platný. Kontaktuj administrátora.');
+    await supa.auth.signOut();
+    window.location.reload();
+    return;
+  }
+  currentProfile=prof.data;
+  if(currentProfile.is_active===false){
+    alert('Tento účet byl deaktivován. Kontaktuj administrátora.');
+    await supa.auth.signOut();
+    window.location.reload();
+    return;
+  }
   var allowed=currentProfile.allowed_apps;
   if(currentProfile.role!=='admin' && Array.isArray(allowed) && allowed.indexOf('wms')===-1){
     document.getElementById('session-check').style.display='none';
@@ -282,6 +313,9 @@ async function onLoggedIn(user){
   rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';
   document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});
   document.getElementById('auth-screen').style.display='none';
+  startSessionIdleWatch();
+  var reqApp=new URLSearchParams(window.location.search).get('app');
+  if(reqApp==='wms'){ enterMode('wms'); return; }
   document.getElementById('mode-select-screen').style.display='flex';
 }
 

@@ -65,7 +65,10 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 </style>
 </head>
 <body>
-<div id="auth-screen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+<div id="session-check" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+  <div style="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:16px;opacity:0.85;">Načítám…</div>
+</div>
+<div id="auth-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
   <div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
     <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1>
     <p style="font-size:13px;color:#7a8090;margin-bottom:20px">Warehouse Management System</p>
@@ -79,14 +82,16 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
   <div id="sidebar">
     <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
     <nav>
-      <div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Dashboard</div>
+      <div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Hub</div>
       <div class="nav-item " onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Sklad</div>
       <div class="nav-item " onclick="go('wms_warehouses.html')"><span class="nav-icon">🏭</span> Sklady</div>
       <div class="nav-item active" onclick="go('wms_clients.html')"><span class="nav-icon">🏢</span> Klienti</div>
       <div class="nav-item " onclick="go('wms_receipts.html')"><span class="nav-icon">📥</span> Příjmy</div>
       <div class="nav-item " onclick="go('wms_deliveries.html')"><span class="nav-icon">📤</span> Výdeje</div>
       <div class="nav-item " onclick="go('wms_scans.html')"><span class="nav-icon">📱</span> Skeny</div>
-      <div class="nav-item admin-only " onclick="go('wms_users.html')"><span class="nav-icon">👥</span> Uživatelé</div>
+      <div style="height:1px;background:rgba(255,255,255,0.15);margin:8px 18px"></div>
+      <div class="nav-item " onclick="go('wms_inventura.html')"><span class="nav-icon">📋</span> Inventory Tool</div>
+<div class="nav-item admin-only " onclick="go('wms_users.html')"><span class="nav-icon">👥</span> Uživatelé</div>
     </nav>
     <div class="sidebar-user">
       <strong id="sidebar-user-name">–</strong>
@@ -101,8 +106,10 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 <div class="content">
   <div class="card">
     <div style="padding:12px 16px;border-bottom:1px solid var(--border)"><input id="search" type="text" placeholder="Hledat klienta…" oninput="filter()" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"></div>
+    <div style="overflow-x:auto;">
     <table><thead><tr><th>Název</th><th>E-mail</th><th>Telefon</th><th>IČ</th><th>Město</th><th>Akce</th></tr></thead>
     <tbody id="tbody"><tr class="empty-row"><td colspan="6">Načítám…</td></tr></tbody></table>
+    </div>
   </div>
 </div>
 <div class="modal-backdrop" id="modal" style="display:none">
@@ -129,7 +136,9 @@ var SUPA_KEY="sb_publishable_5o19BnZUEi8j-rU5DDAgBA_HwKB7V-v";
 var supa=supabase.createClient(SUPA_URL,SUPA_KEY);
 var currentUser=null,currentProfile=null;
 async function doLogin(){var email=document.getElementById('login-email').value.trim();var pass=document.getElementById('login-pass').value;if(!email||!pass){document.getElementById('auth-msg').textContent='⚠️ Vyplň e-mail a heslo';return;}document.getElementById('auth-msg').textContent='⏳ Přihlašuji…';var res=await supa.auth.signInWithPassword({email,password:pass});if(res.error){document.getElementById('auth-msg').textContent='❌ '+res.error.message;return;}await onLoggedIn(res.data.user);}
-async function onLoggedIn(user){currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();currentProfile=prof.data||{name:user.email,role:'user'};document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';if(typeof afterLogin==='function')afterLogin();}
+// idle logout
+var SESSION_IDLE_MS=2*60*60*1000;var sessionIdleTimer=null;function startSessionIdleWatch(){function reset(){clearTimeout(sessionIdleTimer);sessionIdleTimer=setTimeout(async function(){await supa.auth.signOut();alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');window.location.reload();},SESSION_IDLE_MS);}['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){document.addEventListener(evt,reset,{passive:true});});reset();}
+async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}var allowed=currentProfile.allowed_apps;if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1){alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';if(typeof afterLogin==='function')afterLogin();startSessionIdleWatch();}
 async function doLogout(){await supa.auth.signOut();window.location.href='wms_dashboard.html';}
 function go(u){window.location.href=u;}
 function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
@@ -137,7 +146,10 @@ var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m
 function closeModal(id){document.getElementById(id).style.display='none';}
 function fmt(dt){return new Date(dt).toLocaleString('cs-CZ');}
 function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
-supa.auth.getSession().then(function(res){if(res.data&&res.data.session)onLoggedIn(res.data.session.user);});
+supa.auth.getSession().then(function(res){
+  if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}
+  else{document.getElementById('session-check').style.display='none';document.getElementById('auth-screen').style.display='flex';}
+});
 
 var data=[],editId=null;
 async function afterLogin(){load();}

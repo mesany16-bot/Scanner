@@ -82,7 +82,7 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
   <div id="sidebar">
     <div class="sidebar-logo">PRG Systems<span>Sdílená správa</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
     <nav>
-      <div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">🏭</span> PRG WMS</div>
+      <div class="nav-item " onclick="go('wms_dashboard.html?app=wms')"><span class="nav-icon">🏭</span> PRG WMS</div>
       <div class="nav-item " onclick="go('wms_inventura.html')"><span class="nav-icon">📋</span> Inventory Tool</div>
       <div class="nav-item admin-only active" onclick="go('wms_users.html')"><span class="nav-icon">👥</span> Uživatelé</div>
     </nav>
@@ -98,8 +98,10 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 <div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">☰</button><h2>👥 Uživatelé</h2></div>
 <div class="content">
   <div class="card">
+    <div style="overflow-x:auto;">
     <table><thead><tr><th>Jméno</th><th>E-mail</th><th>Role</th><th>Stav</th><th>Akce</th></tr></thead>
     <tbody id="tbody"><tr class="empty-row"><td colspan="5">Načítám…</td></tr></tbody></table>
+    </div>
   </div>
 </div>
 <div class="modal-backdrop" id="modal" style="display:none">
@@ -124,7 +126,8 @@ var SUPA_KEY="sb_publishable_5o19BnZUEi8j-rU5DDAgBA_HwKB7V-v";
 var supa=supabase.createClient(SUPA_URL,SUPA_KEY);
 var currentUser=null,currentProfile=null;
 async function doLogin(){var email=document.getElementById('login-email').value.trim();var pass=document.getElementById('login-pass').value;if(!email||!pass){document.getElementById('auth-msg').textContent='⚠️ Vyplň e-mail a heslo';return;}document.getElementById('auth-msg').textContent='⏳ Přihlašuji…';var res=await supa.auth.signInWithPassword({email,password:pass});if(res.error){document.getElementById('auth-msg').textContent='❌ '+res.error.message;return;}await onLoggedIn(res.data.user);}
-async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();currentProfile=prof.data||{name:user.email,role:'user'};document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';if(typeof afterLogin==='function')afterLogin();}
+// ── Automatické odhlášení po 2h nečinnosti ──────────────────var SESSION_IDLE_MS = 2*60*60*1000;var sessionIdleTimer = null;function startSessionIdleWatch(){  function reset(){    clearTimeout(sessionIdleTimer);    sessionIdleTimer = setTimeout(async function(){      await supa.auth.signOut();      alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');      window.location.reload();    }, SESSION_IDLE_MS);  }  ['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){    document.addEventListener(evt, reset, {passive:true});  });  reset();}
+async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';if(typeof afterLogin==='function')afterLogin();startSessionIdleWatch();}
 async function doLogout(){await supa.auth.signOut();window.location.href='wms_dashboard.html';}
 function go(u){window.location.href=u;}
 function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
@@ -158,10 +161,19 @@ async function load(){
       +'<td>'+statusBadge+'</td>'
       +'<td style="white-space:nowrap">'
         +'<button class="btn btn-secondary btn-sm" onclick="edit(\''+u.id+'\')">✏️ Upravit</button> '
-        +'<button class="btn btn-info btn-sm" onclick="resetPw(\''+u.email+'\')">🔑 Reset hesla</button>'
+        +'<button class="btn btn-info btn-sm" onclick="resetPw(\''+u.email+'\')">🔑 Reset hesla</button> '
+        +(u.id!==currentUser.id?'<button class="btn btn-danger btn-sm" onclick="removeUser(\''+u.id+'\',\''+esc(u.name)+'\')">🗑 Odebrat</button>':'')
       +'</td>'
     +'</tr>';
   }).join('');
+}
+function esc(s){ return (s||'').replace(/'/g,"\\'"); }
+async function removeUser(id,name){
+  if(!confirm('Odebrat uživatele "'+name+'"? Okamžitě ztratí přístup do WMS i Inventory Tool. Jeho přihlašovací účet zůstane v Supabase, ale appky ho už nepustí dál.'))return;
+  var res=await supa.from('profiles').delete().eq('id',id);
+  if(res.error){toast('❌ '+res.error.message);return;}
+  toast('🗑 Uživatel odebrán');
+  load();
 }
 async function resetPw(email){
   if(!email){toast('❌ Neznámý e-mail');return;}

@@ -39,14 +39,16 @@ table{width:100%;border-collapse:collapse;font-size:13px;}thead{background:#f8f9
 <div id="app" style="display:none">
   <div id="sidebar">
     <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">&#x2715;</button></div>
-    <nav><div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Dashboard</div>
+    <nav><div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Hub</div>
 <div class="nav-item " onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Inventory</div>
 <div class="nav-item " onclick="go('wms_warehouses.html')"><span class="nav-icon">🏭</span> Sklady</div>
 <div class="nav-item " onclick="go('wms_clients.html')"><span class="nav-icon">🏢</span> Klienti</div>
-<div class="nav-item active " onclick="go('wms_receipts.html')"><span class="nav-icon">📥</span> Prijmy</div>
-<div class="nav-item " onclick="go('wms_deliveries.html')"><span class="nav-icon">📤</span> Vydeje</div>
+<div class="nav-item active " onclick="go('wms_receipts.html')"><span class="nav-icon">📥</span> Příjmy</div>
+<div class="nav-item " onclick="go('wms_deliveries.html')"><span class="nav-icon">📤</span> Výdeje</div>
 <div class="nav-item " onclick="go('wms_scans.html')"><span class="nav-icon">📱</span> Skeny</div>
-<div class="nav-item admin-only " onclick="go('wms_users.html')"><span class="nav-icon">👥</span> Uzivatele</div>
+<div style="height:1px;background:rgba(255,255,255,0.15);margin:8px 18px"></div>
+      <div class="nav-item " onclick="go('wms_inventura.html')"><span class="nav-icon">📋</span> Inventory Tool</div>
+<div class="nav-item admin-only " onclick="go('wms_users.html')"><span class="nav-icon">👥</span> Uživatelé</div>
 </nav>
     <div class="sidebar-user"><strong id="sidebar-user-name">-</strong><span id="sidebar-user-role" class="badge badge-gray"></span><button onclick="doLogout()">Odhlasit se</button></div>
   </div>

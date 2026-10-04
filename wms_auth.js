@@ -38,7 +38,29 @@ async function doLogin(){
 async function onLoggedIn(user){
   currentUser=user;
   var prof=await supa.from('profiles').select('*').eq('id',user.id).single();
-  currentProfile=prof.data||{name:user.email,role:'user'};
+  if(!prof.data){
+    sessionStorage.clear();
+    alert('Tento účet už není platný. Kontaktuj administrátora.');
+    await supa.auth.signOut();
+    window.location.reload();
+    return;
+  }
+  currentProfile=prof.data;
+  if(currentProfile.is_active===false){
+    sessionStorage.clear();
+    alert('Tento účet byl deaktivován. Kontaktuj administrátora.');
+    await supa.auth.signOut();
+    window.location.reload();
+    return;
+  }
+  var allowed=currentProfile.allowed_apps;
+  if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1){
+    sessionStorage.clear();
+    alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');
+    await supa.auth.signOut();
+    window.location.reload();
+    return;
+  }
   sessionStorage.setItem('wms_profile',JSON.stringify(currentProfile));
   sessionStorage.setItem('wms_user_id',user.id);
   var nameEl=document.getElementById('sidebar-user-name');
@@ -48,7 +70,27 @@ async function onLoggedIn(user){
   document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('app').style.display='block';
+  startSessionIdleWatch();
   if(typeof afterLogin==='function')afterLogin();
+}
+
+// ── Automatické odhlášení po 2h nečinnosti ──────────────────
+var SESSION_IDLE_MS=2*60*60*1000;
+var sessionIdleTimer=null;
+function startSessionIdleWatch(){
+  function reset(){
+    clearTimeout(sessionIdleTimer);
+    sessionIdleTimer=setTimeout(async function(){
+      sessionStorage.clear();
+      await supa.auth.signOut();
+      alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');
+      window.location.reload();
+    },SESSION_IDLE_MS);
+  }
+  ['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){
+    document.addEventListener(evt,reset,{passive:true});
+  });
+  reset();
 }
 
 async function doLogout(){

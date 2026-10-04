@@ -680,6 +680,25 @@ async function doRegister() {
   setTimeout(showLogin, 1500);
 }
 
+
+// ── Automatické odhlášení po 2h nečinnosti ──────────────────
+var SESSION_IDLE_MS = 2*60*60*1000;
+var sessionIdleTimer = null;
+function startSessionIdleWatch(){
+  function reset(){
+    clearTimeout(sessionIdleTimer);
+    sessionIdleTimer = setTimeout(async function(){
+      await supa.auth.signOut();
+      alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');
+      window.location.reload();
+    }, SESSION_IDLE_MS);
+  }
+  ['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){
+    document.addEventListener(evt, reset, {passive:true});
+  });
+  reset();
+}
+
 async function onLoggedIn(user) {
   currentUserId = user.id;
   // Get profile name
@@ -697,6 +716,7 @@ async function onLoggedIn(user) {
   document.getElementById('modal-login').style.display = 'none';
   setStatus('✅ Přihlášen jako '+currentUser);
   if (!appMode) { document.getElementById('mode-select-screen').style.display = 'flex'; }
+  startSessionIdleWatch();
 }
 
 async function doCompleteOnboarding() {
@@ -715,6 +735,7 @@ async function doCompleteOnboarding() {
   closeModal('modal-onboard');
   setStatus('✅ Vítej, '+currentUser+'!');
   if (!appMode) { document.getElementById('mode-select-screen').style.display = 'flex'; }
+  startSessionIdleWatch();
 }
 
 // ── Přepínání WMS ↔ Inventura ───────────────────────────────
