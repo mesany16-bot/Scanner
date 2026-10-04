@@ -74,6 +74,18 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
     <input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
     <button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px">Přihlásit se</button>
     <button onclick="showForgot()" style="width:100%;padding:10px;background:none;color:#7a8090;border:none;font-size:13px;font-weight:600;cursor:pointer">🔑 Zapomenuté heslo?</button>
+    <button onclick="showRegister()" style="width:100%;padding:10px;background:none;color:#0a7c4e;border:none;font-size:13px;font-weight:700;cursor:pointer">📝 Registrovat se</button>
+  </div>
+</div>
+<div id="register-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+  <div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
+    <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📝 Registrace</h1>
+    <p id="register-msg" style="font-size:13px;color:#7a8090;margin-bottom:16px">Vytvoř si účet. Přístup do aplikací ti pak schválí administrátor.</p>
+    <input id="reg-name" type="text" placeholder="Jméno" maxlength="30" autocomplete="off" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
+    <input id="reg-email" type="email" placeholder="E-mail" autocomplete="off" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
+    <input id="reg-password" type="password" placeholder="Heslo (min. 6 znaků)" autocomplete="off" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
+    <button onclick="doRegister()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px">Vytvořit účet</button>
+    <button onclick="document.getElementById('register-screen').style.display='none';document.getElementById('auth-screen').style.display='flex';" style="width:100%;padding:10px;background:none;color:#7a8090;border:none;font-size:13px;font-weight:600;cursor:pointer">← Zpět na přihlášení</button>
   </div>
 </div>
 <div id="forgot-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
@@ -225,6 +237,26 @@ async function doLogin(){
   await onLoggedIn(res.data.user);
 }
 
+function showRegister(){
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('register-msg').textContent='Vytvoř si účet. Přístup do aplikací ti pak schválí administrátor.';
+  document.getElementById('register-screen').style.display='flex';
+}
+
+async function doRegister(){
+  var name=document.getElementById('reg-name').value.trim();
+  var email=document.getElementById('reg-email').value.trim();
+  var pass=document.getElementById('reg-password').value;
+  var msg=document.getElementById('register-msg');
+  if(!name||!email||!pass){msg.textContent='⚠️ Vyplň všechna pole.';return;}
+  if(pass.length<6){msg.textContent='⚠️ Heslo musí mít alespoň 6 znaků.';return;}
+  msg.textContent='⏳ Registruji...';
+  var res=await supa.auth.signUp({email:email,password:pass,options:{data:{name:name},emailRedirectTo:window.location.origin+window.location.pathname}});
+  if(res.error){msg.textContent='❌ '+res.error.message;return;}
+  if(res.data&&res.data.session){await supa.auth.signOut();}
+  msg.textContent='✅ Účet vytvořen. Pokud ti přišel potvrzovací e-mail, klikni na odkaz v něm. Přístup do aplikací ti pak musí schválit administrátor.';
+}
+
 function showForgot(){
   var typed=document.getElementById('login-email').value.trim();
   document.getElementById('auth-screen').style.display='none';
@@ -302,7 +334,7 @@ async function onLoggedIn(user){
   var allowed=currentProfile.allowed_apps;
   if(currentProfile.role!=='admin' && Array.isArray(allowed) && allowed.indexOf('wms')===-1){
     document.getElementById('session-check').style.display='none';
-    alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');
+    alert(allowed.length===0?'Tvůj účet čeká na schválení administrátorem.':'Nemáš přístup do PRG WMS. Kontaktuj administrátora.');
     await supa.auth.signOut();
     window.location.reload();
     return;

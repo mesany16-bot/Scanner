@@ -702,13 +702,31 @@ function startSessionIdleWatch(){
 async function onLoggedIn(user) {
   currentUserId = user.id;
   // Get profile name
-  var prof = await supa.from('profiles').select('name,username').eq('id', user.id).single();
-  if (!prof.data || !prof.data.name) {
+  var prof = await supa.from('profiles').select('name,username,role,is_active,allowed_apps').eq('id', user.id).single();
+  if (!prof.data) {
+    alert('Tento účet už není platný. Kontaktuj administrátora.');
+    await supa.auth.signOut();
+    window.location.reload();
+    return;
+  }
+  if (!prof.data.name) {
     // Nový účet (přijatý pozvánkou) – nemá jméno ani heslo. Dokonči nastavení.
     document.getElementById('modal-login').style.display = 'none';
     document.getElementById('modal-forgot').style.display = 'none';
     document.getElementById('onboard-msg').textContent = 'Dokonči založení účtu.';
     document.getElementById('modal-onboard').style.display = 'flex';
+    return;
+  }
+  if (prof.data.is_active === false) {
+    alert('Tento účet byl deaktivován. Kontaktuj administrátora.');
+    await supa.auth.signOut();
+    window.location.reload();
+    return;
+  }
+  if (prof.data.role !== 'admin' && Array.isArray(prof.data.allowed_apps) && prof.data.allowed_apps.length === 0) {
+    alert('Tvůj účet čeká na schválení administrátorem.');
+    await supa.auth.signOut();
+    window.location.reload();
     return;
   }
   currentUser = prof.data.name;
