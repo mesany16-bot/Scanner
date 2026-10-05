@@ -77,6 +77,7 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
   <div id="sidebar">
     <div class="sidebar-logo">PRG Inventory Tool<span>Asset Inventory</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
     <nav>
+      <div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Hub</div>
       <div class="nav-item" onclick="go('wms_dashboard.html?app=wms')"><span class="nav-icon">🏭</span> PRG WMS</div>
       <div class="nav-item active" onclick="go('wms_inventura.html')"><span class="nav-icon">📋</span> Inventura</div>
       <div class="nav-item admin-only" onclick="go('wms_users.html')"><span class="nav-icon">👥</span> Uživatelé</div>
@@ -222,7 +223,7 @@ function startSessionIdleWatch(){
     sessionIdleTimer = setTimeout(async function(){
       await supa.auth.signOut();
       alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');
-      window.location.reload();
+      window.location.href='wms_dashboard.html';
     }, SESSION_IDLE_MS);
   }
   ['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){
@@ -238,14 +239,14 @@ async function onLoggedIn(user){
   if(!prof.data){
     alert('Tento účet už není platný. Kontaktuj administrátora.');
     await supa.auth.signOut();
-    window.location.reload();
+    window.location.href='wms_dashboard.html';
     return;
   }
   currentProfile=prof.data;
   if(currentProfile.is_active===false){
     alert('Tento účet byl deaktivován. Kontaktuj administrátora.');
     await supa.auth.signOut();
-    window.location.reload();
+    window.location.href='wms_dashboard.html';
     return;
   }
   var allowed=currentProfile.allowed_apps;
@@ -253,7 +254,7 @@ async function onLoggedIn(user){
     document.getElementById('session-check').style.display='none';
     alert('Nemáš přístup do Inventory Tool. Kontaktuj administrátora.');
     await supa.auth.signOut();
-    window.location.reload();
+    window.location.href='wms_dashboard.html';
     return;
   }
   document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;
@@ -267,7 +268,7 @@ async function onLoggedIn(user){
   startSessionIdleWatch();
 }
 
-async function doLogout(){await supa.auth.signOut();window.location.reload();}
+async function doLogout(){await supa.auth.signOut();window.location.href='wms_dashboard.html';}
 function go(u){window.location.href=u;}
 function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
 var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(_tt);_tt=setTimeout(function(){e.classList.remove('show');},2800);}
@@ -458,7 +459,7 @@ function uploadInvList(){
 
 supa.auth.getSession().then(function(res){
   if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}
-  else{document.getElementById('session-check').style.display='none';document.getElementById('auth-screen').style.display='flex';}
+  else{window.location.href='wms_dashboard.html';}
 });
 </script>
 </body></html>

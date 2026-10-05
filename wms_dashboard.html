@@ -332,9 +332,12 @@ async function onLoggedIn(user){
     return;
   }
   var allowed=currentProfile.allowed_apps;
-  if(currentProfile.role!=='admin' && Array.isArray(allowed) && allowed.indexOf('wms')===-1){
+  var restricted=currentProfile.role!=='admin' && Array.isArray(allowed);
+  var hasWms=!restricted || allowed.indexOf('wms')!==-1;
+  var hasInv=!restricted || allowed.indexOf('inventura')!==-1;
+  if(!hasWms && !hasInv){
     document.getElementById('session-check').style.display='none';
-    alert(allowed.length===0?'Tvůj účet čeká na schválení administrátorem.':'Nemáš přístup do PRG WMS. Kontaktuj administrátora.');
+    alert('Tvůj účet čeká na schválení administrátorem.');
     await supa.auth.signOut();
     window.location.reload();
     return;
@@ -347,7 +350,8 @@ async function onLoggedIn(user){
   document.getElementById('auth-screen').style.display='none';
   startSessionIdleWatch();
   var reqApp=new URLSearchParams(window.location.search).get('app');
-  if(reqApp==='wms'){ enterMode('wms'); return; }
+  if(!hasWms){ window.location.href='wms_inventura.html'; return; }
+  if(reqApp==='wms' || !hasInv){ enterMode('wms'); return; }
   document.getElementById('mode-select-screen').style.display='flex';
 }
 

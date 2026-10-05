@@ -42,7 +42,7 @@ async function onLoggedIn(user){
     sessionStorage.clear();
     alert('Tento účet už není platný. Kontaktuj administrátora.');
     await supa.auth.signOut();
-    window.location.reload();
+    window.location.href='wms_dashboard.html';
     return;
   }
   currentProfile=prof.data;
@@ -50,7 +50,7 @@ async function onLoggedIn(user){
     sessionStorage.clear();
     alert('Tento účet byl deaktivován. Kontaktuj administrátora.');
     await supa.auth.signOut();
-    window.location.reload();
+    window.location.href='wms_dashboard.html';
     return;
   }
   var allowed=currentProfile.allowed_apps;
@@ -58,7 +58,7 @@ async function onLoggedIn(user){
     sessionStorage.clear();
     alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');
     await supa.auth.signOut();
-    window.location.reload();
+    window.location.href='wms_dashboard.html';
     return;
   }
   sessionStorage.setItem('wms_profile',JSON.stringify(currentProfile));
@@ -84,7 +84,7 @@ function startSessionIdleWatch(){
       sessionStorage.clear();
       await supa.auth.signOut();
       alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');
-      window.location.reload();
+      window.location.href='wms_dashboard.html';
     },SESSION_IDLE_MS);
   }
   ['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){
@@ -113,7 +113,6 @@ supa.auth.getSession().then(function(res){
     onLoggedIn(res.data.session.user);
   } else {
     sessionStorage.clear();
-    document.getElementById('auth-screen').style.display='flex';
-    document.getElementById('app').style.display='none';
+    window.location.href='wms_dashboard.html';
   }
 });
