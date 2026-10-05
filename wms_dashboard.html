@@ -62,6 +62,21 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 </style>
 </head>
 <body>
+<script>
+// pojistka: kdyby ověření přihlášení viselo, nezůstane navždy "Načítám…"
+setTimeout(function(){
+  var sc=document.getElementById('session-check');
+  if(sc && sc.style.display!=='none'){
+    sc.style.display='none';
+    var as=document.getElementById('auth-screen'); if(as) as.style.display='flex';
+    var m=document.getElementById('auth-msg');
+    if(m) m.textContent=(typeof supabase==='undefined')
+      ? '⚠️ Nepodařilo se načíst přihlašovací knihovnu (internet nebo blokace). Obnov stránku.'
+      : '⚠️ Ověření přihlášení trvá nezvykle dlouho. Zavři ostatní karty s aplikací a zkus se přihlásit znovu.';
+  }
+},8000);
+</script>
+
 <div id="session-check" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
   <div style="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:16px;opacity:0.85;">Načítám…</div>
 </div>

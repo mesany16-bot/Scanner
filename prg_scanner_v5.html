@@ -389,14 +389,27 @@
   <div class="modal" style="max-width:360px">
     <h2>📦 PRG Scanner</h2>
     <p>Vyber, co chceš dělat:</p>
-    <button class="mode-select-btn wms" onclick="selectAppMode('wms')">
+    <div id="hub-hint" style="display:none;font-size:12.5px;color:var(--muted);margin:0 0 14px;line-height:1.5;text-align:left;background:var(--bg);border-radius:8px;padding:10px 12px"></div>
+    <button class="mode-select-btn wms" onclick="hubChoose('wms')">
       <span class="msb-icon">🏭</span><span class="msb-title">PRG WMS</span>
       <span class="msb-sub">Skladové skenování EAN, lokace, myDevices</span>
     </button>
-    <button class="mode-select-btn inv" onclick="selectAppMode('inventura')">
+    <button class="mode-select-btn inv" onclick="hubChoose('inventura')">
       <span class="msb-icon">📋</span><span class="msb-title">Inventory Tool</span>
       <span class="msb-sub">Inventarizace majetku podle seznamu</span>
     </button>
+    <button class="modal-btn secondary" id="hub-exit" style="display:none" onclick="hubExit()">Odejít</button>
+  </div>
+</div>
+
+<!-- Modal: Hub - rozjetá inventura -->
+<div class="modal-backdrop" id="modal-hub-inv" style="display:none">
+  <div class="modal">
+    <h2 class="info">📋 Inventory Tool</h2>
+    <p>Právě máš rozjetou inventuru <b id="hub-inv-name"></b>. Co chceš udělat?</p>
+    <button class="modal-btn info" onclick="hubInvContinue()">▶️ Pokračovat v rozjeté</button>
+    <button class="modal-btn" style="background:var(--accent)" onclick="hubInvOther()">📋 Vybrat jinou inventuru</button>
+    <button class="modal-btn secondary" onclick="closeModal('modal-hub-inv')">Zrušit</button>
   </div>
 </div>
 
@@ -548,7 +561,7 @@
 
 <!-- Header -->
 <header>
-  <h1>📦 PRG Scanner</h1>
+  <h1 id="hub-title" onclick="openHub()" style="cursor:pointer" title="Zpět do Hubu">📦 PRG Scanner</h1>
   <div style="display:flex;gap:8px;align-items:center;">
     <div id="switch-badge" onclick="switchAppMode(appMode==='inventura'?'wms':'inventura')">🔀 <span id="switch-badge-label">Inventura</span></div>
     <div id="mode-badge">📱 myDevices</div>
@@ -802,6 +815,59 @@ async function doCompleteOnboarding() {
 }
 
 // ── Přepínání WMS ↔ Inventura ───────────────────────────────
+
+// ── Hub: návrat k výběru WMS / Inventory Tool bez ukončení inventury ──
+var hubOpenedManually = false;
+function openHub() {
+  if (!currentUser || invDialogOpen) return;
+  hubOpenedManually = true;
+  var hint = document.getElementById('hub-hint');
+  var parts = [];
+  if (invList.length) {
+    var f = invList.filter(function(r){ return r.status==='found'; }).length;
+    parts.push('📋 Rozjetá inventura: <b>' + escHtml(invListMeta ? invListMeta.name : 'z Excelu v telefonu') + '</b> (' + f + '/' + invList.length + ')');
+    parts.push(invListMeta && invListMeta.id ? 'Zůstane aktivní na serveru, můžeš se k ní vrátit i z jiného telefonu.' : '⚠️ Je jen v tomto telefonu, na serveru není.');
+  }
+  hint.innerHTML = parts.join('<br>');
+  hint.style.display = parts.length ? 'block' : 'none';
+  document.getElementById('hub-exit').style.display = 'block';
+  document.getElementById('mode-select-screen').style.display = 'flex';
+}
+function hubClose() {
+  hubOpenedManually = false;
+  document.getElementById('hub-exit').style.display = 'none';
+  closeModal('mode-select-screen');
+}
+function hubExit() { hubClose(); }
+function hubChoose(mode) {
+  if (!hubOpenedManually) { selectAppMode(mode); return; }   // první výběr po přihlášení
+  hubClose();
+  if (mode === 'wms') { if (appMode !== 'wms') switchAppMode('wms'); return; }
+  if (invList.length) {
+    document.getElementById('hub-inv-name').textContent = invListMeta ? invListMeta.name : 'z Excelu v telefonu';
+    document.getElementById('modal-hub-inv').style.display = 'flex';
+    return;
+  }
+  if (appMode !== 'inventura') switchAppMode('inventura');
+  else document.getElementById('modal-inv-source').style.display = 'flex';
+}
+function hubInvContinue() {
+  closeModal('modal-hub-inv');
+  if (appMode !== 'inventura') switchAppMode('inventura');
+}
+function hubInvOther() {
+  closeModal('modal-hub-inv');
+  if (!(invListMeta && invListMeta.id)) {
+    var scanned = invList.filter(function(r){ return r.status==='found'; }).length + invExtra.length;
+    if (scanned && !confirm('Rozjetá inventura z Excelu je jen v tomto telefonu. Pokud přejdeš na jinou, její průběh se ztratí (nejdřív si ho stáhni přes CSV). Pokračovat?')) return;
+  }
+  stopCam();
+  invMode = false; invList = []; invExtra = []; invListMeta = null;
+  appMode = 'inventura';
+  renderInvTable(); refreshModeUI(); updateScanBtn();
+  document.getElementById('modal-inv-source').style.display = 'flex';
+}
+
 function selectAppMode(mode) {
   appMode = mode;
   closeModal('mode-select-screen');
