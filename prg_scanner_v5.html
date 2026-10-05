@@ -228,6 +228,23 @@
     }
     #scan-btn.sleep-mode { background: var(--muted); box-shadow: none; }
 
+    #room-pill {
+      position: absolute; top: 8px; right: 8px; display: none; z-index: 6;
+      background: rgba(41,128,185,0.92); color: #fff; font-size: 12px; font-weight: 700;
+      padding: 4px 12px; border-radius: 20px; cursor: pointer; letter-spacing: 0.3px;
+    }
+    .scan-row { display:flex; justify-content:space-between; align-items:flex-start; gap:14px; padding:9px 0; border-bottom:1px solid var(--border); text-align:left; }
+    .scan-row > span { color:var(--muted); font-family:'JetBrains Mono',monospace; font-size:11px; text-transform:uppercase; padding-top:4px; flex-shrink:0; }
+    .scan-row > b { text-align:right; font-size:16px; word-break:break-word; }
+    .scan-status { padding:6px 12px; border-radius:20px; font-weight:700; font-size:15px; display:inline-block; }
+    .scan-status.ok    { background:var(--accent-light);  color:var(--accent); }
+    .scan-status.extra { background:var(--warning-light); color:var(--warning); }
+    .scan-status.dup   { background:var(--info-light);    color:var(--info); }
+    .scan-note { font-size:12.5px; color:var(--muted); margin:10px 0 14px; line-height:1.5; text-align:left; }
+    .scan-note b { color:var(--text); }
+    .room-chips { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 14px; justify-content:center; }
+    .room-chip { border:1.5px solid var(--border); background:var(--bg); border-radius:20px; padding:6px 12px; font-family:'JetBrains Mono',monospace; font-size:12px; cursor:pointer; color:var(--text); }
+
     #table-area { flex: 1; overflow-y: auto; background: var(--bg); -webkit-overflow-scrolling: touch; }
     #status-bar {
       background: var(--surface); border-bottom: 1px solid var(--border);
@@ -502,6 +519,33 @@
   </div>
 </div>
 
+<!-- Modal: Inventura - výsledek skenu -->
+<div class="modal-backdrop" id="modal-inv-scan" style="display:none">
+  <div class="modal">
+    <div class="scan-row"><span>Položka</span><b id="scan-code">–</b></div>
+    <div class="scan-row"><span>Popis</span><b id="scan-name" style="font-size:14px;font-weight:500">–</b></div>
+    <div class="scan-row"><span>Stav</span><b><span id="scan-status" class="scan-status ok">–</span></b></div>
+    <div class="scan-row"><span>Umístění</span><b id="scan-loc">–</b></div>
+    <div class="scan-note" id="scan-note"></div>
+    <button class="modal-btn info" id="scan-btn-ok" onclick="scanDialogConfirm()">✅ Potvrdit</button>
+    <button class="modal-btn" style="background:var(--accent)" id="scan-btn-change" onclick="scanDialogChange()">📍 Změnit umístění</button>
+    <button class="modal-btn secondary" onclick="scanDialogRetry()">🔁 Opakovat</button>
+  </div>
+</div>
+
+<!-- Modal: Inventura - místnost -->
+<div class="modal-backdrop" id="modal-inv-room" style="display:none">
+  <div class="modal">
+    <h2 class="info">📍 Místnost</h2>
+    <p>Kde právě skenuješ? Použije se jako <b>Nové umístění</b>.</p>
+    <input id="inv-room-input" type="text" placeholder="např. 4IMPORT" maxlength="40" autocomplete="off">
+    <div class="room-chips" id="inv-room-chips"></div>
+    <button class="modal-btn info" onclick="saveInvRoom()">✅ Uložit místnost</button>
+    <button class="modal-btn secondary" onclick="clearInvRoom()">Bez místnosti</button>
+    <button class="modal-btn secondary" onclick="cancelRoomModal()">Zrušit</button>
+  </div>
+</div>
+
 <!-- Header -->
 <header>
   <h1>📦 PRG Scanner</h1>
@@ -524,6 +568,7 @@
     <div id="cam-status">Kamera vypnuta</div>
     <div id="loc-pill">📍 SKENUJ LOKACI</div>
     <div id="dev-pill">📦 SKENUJ BOX</div>
+    <div id="room-pill" onclick="openRoomModal()">📍 Místnost: nenastavena</div>
     <div id="sleep-overlay" style="display:none">
       <div class="sleep-icon">🛏️💤</div>
       <div class="sleep-title">Kamera spí</div>
@@ -783,6 +828,7 @@ function refreshModeUI() {
     if (btn) btn.textContent = '📱 myDev';
     if (swLabel) swLabel.textContent = 'Inventura';
   }
+  if (typeof updateRoomPill === 'function') updateRoomPill();
 }
 
 function switchAppMode(target) {
@@ -867,6 +913,7 @@ function resetIdleTimer() {
 }
 
 function enterSleepMode() {
+  if (invDialogOpen) { resetIdleTimer(); return; }
   isAsleep = true;
   clearTimeout(idleTimer); idleTimer = null;
   if (stream) { stream.getTracks().forEach(function(t){t.stop();}); stream=null; }
@@ -1378,7 +1425,7 @@ function loadInvExcelFile(input) {
         var code = (row['Kód']||row['Kod']||row['Evidenční číslo']||row['Evidencni cislo']||row['Inventární číslo']||row['Inventarni cislo']||row['ID']||row['Code']||'').toString().trim();
         var name = (row['Název']||row['Nazev']||row['Popis']||row['Description']||'').toString().trim();
         var loc  = (row['Umístění']||row['Umisteni']||row['Lokace']||row['Location']||'').toString().trim();
-        if (code) list.push({ id: null, code: code, name: name, loc: loc, status: 'pending', ts: '', user: '' });
+        if (code) list.push({ id: null, code: code, name: name, loc: loc, newLoc: '', status: 'pending', ts: '', tsn: 0, user: '' });
       });
       closeModal('modal-inv-source');
       if (!list.length) { alert('Soubor nenačten – zkontroluj sloupce (potřebujeme aspoň Kód / Evidenční číslo).'); return; }
@@ -1416,13 +1463,13 @@ async function selectInvList(listId, listName) {
   var wrap = document.getElementById('inv-server-list-wrap');
   wrap.innerHTML = '<p style="color:var(--muted);font-size:14px;">Načítám položky…</p>';
   try {
-    var res = await supa.from('inventory_list_items').select('id,code,name,location,status,found_by,found_at').eq('list_id', listId);
+    var res = await supa.from('inventory_list_items').select('id,code,name,location,new_location,status,found_by,found_at').eq('list_id', listId);
     if (res.error) throw res.error;
     var items = res.data || [];
     if (!items.length) { alert('Seznam "'+listName+'" neobsahuje žádné položky.'); return; }
     var list = items.map(function(it){
-      return { id: it.id, code: (it.code||'').toString().trim(), name: it.name||'', loc: it.location||'',
-        status: it.status==='found' ? 'found' : 'pending', ts: it.found_at||'', user: it.found_by||'' };
+      return { id: it.id, code: (it.code||'').toString().trim(), name: it.name||'', loc: it.location||'', newLoc: it.new_location||'',
+        status: it.status==='found' ? 'found' : 'pending', ts: it.found_at||'', tsn: 0, user: it.found_by||'' };
     });
     closeModal('modal-inv-server-pick');
     // Označ seznam jako aktivní (nebo se jen připoj, pokud už aktivní je) — start info nastav jen poprvé
@@ -1451,69 +1498,239 @@ function startInvScanning(list, meta) {
   if (meta && meta.id) { invPollTimer = setInterval(pollInvServerState, 8000); }
 }
 
+var invRoom = '';
+try { invRoom = localStorage.getItem('prg_inv_room') || ''; } catch(e) {}
+var invDialogOpen = false;
+var invPending = null;
+var invBusy = false;
+var roomCallback = null;
+
+function escHtml(s) { return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function fmtTs(t) { if (!t) return ''; var d = new Date(t); return isNaN(d.getTime()) ? String(t) : d.toLocaleString('cs-CZ'); }
+function tsNum(r) { return r.tsn || (r.ts ? (Date.parse(r.ts) || 0) : 0); }
+
 async function pollInvServerState() {
   if (!invMode || !invListMeta || !invListMeta.id) { clearInterval(invPollTimer); return; }
   try {
-    var res = await supa.from('inventory_list_items').select('id,status,found_by,found_at').eq('list_id', invListMeta.id);
+    var res = await supa.from('inventory_list_items').select('id,status,found_by,found_at,new_location').eq('list_id', invListMeta.id);
     if (res.error) return;
     var byId = {};
     (res.data||[]).forEach(function(r){ byId[r.id] = r; });
     var changed = false;
     invList.forEach(function(item){
       var srv = byId[item.id];
-      if (srv && srv.status==='found' && item.status!=='found') {
-        item.status='found'; item.ts=srv.found_at||''; item.user=srv.found_by||'';
+      if (!srv) return;
+      if (srv.status==='found' && item.status!=='found') {
+        item.status='found'; item.ts=srv.found_at||''; item.tsn=0; item.user=srv.found_by||'';
         changed = true;
       }
+      var nl = srv.new_location || '';
+      if (nl !== (item.newLoc||'')) { item.newLoc = nl; changed = true; }
     });
-    var extraRes = await supa.from('inventory_extra_scans').select('code,found_by,found_at').eq('list_id', invListMeta.id);
+    var extraRes = await supa.from('inventory_extra_scans').select('code,found_by,found_at,new_location').eq('list_id', invListMeta.id);
     if (!extraRes.error) {
       (extraRes.data||[]).forEach(function(r){
         var norm = normalizeCode(r.code);
-        if (!invExtra.find(function(e){ return normalizeCode(e.code)===norm; })) {
-          invExtra.push({ code: r.code, ts: r.found_at||'', user: r.found_by||'' });
+        var ex = invExtra.find(function(e){ return normalizeCode(e.code)===norm; });
+        if (!ex) {
+          invExtra.push({ code: r.code, ts: r.found_at||'', tsn: 0, user: r.found_by||'', newLoc: r.new_location||'' });
           changed = true;
-        }
+        } else if ((r.new_location||'') !== (ex.newLoc||'')) { ex.newLoc = r.new_location||''; changed = true; }
       });
     }
     if (changed) { renderInvTable(); updateInvSummaryBadge(); }
   } catch(e){}
 }
 
+// ── Sken položky: nejdřív dialog, zápis až po potvrzení ──────
 async function handleInvCode(code) {
+  if (invDialogOpen) return;
   var norm = normalizeCode(code);
   var item = invList.find(function(r){
     return normalizeCode(r.code) === norm || (r.name && normalizeCode(r.name) === norm);
   });
+  var online = !!(invListMeta && invListMeta.id);
+  var ex = null, kind;
   if (item) {
-    if (item.status === 'found') {
-      beepWarn();
-      setStatus('⚠️ '+item.code+' už byl naskenován ('+(item.user?item.user+' · ':'')+item.ts+')');
-      return;
+    if (online && item.id) {
+      try {
+        var r = await supa.from('inventory_list_items').select('status,found_by,found_at,new_location').eq('id', item.id).single();
+        if (r.data) {
+          if (r.data.status==='found' && item.status!=='found') { item.status='found'; item.ts=r.data.found_at||''; item.tsn=0; item.user=r.data.found_by||''; }
+          item.newLoc = r.data.new_location || '';
+        }
+      } catch(e) {}
     }
-    item.status = 'found'; item.ts = nowStr(); item.user = currentUser;
-    beepOk();
-    setStatus('✅ '+item.code+(item.name?' · '+item.name:'')+' nalezeno');
-    if (invListMeta && invListMeta.id && item.id) {
-      supa.from('inventory_list_items').update({ status:'found', found_by: currentUser, found_at: new Date().toISOString() }).eq('id', item.id).then(function(){});
-    }
+    kind = item.status==='found' ? 'dup' : 'ok';
   } else {
-    var already = invExtra.find(function(r){ return normalizeCode(r.code)===norm; });
-    if (already) { beepWarn(); setStatus('⚠️ '+code+' (navíc) už byl zaznamenán'); return; }
-    invExtra.push({ code: code, ts: nowStr(), user: currentUser });
-    beepError();
-    setStatus('➕ '+code+' není v seznamu – zaznamenáno jako NAVÍC');
-    if (invListMeta && invListMeta.id) {
-      supa.from('inventory_extra_scans').insert({ list_id: invListMeta.id, code: code, found_by: currentUser }).then(function(){});
+    ex = invExtra.find(function(e){ return normalizeCode(e.code)===norm; }) || null;
+    if (!ex && online) {
+      try {
+        var er = await supa.from('inventory_extra_scans').select('code,found_by,found_at,new_location').eq('list_id', invListMeta.id).eq('code', code).limit(1);
+        if (er.data && er.data.length) {
+          var d = er.data[0];
+          ex = { code: d.code, ts: d.found_at||'', tsn: 0, user: d.found_by||'', newLoc: d.new_location||'' };
+          invExtra.push(ex);
+        }
+      } catch(e) {}
     }
+    kind = ex ? 'dup' : 'extra';
   }
-  renderInvTable(); updateInvSummaryBadge();
+  invPending = { kind: kind, item: item, ex: ex, code: code };
+  if (kind==='ok') beepOk(); else if (kind==='dup') beepWarn(); else beepError();
+  showScanDialog();
 }
+
+function showScanDialog() {
+  var p = invPending; if (!p) return;
+  var item = p.item, ex = p.ex;
+  document.getElementById('scan-code').textContent = item ? item.code : (ex ? ex.code : p.code);
+  document.getElementById('scan-name').textContent = item ? (item.name || '–') : 'Není v nahraném seznamu';
+  document.getElementById('scan-loc').textContent  = item ? (item.loc || '–') : '–';
+  var st = document.getElementById('scan-status');
+  var notes = [];
+  if (p.kind === 'ok')         { st.className = 'scan-status ok';    st.textContent = '✅ Správně'; }
+  else if (p.kind === 'extra') { st.className = 'scan-status extra'; st.textContent = '➕ Přebývá'; notes.push('Položka <b>není v nahraném seznamu</b>, zapíše se jako přebývající.'); }
+  else {
+    st.className = 'scan-status dup'; st.textContent = '⚠️ Již bylo naskenováno';
+    var who = item || ex;
+    notes.push('Naskenoval: <b>' + escHtml(who.user || '?') + '</b>' + (who.ts ? ' · ' + escHtml(fmtTs(who.ts)) : ''));
+  }
+  var curNew = item ? item.newLoc : (ex ? ex.newLoc : '');
+  if (curNew) notes.push('Nové umístění: <b>' + escHtml(curNew) + '</b>');
+  if (invRoom) {
+    if (item && item.loc && item.loc.toUpperCase() !== invRoom.toUpperCase()) notes.push('⚠️ Aktuální místnost <b>' + escHtml(invRoom) + '</b> se liší od umístění v seznamu.');
+    else notes.push('Aktuální místnost: <b>' + escHtml(invRoom) + '</b>');
+  } else {
+    notes.push('Místnost není nastavena (klepni na 📍 nad kamerou).');
+  }
+  document.getElementById('scan-note').innerHTML = notes.join('<br>');
+  invDialogOpen = true;
+  resetIdleTimer();
+  document.getElementById('modal-inv-scan').style.display = 'flex';
+}
+
+function closeScanDialog() {
+  invDialogOpen = false;
+  invPending = null;
+  document.getElementById('modal-inv-scan').style.display = 'none';
+  resetIdleTimer();
+}
+
+function scanDialogRetry() { closeScanDialog(); setStatus('🔁 Sken zahozen – zkus znovu'); }
+function scanDialogConfirm() { return scanDialogCommit(false); }
+function scanDialogChange() {
+  if (!invRoom) { openRoomModal(function(){ return scanDialogCommit(true); }); return; }
+  return scanDialogCommit(true);
+}
+
+async function scanDialogCommit(change) {
+  var p = invPending;
+  if (!p || invBusy) return;
+  invBusy = true;
+  try {
+    var online = !!(invListMeta && invListMeta.id);
+    var item = p.item, ex = p.ex;
+    var newLoc = null;                              // null = beze změny
+    if (change) {
+      newLoc = invRoom || null;
+      if (item && item.loc && newLoc && item.loc.toUpperCase() === newLoc.toUpperCase()) newLoc = null; // už odpovídá
+    } else if (p.kind === 'extra') {
+      newLoc = invRoom || null;                     // přebývající: kde byl nalezen
+    }
+    var msg = '';
+
+    if (p.kind === 'ok') {
+      item.status = 'found'; item.ts = nowStr(); item.tsn = Date.now(); item.user = currentUser;
+      if (newLoc !== null) item.newLoc = newLoc;
+      msg = '✅ ' + item.code + (item.name ? ' · ' + item.name : '') + ' – správně' + (newLoc ? ' · nové umístění ' + newLoc : '');
+      if (online && item.id) {
+        var patch = { status: 'found', found_by: currentUser, found_at: new Date().toISOString() };
+        if (newLoc !== null) patch.new_location = newLoc;
+        var r = await supa.from('inventory_list_items').update(patch).eq('id', item.id).eq('status', 'pending').select();
+        if (r.error) { msg = '⚠️ Nepodařilo se uložit na server: ' + r.error.message; }
+        else if (!r.data || !r.data.length) {
+          // mezitím to naskenoval někdo jiný
+          var cur = await supa.from('inventory_list_items').select('found_by,found_at').eq('id', item.id).single();
+          if (cur.data) { item.user = cur.data.found_by || ''; item.ts = cur.data.found_at || ''; item.tsn = 0; }
+          if (newLoc !== null) await supa.from('inventory_list_items').update({ new_location: newLoc }).eq('id', item.id);
+          msg = '⚠️ ' + item.code + ' mezitím naskenoval ' + (item.user || 'někdo jiný');
+        }
+      }
+    } else if (p.kind === 'dup') {
+      if (change && newLoc !== null) {
+        if (item) {
+          item.newLoc = newLoc;
+          if (online && item.id) await supa.from('inventory_list_items').update({ new_location: newLoc }).eq('id', item.id);
+          msg = '📍 ' + item.code + ' – nové umístění ' + newLoc;
+        } else if (ex) {
+          ex.newLoc = newLoc;
+          if (online) await supa.from('inventory_extra_scans').update({ new_location: newLoc }).eq('list_id', invListMeta.id).eq('code', ex.code);
+          msg = '📍 ' + ex.code + ' – nové umístění ' + newLoc;
+        }
+      } else {
+        msg = '⚠️ ' + (item ? item.code : (ex ? ex.code : p.code)) + ' už byl naskenován';
+      }
+    } else { // extra
+      var ne = { code: p.code, ts: nowStr(), tsn: Date.now(), user: currentUser, newLoc: newLoc || '' };
+      invExtra.push(ne);
+      msg = '➕ ' + p.code + ' – přebývá' + (newLoc ? ' · místnost ' + newLoc : '');
+      if (online) {
+        var ir = await supa.from('inventory_extra_scans').insert({ list_id: invListMeta.id, code: p.code, found_by: currentUser, new_location: newLoc }).select();
+        if (ir.error) {
+          if (ir.error.code === '23505') msg = '⚠️ ' + p.code + ' už mezitím zaznamenal někdo jiný';
+          else msg = '⚠️ Nepodařilo se uložit na server: ' + ir.error.message;
+        }
+      }
+    }
+    closeScanDialog();
+    renderInvTable(); updateInvSummaryBadge();
+    setStatus(msg);
+  } finally { invBusy = false; }
+}
+
+// ── Místnost ─────────────────────────────────────────────
+function updateRoomPill() {
+  var pill = document.getElementById('room-pill'); if (!pill) return;
+  pill.style.display = (appMode === 'inventura' && invMode) ? 'block' : 'none';
+  pill.textContent = '📍 Místnost: ' + (invRoom || 'nenastavena');
+}
+function setRoom(v) {
+  invRoom = v || '';
+  try { localStorage.setItem('prg_inv_room', invRoom); } catch(e) {}
+  updateRoomPill();
+  if (invPending) showScanDialog();
+}
+function openRoomModal(cb) {
+  roomCallback = (typeof cb === 'function') ? cb : null;
+  document.getElementById('inv-room-input').value = invRoom;
+  var locs = {};
+  invList.forEach(function(r){ if (r.loc) locs[r.loc] = 1; if (r.newLoc) locs[r.newLoc] = 1; });
+  if (invRoom) locs[invRoom] = 1;
+  var wrap = document.getElementById('inv-room-chips');
+  wrap.innerHTML = '';
+  Object.keys(locs).sort().slice(0, 40).forEach(function(l){
+    var b = document.createElement('button');
+    b.className = 'room-chip'; b.textContent = l;
+    b.onclick = function(){ document.getElementById('inv-room-input').value = l; saveInvRoom(); };
+    wrap.appendChild(b);
+  });
+  document.getElementById('modal-inv-room').style.display = 'flex';
+}
+function saveInvRoom() {
+  var v = document.getElementById('inv-room-input').value.trim();
+  setRoom(v);
+  closeModal('modal-inv-room');
+  var cb = roomCallback; roomCallback = null;
+  if (v && cb) cb();
+}
+function clearInvRoom() { setRoom(''); roomCallback = null; closeModal('modal-inv-room'); }
+function cancelRoomModal() { roomCallback = null; closeModal('modal-inv-room'); }
 
 function updateInvSummaryBadge() {
   var found = invList.filter(function(r){return r.status==='found';}).length;
   var total = invList.length;
-  document.getElementById('mode-badge').textContent = '📋 '+found+'/'+total+' · +'+invExtra.length;
+  document.getElementById('mode-badge').textContent = '📋 '+found+'/'+total+' · ➕'+invExtra.length;
 }
 
 function renderInvTable() {
@@ -1521,11 +1738,12 @@ function renderInvTable() {
   var table = document.getElementById('main-table');
   var tbody = document.getElementById('tableBody');
   var headRow = document.getElementById('table-head-row');
-  headRow.innerHTML = '<th>Kód</th><th>Název</th><th style="text-align:center">Stav</th>';
+  headRow.innerHTML = '<th>Kód</th><th>Název</th><th>Stav</th>';
 
   var events = invList.filter(function(r){return r.status==='found';})
-    .concat(invExtra.map(function(r){ return {code:r.code, name:'', status:'extra', ts:r.ts}; }))
-    .sort(function(a,b){ return (b.ts||'').localeCompare(a.ts||''); });
+    .map(function(r){ return { code:r.code, name:r.name, newLoc:r.newLoc, status:'found', n:tsNum(r) }; })
+    .concat(invExtra.map(function(r){ return { code:r.code, name:'', newLoc:r.newLoc, status:'extra', n:tsNum(r) }; }))
+    .sort(function(a,b){ return b.n - a.n; });
 
   if (!events.length) { empty.style.display='block'; table.style.display='none'; return; }
   empty.style.display='none'; table.style.display='table';
@@ -1533,9 +1751,11 @@ function renderInvTable() {
   events.forEach(function(r, i) {
     var tr = document.createElement('tr');
     if (i===0) { tr.className='highlight'; setTimeout(function(){tr.classList.remove('highlight');},900); }
-    var icon = r.status==='found' ? '✅' : '➕';
-    var color = r.status==='found' ? 'color:var(--accent)' : 'color:var(--warning)';
-    tr.innerHTML = '<td class="ean-cell">'+r.code+'</td><td style="font-size:12px;color:var(--muted)">'+(r.name||'')+'</td><td style="text-align:center;'+color+'">'+icon+'</td>';
+    var statusHtml = r.status==='found'
+      ? '<span style="color:var(--accent);font-weight:700">✅ Správně</span>'
+      : '<span style="color:var(--warning);font-weight:700">➕ Přebývá</span>';
+    var sub = r.newLoc ? '<div style="font-size:11px;color:var(--info)">📍 ' + escHtml(r.newLoc) + '</div>' : '';
+    tr.innerHTML = '<td class="ean-cell">'+escHtml(r.code)+'</td><td style="font-size:12px;color:var(--muted)">'+escHtml(r.name||'')+sub+'</td><td style="white-space:nowrap">'+statusHtml+'</td>';
     tbody.appendChild(tr);
   });
 }
@@ -1549,7 +1769,7 @@ function finishInventura() {
     '<div class="chip" style="background:var(--bg)"><b>'+total+'</b><span>Celkem</span></div>'+
     '<div class="chip" style="background:var(--accent-light)"><b style="color:var(--accent)">'+found+'</b><span>Nalezeno</span></div>'+
     '<div class="chip" style="background:var(--danger-light)"><b style="color:var(--danger)">'+missing+'</b><span>Chybí</span></div>'+
-    '<div class="chip" style="background:var(--warning-light)"><b style="color:var(--warning)">'+extra+'</b><span>Navíc</span></div>';
+    '<div class="chip" style="background:var(--warning-light)"><b style="color:var(--warning)">'+extra+'</b><span>Přebývá</span></div>';
   document.getElementById('modal-inv-finish').style.display = 'flex';
 }
 
@@ -1581,14 +1801,15 @@ function promptInvExportYes() {
 }
 
 function exportInvCSV() {
-  var csv = 'Kod,Nazev,Umisteni,Stav,Cas,Uzivatel\n';
+  var q = function(v){ return '"' + String(v==null?'':v).replace(/"/g,'""') + '"'; };
+  var csv = 'Kód,Název,Umístění,Nové umístění,Stav,Čas,Uživatel\n';
   invList.forEach(function(r){
-    csv += '"'+r.code+'","'+(r.name||'')+'","'+(r.loc||'')+'","'+(r.status==='found'?'Nalezeno':'Chybi')+'","'+(r.ts||'')+'","'+(r.user||'')+'"\n';
+    csv += [q(r.code), q(r.name), q(r.loc), q(r.newLoc), q(r.status==='found'?'Nalezeno':'Chybí'), q(fmtTs(r.ts)), q(r.user)].join(',') + '\n';
   });
   invExtra.forEach(function(r){
-    csv += '"'+r.code+'","","","Navic","'+r.ts+'","'+r.user+'"\n';
+    csv += [q(r.code), q(''), q(''), q(r.newLoc), q('Přebývá'), q(fmtTs(r.ts)), q(r.user)].join(',') + '\n';
   });
-  downloadCSV(csv, 'inventura');
+  downloadCSV('\ufeff' + csv, 'inventura');
 }
 
 function renderTableHead() {
@@ -1672,11 +1893,11 @@ function resetData() {
     if (!confirm('Smazat všechna naskenovaná data?')) return;
   }
   if (invMode) {
-    invList.forEach(function(r){ r.status='pending'; r.ts=''; r.user=''; });
+    invList.forEach(function(r){ r.status='pending'; r.ts=''; r.tsn=0; r.user=''; r.newLoc=''; });
     invExtra = [];
     renderInvTable(); updateInvSummaryBadge();
     if (invListMeta && invListMeta.id) {
-      supa.from('inventory_list_items').update({status:'pending', found_by:null, found_at:null}).eq('list_id', invListMeta.id).then(function(){});
+      supa.from('inventory_list_items').update({status:'pending', found_by:null, found_at:null, new_location:null}).eq('list_id', invListMeta.id).then(function(){});
       supa.from('inventory_extra_scans').delete().eq('list_id', invListMeta.id).then(function(){});
     }
   } else if (myDevMode) {

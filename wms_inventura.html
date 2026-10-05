@@ -137,7 +137,7 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
       <div class="card">
         <div class="card-header"><h3>▶️ Aktivní inventury</h3></div>
         <div style="overflow-x:auto;">
-        <table><thead><tr><th>Název</th><th>Kdo skenuje</th><th>Postup</th><th>Navíc</th><th>Spuštěno</th><th style="text-align:right">Akce</th><th style="text-align:right">Stáhnout</th></tr></thead>
+        <table><thead><tr><th>Název</th><th>Kdo skenuje</th><th>Postup</th><th>Přebývá</th><th>Spuštěno</th><th style="text-align:right">Akce</th><th style="text-align:right">Stáhnout</th></tr></thead>
         <tbody id="t-active"><tr class="empty-row"><td colspan="7">Načítám…</td></tr></tbody></table>
         </div>
       </div>
@@ -145,7 +145,7 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
       <div class="card">
         <div class="card-header"><h3>✅ Dokončené inventury</h3></div>
         <div style="overflow-x:auto;">
-        <table><thead><tr><th>Název</th><th>Kdo dokončil</th><th>Nalezeno</th><th>Chybí</th><th>Navíc</th><th>Kdy</th><th style="text-align:right">Akce</th><th style="text-align:right">Stáhnout</th></tr></thead>
+        <table><thead><tr><th>Název</th><th>Kdo dokončil</th><th>Nalezeno</th><th>Chybí</th><th>Přebývá</th><th>Kdy</th><th style="text-align:right">Akce</th><th style="text-align:right">Stáhnout</th></tr></thead>
         <tbody id="t-completed"><tr class="empty-row"><td colspan="8">Načítám…</td></tr></tbody></table>
         </div>
       </div>
@@ -340,26 +340,30 @@ async function loadInvPage(){
   }).join(''):'<tr class="empty-row"><td colspan="8">Zatím žádné dokončené inventury</td></tr>';
 }
 
+function fmtTsDash(t){ if(!t) return ''; var d=new Date(t); return isNaN(d.getTime())?String(t):d.toLocaleString('cs-CZ'); }
+
 async function fetchInvExportRows(listId){
-  var itemsRes = await supa.from('inventory_list_items').select('code,name,location,status,found_by,found_at').eq('list_id', listId);
-  var extraRes = await supa.from('inventory_extra_scans').select('code,found_by,found_at').eq('list_id', listId);
+  var itemsRes = await supa.from('inventory_list_items').select('code,name,location,new_location,status,found_by,found_at').eq('list_id', listId);
+  var extraRes = await supa.from('inventory_extra_scans').select('code,found_by,found_at,new_location').eq('list_id', listId);
   var rows=[];
   (itemsRes.data||[]).forEach(function(r){
-    rows.push({Kod:r.code||'', Nazev:r.name||'', Umisteni:r.location||'', Stav:r.status==='found'?'Nalezeno':'Chybi', Cas:r.found_at||'', Uzivatel:r.found_by||''});
+    rows.push({'Kód':r.code||'', 'Název':r.name||'', 'Umístění':r.location||'', 'Nové umístění':r.new_location||'',
+      'Stav':r.status==='found'?'Nalezeno':'Chybí', 'Čas':fmtTsDash(r.found_at), 'Uživatel':r.found_by||''});
   });
   (extraRes.data||[]).forEach(function(r){
-    rows.push({Kod:r.code||'', Nazev:'', Umisteni:'', Stav:'Navic', Cas:r.found_at||'', Uzivatel:r.found_by||''});
+    rows.push({'Kód':r.code||'', 'Název':'', 'Umístění':'', 'Nové umístění':r.new_location||'',
+      'Stav':'Přebývá', 'Čas':fmtTsDash(r.found_at), 'Uživatel':r.found_by||''});
   });
   return rows;
 }
 
 async function downloadInvCsv(listId, listName){
   var rows=await fetchInvExportRows(listId);
-  var csv='Kod,Nazev,Umisteni,Stav,Cas,Uzivatel\n';
-  rows.forEach(function(r){
-    csv+='"'+r.Kod+'","'+r.Nazev+'","'+r.Umisteni+'","'+r.Stav+'","'+r.Cas+'","'+r.Uzivatel+'"\n';
-  });
-  var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+  var cols=['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];
+  var q=function(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; };
+  var csv=cols.join(',')+'\n';
+  rows.forEach(function(r){ csv+=cols.map(function(k){return q(r[k]);}).join(',')+'\n'; });
+  var blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8;'});
   var url=URL.createObjectURL(blob);
   var a=document.createElement('a');
   a.href=url; a.download='inventura_'+listName.replace(/[^a-z0-9_-]/gi,'_')+'.csv';
@@ -369,7 +373,9 @@ async function downloadInvCsv(listId, listName){
 
 async function downloadInvXlsx(listId, listName){
   var rows=await fetchInvExportRows(listId);
-  var ws=XLSX.utils.json_to_sheet(rows);
+  var cols=['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];
+  var ws=XLSX.utils.json_to_sheet(rows,{header:cols});
+  ws['!cols']=[{wch:16},{wch:30},{wch:14},{wch:16},{wch:12},{wch:20},{wch:16}];
   var wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Inventura');
   XLSX.writeFile(wb, 'inventura_'+listName.replace(/[^a-z0-9_-]/gi,'_')+'.xlsx');
