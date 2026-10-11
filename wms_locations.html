@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Lokace – PRG WMS</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="wms_nav.js"></script>
+<script src="wms_dc.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+:root{--bg:#f0f2f5;--surface:#fff;--border:#e2e6ed;--accent:#0a7c4e;--accent-light:#e8f7f1;--danger:#c0392b;--danger-light:#fdecea;--warning:#e67e22;--warning-light:#fef3e8;--info:#2980b9;--info-light:#eaf4fb;--text:#1a1d27;--muted:#7a8090;--shadow:0 2px 12px rgba(0,0,0,0.07);--sidebar-w:220px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.btn{padding:9px 18px;border:none;border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;transition:opacity 0.15s;text-decoration:none;display:inline-flex;align-items:center;gap:6px;}
+.btn:active{opacity:0.8;}.btn-primary{background:var(--accent);color:#fff;}.btn-secondary{background:var(--bg);color:var(--muted);border:1.5px solid var(--border);}.btn-danger{background:var(--danger);color:#fff;}.btn-warning{background:var(--warning);color:#fff;}.btn-info{background:var(--info);color:#fff;}.btn-sm{padding:6px 12px;font-size:12px;}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
+.badge-green{background:var(--accent-light);color:var(--accent);}.badge-orange{background:var(--warning-light);color:var(--warning);}.badge-red{background:var(--danger-light);color:var(--danger);}.badge-blue{background:var(--info-light);color:var(--info);}.badge-gray{background:#f0f2f5;color:var(--muted);}
+.card{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden;margin-bottom:20px;}
+.card-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.card-header h3{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+thead{background:#f8f9fb;}
+th{padding:9px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;}
+td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tbody tr:last-child td{border-bottom:none;}tbody tr:hover{background:#fafbfc;}
+.empty-row td{text-align:center;color:var(--muted);padding:28px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.form-row.single{grid-template-columns:1fr;}.form-row.triple{grid-template-columns:1fr 1fr 1fr;}
+.form-group{display:flex;flex-direction:column;gap:5px;}
+.form-group label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;}
+.form-group input,.form-group select,.form-group textarea{padding:9px 12px;border:1.5px solid var(--border);border-radius:7px;font-family:'Inter',sans-serif;font-size:13px;outline:none;transition:border-color 0.2s;background:#fff;}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--accent);}
+.form-group textarea{resize:vertical;min-height:70px;}
+.form-section{font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;}
+.modal-box{background:var(--surface);border-radius:14px;width:100%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,0.2);max-height:90vh;overflow-y:auto;}
+.modal-header{padding:18px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.modal-header h3{font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:700;}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);}
+.modal-body{padding:18px 22px;}.modal-footer{padding:12px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+#sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);background:#0a7c4e;display:flex;flex-direction:column;z-index:50;transition:transform 0.25s ease;}
+.sidebar-logo{padding:20px 18px 14px;font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:#fff;letter-spacing:1.5px;border-bottom:1px solid rgba(255,255,255,0.15);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;}
+.sidebar-logo span{font-size:11px;font-weight:400;opacity:0.7;width:100%;letter-spacing:0;}
+#sidebar-close-btn{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;opacity:0.8;display:none;}
+nav{flex:1;padding:10px 0;overflow-y:auto;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:11px 18px;color:rgba(255,255,255,0.75);cursor:pointer;font-size:14px;font-weight:500;transition:background 0.15s,color 0.15s;border-left:3px solid transparent;}
+.nav-item:hover{background:rgba(255,255,255,0.1);color:#fff;}
+.nav-item.active{background:rgba(255,255,255,0.15);color:#fff;border-left-color:#fff;}
+.nav-icon{font-size:17px;width:22px;text-align:center;}
+.sidebar-user{padding:12px 18px;border-top:1px solid rgba(255,255,255,0.15);font-size:12px;color:rgba(255,255,255,0.7);display:flex;flex-direction:column;gap:4px;}
+.sidebar-user strong{color:#fff;font-size:13px;}
+.sidebar-user button{background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;margin-top:4px;}
+#main{margin-left:var(--sidebar-w);min-height:100vh;}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:13px 24px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow);position:sticky;top:0;z-index:40;}
+.topbar h2{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;flex:1;}
+.topbar-actions{display:flex;gap:8px;align-items:center;}
+.hamburger-btn{display:inline-flex;align-items:center;background:none;border:none;font-size:24px;cursor:pointer;color:var(--text);padding:4px 8px;margin-right:4px;border-radius:6px;}
+.content{padding:24px;}
+#sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:49;}
+#toast{position:fixed;bottom:24px;right:24px;background:#1a1d27;color:#fff;padding:12px 20px;border-radius:9px;font-size:13px;font-weight:500;z-index:999;opacity:0;transition:opacity 0.3s;pointer-events:none;}
+#toast.show{opacity:1;}
+.back-btn{background:var(--bg);border:1.5px solid var(--border);border-radius:7px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;text-decoration:none;display:flex;align-items:center;gap:6px;}
+.back-btn:hover{border-color:var(--accent);color:var(--accent);}
+@media(min-width:901px){.hamburger-btn{display:none;}#sidebar-close-btn{display:none !important;}}
+@media(max-width:900px){:root{--sidebar-w:0px;}#sidebar{transform:translateX(-220px);width:220px;}#sidebar.open{transform:translateX(0);}#sidebar-close-btn{display:block !important;}#main{margin-left:0;}.content{padding:14px;}.topbar{padding:11px 14px;}}
+
+/* mobilní zobrazení – sjednoceno s Inventory Tool */
+@media(max-width:900px){
+body{overflow-x:hidden;}
+#main{min-width:0;max-width:100%;}
+.content{padding:12px !important;min-width:0;max-width:100%;}
+.card{min-width:0;max-width:100%;}
+.topbar{flex-wrap:wrap;gap:8px;padding:10px 12px !important;}
+.topbar h2{font-size:19px !important;min-width:0;flex:1 1 auto;}
+.topbar-actions{flex-wrap:wrap;gap:6px;margin-left:auto;}
+#last-refresh{display:none;}
+#theme-popover{right:8px !important;max-width:calc(100vw - 16px);}
+.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:10px !important;}
+.two-col{grid-template-columns:minmax(0,1fr) !important;}
+.stat-grid>*,.two-col>*{min-width:0;}
+.form-row{grid-template-columns:1fr !important;}
+}
+.lf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;padding:12px 16px;}
+.lf-grid label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;}
+.lf-grid input,.lf-grid select{width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none;background:#fff;font-family:inherit;}
+.lf-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 16px;border-top:1px solid var(--border);background:#fafbfc;}
+@media(max-width:900px){.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;}}
+</style>
+</head>
+<body>
+<div id="session-check" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+  <div style="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:16px;opacity:0.85;">Načítám…</div>
+</div>
+<div id="auth-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+  <div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
+    <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1>
+    <p style="font-size:13px;color:#7a8090;margin-bottom:20px">Warehouse Management System</p>
+    <div id="auth-msg" style="font-size:13px;color:#c0392b;min-height:18px;margin-bottom:8px"></div>
+    <input id="login-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
+    <input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
+    <button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Přihlásit se</button>
+  </div>
+</div>
+<div id="app" style="display:none">
+  <div id="sidebar">
+    <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
+    <nav id="wms-nav" data-active="locations"></nav>
+    <div class="sidebar-user">
+      <strong id="sidebar-user-name">–</strong>
+      <span id="sidebar-user-role" class="badge badge-gray"></span>
+      <button onclick="doLogout()">Odhlásit se</button>
+    </div>
+  </div>
+  <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+  <div id="main">
+    
+<div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">☰</button><h2>📍 Lokace</h2><div class="topbar-actions admin-only" style="display:none"><button class="btn btn-secondary btn-sm" onclick="downloadTemplate()">⬇ Šablona</button><button class="btn btn-secondary btn-sm" onclick="openImport()">⬆ Import</button><button class="btn btn-primary btn-sm" onclick="openModal()">+ Nová lokace</button></div></div>
+<div class="content">
+  <div class="stat-grid" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+    <div class="card" style="padding:14px;margin:0"><div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase">Celkem</div><div id="st-total" style="font-size:24px;font-weight:700">–</div></div>
+    <div class="card" style="padding:14px;margin:0"><div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase">Regály</div><div id="st-rack" style="font-size:24px;font-weight:700">–</div></div>
+    <div class="card" style="padding:14px;margin:0"><div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase">Bulk / rampy</div><div id="st-other" style="font-size:24px;font-weight:700">–</div></div>
+    <div class="card" style="padding:14px;margin:0"><div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase">Blokované</div><div id="st-blocked" style="font-size:24px;font-weight:700;color:var(--danger)">–</div></div>
+  </div>
+  <div class="card">
+    <div class="lf-grid">
+      <div><label>Hledat</label><input id="search" type="text" placeholder="Kód, poznámka…" oninput="applyFilters()"></div>
+      <div><label>Typ</label><select id="f-type" onchange="applyFilters()"><option value="">Všechny</option><option value="rack">Regál</option><option value="bulk">Bulk</option><option value="dock">Rampa / DS</option><option value="other">Jiné</option></select></div>
+      <div><label>Řada</label><select id="f-row" onchange="applyFilters()"><option value="">Všechny</option></select></div>
+      <div><label>Patro</label><select id="f-level" onchange="applyFilters()"><option value="">Všechna</option></select></div>
+      <div><label>Stav</label><select id="f-active" onchange="applyFilters()"><option value="">Vše</option><option value="1">Aktivní</option><option value="0">Blokované</option></select></div>
+      <div id="dc-col-filter"><label>DC</label><select id="f-dc" onchange="applyFilters()"><option value="">Všechna</option></select></div>
+    </div>
+    <div class="lf-bar"><span id="lf-info" style="flex:1;min-width:160px;font-size:12px;color:var(--muted)">Načítám…</span>
+      <button class="btn btn-secondary" onclick="resetFilters()">Zrušit filtry</button>
+      <button class="btn btn-secondary" onclick="exportXlsx()">📊 Export XLSX</button></div>
+    <div style="overflow-x:auto;">
+    <table><thead><tr><th>Kód</th><th>Typ</th><th>Řada</th><th>Pole</th><th>Patro</th><th>Pozice</th><th>Max. výška</th><th>DC</th><th>Stav</th><th id="th-act" style="display:none">Akce</th></tr></thead>
+    <tbody id="tbody"><tr class="empty-row"><td colspan="10">Načítám…</td></tr></tbody></table>
+    </div>
+    <div class="lf-bar" style="border-top:1px solid var(--border);border-bottom:0"><button class="btn btn-secondary" id="pg-prev" onclick="gotoPage(-1)">← Předchozí</button><span id="pg-info" style="flex:1;text-align:center;font-size:12px;color:var(--muted)"></span><button class="btn btn-secondary" id="pg-next" onclick="gotoPage(1)">Další →</button></div>
+  </div>
+</div>
+
+  </div>
+</div>
+<div class="modal-backdrop" id="modal" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header"><h3 id="modal-title">Nová lokace</h3><button class="modal-close" onclick="closeModal('modal')">✕</button></div>
+    <div class="modal-body">
+      <div class="form-row"><div class="form-group"><label>Kód *</label><input id="f-code" type="text" placeholder="R1P1L1BA"></div><div class="form-group"><label>Typ</label><select id="f-ztype"><option value="rack">Regál</option><option value="bulk">Bulk</option><option value="dock">Rampa / DS</option><option value="other">Jiné</option></select></div></div>
+      <div class="form-row triple"><div class="form-group"><label>Řada</label><input id="f-rowno" type="number"></div><div class="form-group"><label>Pole</label><input id="f-bay" type="number"></div><div class="form-group"><label>Patro</label><input id="f-lvl" type="number"></div></div>
+      <div class="form-row"><div class="form-group"><label>Pozice (A–F)</label><input id="f-slot" type="text" maxlength="2"></div><div class="form-group"><label>Max. výška (mm)</label><input id="f-maxh" type="number"></div></div>
+      <div class="form-row"><div class="form-group"><label>Nosník</label><input id="f-beam" type="text" placeholder="R1P1L1"></div><div class="form-group"><label>Kapacita nosníku (mm)</label><input id="f-beamcap" type="number"></div></div>
+      <div class="form-row"><div class="form-group"><label>X (m)</label><input id="f-x" type="number" step="0.01"></div><div class="form-group"><label>Y (m)</label><input id="f-y" type="number" step="0.01"></div></div>
+      <div class="form-row"><div class="form-group"><label>Stav</label><select id="f-isactive"><option value="true">Aktivní</option><option value="false">Blokovaná</option></select></div><div class="form-group"><label>DC</label><input id="f-dcname" type="text" disabled></div></div>
+      <div class="form-row single"><div class="form-group"><label>Poznámka</label><textarea id="f-note"></textarea></div></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal')">Zrušit</button><button class="btn btn-primary" onclick="saveLoc()">Uložit</button></div>
+  </div>
+</div>
+<div class="modal-backdrop" id="modal-import" style="display:none">
+  <div class="modal-box">
+    <div class="modal-header"><h3>Import lokací</h3><button class="modal-close" onclick="closeModal('modal-import')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Nahraj XLSX nebo CSV podle šablony (sloupce: Kód, Typ, Řada, Pole, Patro, Pozice, Nosník, Kapacita nosníku (mm), Max. výška (mm), X (m), Y (m), Aktivní, Poznámka). Lokace se importují do DC: <b id="imp-dc">–</b>. Existující kódy se aktualizují, nové se přidají. Nic se nemaže.</p>
+      <input type="file" id="imp-file" accept=".xlsx,.xls,.csv" onchange="previewImport()">
+      <div id="imp-msg" style="margin-top:12px;font-size:13px"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-import')">Zavřít</button><button class="btn btn-primary" id="imp-go" onclick="runImport()" disabled>Importovat</button></div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+var SUPA_URL="https://ujvqanqqhmnfxsfeqixc.supabase.co";
+var SUPA_KEY="sb_publishable_5o19BnZUEi8j-rU5DDAgBA_HwKB7V-v";
+var supa=supabase.createClient(SUPA_URL,SUPA_KEY);
+var currentUser=null,currentProfile=null;
+async function doLogin(){var email=document.getElementById('login-email').value.trim();var pass=document.getElementById('login-pass').value;if(!email||!pass){document.getElementById('auth-msg').textContent='⚠️ Vyplň e-mail a heslo';return;}document.getElementById('auth-msg').textContent='⏳ Přihlašuji…';var res=await supa.auth.signInWithPassword({email,password:pass});if(res.error){document.getElementById('auth-msg').textContent='❌ '+res.error.message;return;}await onLoggedIn(res.data.user);}
+// idle logout
+var SESSION_IDLE_MS=2*60*60*1000;var sessionIdleTimer=null;function startSessionIdleWatch(){function reset(){clearTimeout(sessionIdleTimer);sessionIdleTimer=setTimeout(async function(){await supa.auth.signOut();alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');window.location.href='wms_dashboard.html';},SESSION_IDLE_MS);}['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){document.addEventListener(evt,reset,{passive:true});});reset();}
+async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}var allowed=currentProfile.allowed_apps;if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1){alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';(async function(){try{if(window.PRG_DC)await PRG_DC.init(supa,currentProfile);}catch(e){console.warn('DC',e);}if(typeof afterLogin==='function')afterLogin();})();startSessionIdleWatch();}
+async function doLogout(){await supa.auth.signOut();window.location.href='wms_dashboard.html';}
+function go(u){window.location.href=u;}
+function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
+var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(_tt);_tt=setTimeout(function(){e.classList.remove('show');},2800);}
+function closeModal(id){document.getElementById(id).style.display='none';}
+function fmt(dt){return new Date(dt).toLocaleString('cs-CZ');}
+function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
+supa.auth.getSession().then(function(res){
+  if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}
+  else{window.location.href='wms_dashboard.html';}
+});
+
+var data=[],shown=[],editId=null,page=0,PAGE_SZ=200,isAdmin=false,impRows=[];
+function escH(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+var TYPE_LBL={rack:'Regál',bulk:'Bulk',dock:'Rampa / DS',other:'Jiné'};
+var dcMap={};
+async function afterLogin(){
+  isAdmin=currentProfile&&currentProfile.role==='admin';
+  document.getElementById('th-act').style.display=isAdmin?'':'none';
+  (window.PRG_DC?PRG_DC.allWarehouses():[]).forEach(function(w){dcMap[String(w.id)]=w;});
+  load();
+}
+function dcCode(id){var w=dcMap[String(id)];return w?w.code:'–';}
+async function load(){
+  var info=document.getElementById('lf-info');info.textContent='Načítám…';
+  var rows=[],off=0,PAGE=1000;
+  while(true){
+    var q=supa.from('locations').select('*').order('code').range(off,off+PAGE-1);
+    if(window.PRG_DC)q=PRG_DC.apply(q,'dc_id');
+    var res=await q;
+    if(res.error){info.textContent='❌ '+res.error.message+' (spustil jsi SQL locations_setup?)';return;}
+    rows=rows.concat(res.data||[]);
+    if(!res.data||res.data.length<PAGE)break;
+    off+=PAGE;if(off>100000)break;
+  }
+  data=rows;
+  var rs={},ls={},ds={};
+  data.forEach(function(l){if(l.row_no!=null)rs[l.row_no]=1;if(l.level_no!=null)ls[l.level_no]=1;ds[String(l.dc_id)]=1;});
+  fillSel('f-row',Object.keys(rs).map(Number).sort(function(a,b){return a-b;}).map(function(v){return [v,'R'+v];}),'Všechny');
+  fillSel('f-level',Object.keys(ls).map(Number).sort(function(a,b){return a-b;}).map(function(v){return [v,'L'+v];}),'Všechna');
+  fillSel('f-dc',Object.keys(ds).map(function(k){return [k,dcCode(k)];}),'Všechna');
+  document.getElementById('dc-col-filter').style.display=Object.keys(ds).length>1?'':'none';
+  applyFilters();
+}
+function fillSel(id,opts,all){var el=document.getElementById(id),cur=el.value;el.innerHTML='<option value="">'+all+'</option>'+opts.map(function(o){return '<option value="'+escH(o[0])+'">'+escH(o[1])+'</option>';}).join('');el.value=cur;}
+function curFilters(){return {q:document.getElementById('search').value.trim().toLowerCase(),type:document.getElementById('f-type').value,row:document.getElementById('f-row').value,level:document.getElementById('f-level').value,act:document.getElementById('f-active').value,dc:document.getElementById('f-dc').value};}
+function applyFilters(){
+  var f=curFilters();
+  shown=data.filter(function(l){
+    if(f.q&&((l.code||'')+' '+(l.note||'')).toLowerCase().indexOf(f.q)===-1)return false;
+    if(f.type&&l.zone_type!==f.type)return false;
+    if(f.row!==''&&String(l.row_no)!==f.row)return false;
+    if(f.level!==''&&String(l.level_no)!==f.level)return false;
+    if(f.act&&((f.act==='1')!==(l.is_active!==false)))return false;
+    if(f.dc&&String(l.dc_id)!==f.dc)return false;
+    return true;
+  });
+  page=0;render();stats();
+}
+function resetFilters(){['search','f-type','f-row','f-level','f-active','f-dc'].forEach(function(id){document.getElementById(id).value='';});applyFilters();}
+function stats(){
+  document.getElementById('st-total').textContent=data.length;
+  document.getElementById('st-rack').textContent=data.filter(function(l){return l.zone_type==='rack';}).length;
+  document.getElementById('st-other').textContent=data.filter(function(l){return l.zone_type!=='rack';}).length;
+  document.getElementById('st-blocked').textContent=data.filter(function(l){return l.is_active===false;}).length;
+}
+function gotoPage(d){var max=Math.max(0,Math.ceil(shown.length/PAGE_SZ)-1);page=Math.min(max,Math.max(0,page+d));render();}
+function render(){
+  var tb=document.getElementById('tbody');
+  var max=Math.max(0,Math.ceil(shown.length/PAGE_SZ)-1);if(page>max)page=max;
+  document.getElementById('lf-info').textContent='Zobrazeno '+shown.length+' z '+data.length+' lokací';
+  document.getElementById('pg-info').textContent=shown.length?('Strana '+(page+1)+' / '+(max+1)):'';
+  document.getElementById('pg-prev').disabled=page<=0;document.getElementById('pg-next').disabled=page>=max;
+  var ad=isAdmin?'':'display:none';
+  if(!shown.length){tb.innerHTML='<tr class="empty-row"><td colspan="10">Žádné lokace'+(data.length?'':' – naimportuj je přes tlačítko Import')+'</td></tr>';return;}
+  tb.innerHTML=shown.slice(page*PAGE_SZ,(page+1)*PAGE_SZ).map(function(l){
+    var st=l.is_active===false?'<span class="badge badge-red">Blokovaná</span>':'<span class="badge badge-green">Aktivní</span>';
+    return '<tr><td><strong style="font-family:\'JetBrains Mono\',monospace;font-size:12px">'+escH(l.code)+'</strong></td><td>'+escH(TYPE_LBL[l.zone_type]||l.zone_type)+'</td><td>'+escH(l.row_no==null?'–':l.row_no)+'</td><td>'+escH(l.bay_no==null?'–':l.bay_no)+'</td><td>'+escH(l.level_no==null?'–':l.level_no)+'</td><td>'+escH(l.slot||'–')+'</td><td>'+escH(l.max_height_mm==null?'–':l.max_height_mm+' mm')+'</td><td>'+escH(dcCode(l.dc_id))+'</td><td>'+st+'</td>'
+     +'<td style="'+ad+'"><div style="display:flex;gap:6px"><button class="btn btn-secondary btn-sm" title="Upravit" onclick="editLoc('+l.id+')">✏️</button><button class="btn btn-secondary btn-sm" title="'+(l.is_active===false?'Odblokovat':'Zablokovat')+'" onclick="toggleLoc('+l.id+')">'+(l.is_active===false?'✅':'⛔')+'</button><button class="btn btn-danger btn-sm" title="Smazat" onclick="delLoc('+l.id+')">🗑</button></div></td></tr>';
+  }).join('');
+}
+function needDc(){var id=window.PRG_DC?PRG_DC.currentId():null;if(id==null){toast('⚠️ Vyber nahoře konkrétní DC (ne „Všechna DC“)');return null;}return id;}
+function openModal(l){
+  var dc=l?l.dc_id:needDc();if(dc==null)return;
+  editId=l?l.id:null;
+  document.getElementById('modal-title').textContent=l?'Upravit lokaci':'Nová lokace';
+  var v=function(id,x){document.getElementById(id).value=x==null?'':x;};
+  v('f-code',l&&l.code);v('f-ztype',l?l.zone_type:'rack');v('f-rowno',l&&l.row_no);v('f-bay',l&&l.bay_no);v('f-lvl',l&&l.level_no);v('f-slot',l&&l.slot);
+  v('f-maxh',l&&l.max_height_mm);v('f-beam',l&&l.beam_key);v('f-beamcap',l&&l.beam_cap_mm);v('f-x',l&&l.x_m);v('f-y',l&&l.y_m);v('f-note',l&&l.note);
+  document.getElementById('f-isactive').value=(l&&l.is_active===false)?'false':'true';
+  document.getElementById('f-dcname').value=dcCode(dc);
+  document.getElementById('modal').dataset.dc=dc;
+  document.getElementById('modal').style.display='flex';
+}
+function editLoc(id){openModal(data.find(function(x){return x.id===id;}));}
+function num(id){var v=document.getElementById(id).value;return v===''?null:Number(v);}
+async function saveLoc(){
+  var code=document.getElementById('f-code').value.trim().toUpperCase();
+  if(!code){toast('⚠️ Zadej kód lokace');return;}
+  var p={code:code,zone_type:document.getElementById('f-ztype').value,row_no:num('f-rowno'),bay_no:num('f-bay'),level_no:num('f-lvl'),slot:document.getElementById('f-slot').value.trim().toUpperCase()||null,
+    max_height_mm:num('f-maxh'),beam_key:document.getElementById('f-beam').value.trim()||null,beam_cap_mm:num('f-beamcap'),x_m:num('f-x'),y_m:num('f-y'),
+    is_active:document.getElementById('f-isactive').value==='true',note:document.getElementById('f-note').value.trim()||null};
+  var res;
+  if(editId){res=await supa.from('locations').update(p).eq('id',editId).select();}
+  else{p.dc_id=document.getElementById('modal').dataset.dc;var w=(window.PRG_DC?PRG_DC.list():[]).find(function(x){return String(x.id)===String(p.dc_id);});if(w)p.dc_id=w.id;res=await supa.from('locations').insert(p).select();}
+  if(res.error){toast('❌ '+(res.error.code==='23505'?'Lokace s tímto kódem v DC už existuje':res.error.message));return;}
+  if(!res.data||!res.data.length){toast('❌ Uložení se nepovedlo (chybí oprávnění v databázi)');return;}
+  toast('✅ Lokace uložena');closeModal('modal');load();
+}
+async function toggleLoc(id){
+  var l=data.find(function(x){return x.id===id;});if(!l)return;
+  var res=await supa.from('locations').update({is_active:l.is_active===false}).eq('id',id).select();
+  if(res.error||!res.data||!res.data.length){toast('❌ Změna se nepovedla');return;}
+  l.is_active=res.data[0].is_active;applyFilters();toast(l.is_active===false?'⛔ Lokace zablokována':'✅ Lokace odblokována');
+}
+async function delLoc(id){
+  var l=data.find(function(x){return x.id===id;});if(!l)return;
+  if(!confirm('Smazat lokaci '+l.code+'?'))return;
+  var res=await supa.from('locations').delete().eq('id',id).select();
+  if(res.error){toast('❌ '+res.error.message);return;}
+  toast('🗑 Smazáno');load();
+}
+/* ---- export / šablona ---- */
+var COLS=['Kód','Typ','Řada','Pole','Patro','Pozice','Nosník','Kapacita nosníku (mm)','Max. výška (mm)','X (m)','Y (m)','Aktivní','Poznámka'];
+function rowToArr(l){return [l.code,l.zone_type,l.row_no,l.bay_no,l.level_no,l.slot,l.beam_key,l.beam_cap_mm,l.max_height_mm,l.x_m,l.y_m,l.is_active===false?'ne':'ano',l.note];}
+function exportXlsx(){
+  if(!shown.length){toast('Není co exportovat');return;}
+  var aoa=[COLS.concat(['DC'])].concat(shown.map(function(l){return rowToArr(l).concat([dcCode(l.dc_id)]);}));
+  var ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=[14,8,7,7,7,8,12,16,14,8,8,9,30,8].map(function(w){return {wch:w};});
+  var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Lokace');
+  XLSX.writeFile(wb,'lokace_'+new Date().toISOString().slice(0,10)+'.xlsx');toast('Export hotov ('+shown.length+' řádků)');
+}
+function downloadTemplate(){
+  var ws=XLSX.utils.aoa_to_sheet([COLS,['R1P1L1BA','rack',1,1,1,'A','R1P1L1',2830,1975,4.75,14.25,'ano',''],['A1','bulk',null,null,null,null,null,null,null,null,null,'ano','bulk zóna']]);
+  ws['!cols']=[14,8,7,7,7,8,12,16,14,8,8,9,30].map(function(w){return {wch:w};});
+  var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Lokace');XLSX.writeFile(wb,'sablona_lokace.xlsx');
+}
+/* ---- import ---- */
+function openImport(){
+  var dc=needDc();if(dc==null)return;
+  var w=(window.PRG_DC?PRG_DC.list():[]).find(function(x){return String(x.id)===String(dc);});
+  document.getElementById('imp-dc').textContent=w?(w.code+' – '+w.name):dcCode(dc);
+  document.getElementById('imp-file').value='';document.getElementById('imp-msg').textContent='';document.getElementById('imp-go').disabled=true;impRows=[];
+  document.getElementById('modal-import').style.display='flex';
+}
+function pickCol(row,names){for(var i=0;i<names.length;i++){for(var k in row){if(String(k).trim().toLowerCase()===names[i])return row[k];}}return undefined;}
+function toNum(v){if(v===''||v==null)return null;var n=Number(String(v).replace(',','.'));return isNaN(n)?null:n;}
+function previewImport(){
+  var f=document.getElementById('imp-file').files[0];if(!f)return;
+  var msg=document.getElementById('imp-msg');msg.style.color='var(--muted)';msg.textContent='⏳ Čtu soubor…';
+  var rd=new FileReader();
+  rd.onload=function(e){
+    try{
+      var wb=XLSX.read(e.target.result,{type:'array'});var ws=wb.Sheets[wb.SheetNames[0]];
+      var raw=XLSX.utils.sheet_to_json(ws,{defval:''});
+      var seen={},rows=[],dup=0,bad=0;
+      raw.forEach(function(r){
+        var code=String(pickCol(r,['kód','kod','code'])||'').trim().toUpperCase();
+        if(!code){bad++;return;}
+        if(seen[code]){dup++;return;}seen[code]=1;
+        var t=String(pickCol(r,['typ','type'])||'rack').trim().toLowerCase();if(['rack','bulk','dock','other'].indexOf(t)===-1)t='other';
+        var act=String(pickCol(r,['aktivní','aktivni','active'])||'ano').trim().toLowerCase();
+        rows.push({code:code,zone_type:t,row_no:toNum(pickCol(r,['řada','rada','row'])),bay_no:toNum(pickCol(r,['pole','bay'])),level_no:toNum(pickCol(r,['patro','level'])),
+          slot:String(pickCol(r,['pozice','slot'])||'').trim().toUpperCase()||null,beam_key:String(pickCol(r,['nosník','nosnik','beam'])||'').trim()||null,
+          beam_cap_mm:toNum(pickCol(r,['kapacita nosníku (mm)','kapacita nosniku (mm)','beam_cap_mm'])),max_height_mm:toNum(pickCol(r,['max. výška (mm)','max. vyska (mm)','max_height_mm'])),
+          x_m:toNum(pickCol(r,['x (m)','x'])),y_m:toNum(pickCol(r,['y (m)','y'])),is_active:!(act==='ne'||act==='no'||act==='false'||act==='0'),
+          note:String(pickCol(r,['poznámka','poznamka','note'])||'').trim()||null});
+      });
+      impRows=rows;
+      if(!rows.length){msg.style.color='var(--danger)';msg.textContent='❌ V souboru nebyl nalezen žádný sloupec „Kód“ s hodnotami.';document.getElementById('imp-go').disabled=true;return;}
+      var ex={};data.forEach(function(l){ex[l.code]=1;});var upd=rows.filter(function(r){return ex[r.code];}).length;
+      msg.style.color='var(--text)';msg.innerHTML='Načteno <b>'+rows.length+'</b> lokací (nových: <b>'+(rows.length-upd)+'</b>, k aktualizaci: <b>'+upd+'</b>)'+(dup?'<br>Duplicitní kódy v souboru přeskočeny: '+dup:'')+(bad?'<br>Řádky bez kódu přeskočeny: '+bad:'');
+      document.getElementById('imp-go').disabled=false;
+    }catch(err){msg.style.color='var(--danger)';msg.textContent='❌ Soubor se nepodařilo přečíst: '+err.message;}
+  };
+  rd.readAsArrayBuffer(f);
+}
+async function runImport(){
+  var dc=needDc();if(dc==null||!impRows.length)return;
+  var msg=document.getElementById('imp-msg'),btn=document.getElementById('imp-go');btn.disabled=true;
+  var CH=500,done=0;
+  for(var i=0;i<impRows.length;i+=CH){
+    var chunk=impRows.slice(i,i+CH).map(function(r){return Object.assign({dc_id:dc},r);});
+    var res=await supa.from('locations').upsert(chunk,{onConflict:'dc_id,code'});
+    if(res.error){msg.style.color='var(--danger)';msg.textContent='❌ Import selhal po '+done+' řádcích: '+res.error.message;btn.disabled=false;return;}
+    done+=chunk.length;msg.style.color='var(--muted)';msg.textContent='⏳ Importováno '+done+' / '+impRows.length+'…';
+  }
+  msg.style.color='var(--accent)';msg.textContent='✅ Hotovo – importováno '+done+' lokací.';
+  toast('✅ Import lokací hotov');load();
+}
+
+</script>
+</body></html>
