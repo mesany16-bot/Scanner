@@ -2,7 +2,7 @@
 <html lang="cs">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Inventory – PRG WMS</title>
+<title>SKU Setup – PRG WMS</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="wms_nav.js"></script>
 <script src="wms_dc.js"></script>
@@ -109,30 +109,32 @@ body{overflow-x:hidden;}
   <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
   <div id="main">
     
-<div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">☰</button><h2>📦 Sklad</h2><div class="topbar-actions"><button class="btn btn-primary btn-sm" onclick="openModal()">+ Nová karta</button></div></div>
+<div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">☰</button><h2>🏷️ SKU Setup</h2><div class="topbar-actions"><button class="btn btn-primary btn-sm" onclick="openModal()">+ Nové SKU</button></div></div>
 <div class="content">
   <div class="card">
     <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">
-      <input id="search" type="text" placeholder="Hledat SKU, EAN, kategorie…" oninput="filter()" style="flex:1;min-width:150px;padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none">
-      <select id="f-wh" onchange="filter()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"><option value="">Všechny sklady</option></select>
+      <input id="search" type="text" placeholder="Hledat SKU, popis, EAN, kategorie…" oninput="filter()" style="flex:1;min-width:150px;padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none">
+      <select id="f-wh" onchange="filter()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"><option value="">Všechna DC</option></select>
       <select id="f-cl" onchange="filter()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"><option value="">Všichni klienti</option></select>
     </div>
     <div style="overflow-x:auto;">
-    <table><thead><tr><th>SKU</th><th>EAN</th><th>Kategorie</th><th>Sklad</th><th>Stav</th><th>Lokace</th><th>LOT</th><th>Klient</th><th>Akce</th></tr></thead>
-    <tbody id="tbody"><tr class="empty-row"><td colspan="9">Načítám…</td></tr></tbody></table>
+    <table><thead><tr><th>SKU</th><th>Popis</th><th>EAN</th><th>Kategorie</th><th>Klient</th><th>DC</th><th style="text-align:right">Ks / paleta</th><th>Typ palety</th><th style="text-align:right">Min.</th><th style="text-align:right">Na skladě</th><th>Akce</th></tr></thead>
+    <tbody id="tbody"><tr class="empty-row"><td colspan="11">Načítám…</td></tr></tbody></table>
     </div>
   </div>
 </div>
 <div class="modal-backdrop" id="modal" style="display:none">
   <div class="modal-box">
-    <div class="modal-header"><h3 id="modal-title">Nová skladová karta</h3><button class="modal-close" onclick="closeModal('modal')">✕</button></div>
+    <div class="modal-header"><h3 id="modal-title">Nové SKU</h3><button class="modal-close" onclick="closeModal('modal')">✕</button></div>
     <div class="modal-body">
-      <div class="form-row"><div class="form-group"><label>SKU *</label><input id="f-sku" type="text" placeholder="Název/kód položky"></div><div class="form-group"><label>EAN</label><input id="f-ean" type="text"></div></div>
+      <div class="form-row"><div class="form-group"><label>SKU *</label><input id="f-sku" type="text" placeholder="Kód položky"></div><div class="form-group"><label>EAN</label><input id="f-ean" type="text"></div></div>
+      <div class="form-row single"><div class="form-group"><label>Popis</label><input id="f-desc" type="text"></div></div>
       <div class="form-row"><div class="form-group"><label>Kategorie</label><input id="f-cat" type="text"></div><div class="form-group"><label>Dodavatel</label><input id="f-sup" type="text"></div></div>
-      <div class="form-row"><div class="form-group"><label>Cena (Kč)</label><input id="f-price" type="number" step="0.01"></div><div class="form-group"><label>Min. stav</label><input id="f-min" type="number" value="0"></div></div>
-      <div class="form-row"><div class="form-group"><label>Sklad</label><select id="f-wh2"><option value="">– bez skladu –</option></select></div><div class="form-group"><label>Klient</label><select id="f-cl2"><option value="">– bez klienta –</option></select></div></div>
-      <div class="form-row"><div class="form-group"><label>Lokace</label><input id="f-loc" type="text"></div><div class="form-group"><label>LOT</label><input id="f-lot" type="text"></div></div>
-      <div class="form-row"><div class="form-group"><label>Množství</label><input id="f-qty" type="number" value="0"></div><div class="form-group"><label>Foto URL</label><input id="f-photo" type="url"></div></div>
+      <div class="form-row"><div class="form-group"><label>Klient</label><select id="f-cl2"><option value="">– bez klienta –</option></select></div><div class="form-group"><label>DC</label><select id="f-wh2"><option value="">– bez DC –</option></select></div></div>
+      <div class="form-row"><div class="form-group"><label>Ks na paletu</label><input id="f-upp" type="number" min="0"></div><div class="form-group"><label>Typ palety</label><input id="f-ptype" type="text" placeholder="např. EUR, A, B, C"></div></div>
+      <div class="form-row"><div class="form-group"><label>Šířka palety (mm)</label><input id="f-pw" type="number" min="0"></div><div class="form-group"><label>Výška palety (mm)</label><input id="f-ph" type="number" min="0"></div></div>
+      <div class="form-row"><div class="form-group"><label>Váha palety (kg)</label><input id="f-pkg" type="number" step="0.1" min="0"></div><div class="form-group"><label>Min. stav (ks)</label><input id="f-min" type="number" value="0"></div></div>
+      <div class="form-row"><div class="form-group"><label>Cena (Kč)</label><input id="f-price" type="number" step="0.01"></div><div class="form-group"><label>Foto URL</label><input id="f-photo" type="url"></div></div>
       <div class="form-row single"><div class="form-group"><label>Poznámka</label><textarea id="f-notes"></textarea></div></div>
     </div>
     <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal')">Zrušit</button><button class="btn btn-primary" onclick="save()">Uložit</button></div>
@@ -168,47 +170,64 @@ async function afterLogin(){
   var [wr,cr]=await Promise.all([supa.from('warehouses').select('id,name,code').order('name'),supa.from('clients').select('id,name').order('name')]);
   whs=(window.PRG_DC&&PRG_DC.list().length?PRG_DC.list():wr.data)||[];clients=cr.data||[];
   var fwh=document.getElementById('f-wh'),fwh2=document.getElementById('f-wh2');
-  whs.forEach(function(w){fwh.innerHTML+='<option value="'+w.id+'">'+w.name+'</option>';fwh2.innerHTML+='<option value="'+w.id+'">'+w.name+'</option>';});
+  whs.forEach(function(w){fwh.innerHTML+='<option value="'+w.id+'">'+(w.code||w.name)+'</option>';fwh2.innerHTML+='<option value="'+w.id+'">'+(w.code||w.name)+'</option>';});
   var fcl=document.getElementById('f-cl'),fcl2=document.getElementById('f-cl2');
   clients.forEach(function(c){fcl.innerHTML+='<option value="'+c.id+'">'+c.name+'</option>';fcl2.innerHTML+='<option value="'+c.id+'">'+c.name+'</option>';});
   load();
 }
-async function load(){var q=supa.from('stock_items').select('*,warehouses(name),clients(name)').order('sku');if(window.PRG_DC)q=PRG_DC.apply(q,'warehouse_id');var res=await q;data=res.data||[];render(data);}
+var stockMap={};
+async function loadStockSums(){
+  stockMap={};var from=0;
+  try{while(true){
+    var q=supa.from('v_sku_stock').select('dc_id,sku_key,units_total').range(from,from+999);if(window.PRG_DC)q=PRG_DC.apply(q,'dc_id');
+    var r=await q;if(r.error){stockMap=null;return;}
+    var d=r.data||[];d.forEach(function(x){stockMap[x.dc_id+'|'+x.sku_key]=Number(x.units_total)||0;});
+    if(d.length<1000)break;from+=1000;}
+  }catch(e){stockMap=null;}
+}
+function stockOf(i){if(stockMap===null)return null;var k=String(i.sku||'').trim().toUpperCase();if(i.warehouse_id!=null)return stockMap[i.warehouse_id+'|'+k]||0;var t=0,f=false;Object.keys(stockMap).forEach(function(x){if(x.slice(x.indexOf('|')+1)===k){t+=stockMap[x];f=true;}});return f?t:0;}
+async function load(){var q=supa.from('stock_items').select('*,warehouses(name,code),clients(name)').order('sku');if(window.PRG_DC)q=PRG_DC.apply(q,'warehouse_id');var res=await q;data=res.data||[];await loadStockSums();render(data);}
 function render(d){
   var tb=document.getElementById('tbody');
-  if(!d.length){tb.innerHTML='<tr class="empty-row"><td colspan="9">Žádné skladové karty</td></tr>';return;}
+  if(!d.length){tb.innerHTML='<tr class="empty-row"><td colspan="11">Žádné SKU</td></tr>';return;}
   tb.innerHTML=d.map(function(i){
-    var low=i.quantity<=i.min_stock;
-    var qb=low?'<span class="badge badge-orange">'+i.quantity+'</span>':'<span class="badge badge-green">'+i.quantity+'</span>';
-    var wn=(i.warehouses&&i.warehouses.name)||'–';
+    var wn=(i.warehouses&&(i.warehouses.code||i.warehouses.name))||'–';
     var cn=(i.clients&&i.clients.name)||'–';
-    return '<tr'+(low?' style="background:#fff8f0"':'')+'>'
+    var st=stockOf(i);
+    var sb=st===null?'–':(i.min_stock>0&&st<=i.min_stock?'<span class="badge badge-orange">'+st+'</span>':'<span class="badge badge-green">'+st+'</span>');
+    var num=function(v){return v==null||v===''?'–':v;};
+    return '<tr>'
       +'<td><a href="wms_item.html?id='+i.id+'" style="font-weight:700;color:var(--accent);text-decoration:none">'+i.sku+'</a></td>'
+      +'<td>'+(i.description||'–')+'</td>'
       +'<td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+(i.ean||'–')+'</td>'
       +'<td>'+(i.category?'<span class="badge badge-blue">'+i.category+'</span>':'–')+'</td>'
-      +'<td>'+wn+'</td><td>'+qb+'</td>'
-      +'<td>'+(i.location||'–')+'</td>'
-      +'<td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+(i.lot||'–')+'</td>'
-      +'<td>'+cn+'</td>'
+      +'<td>'+cn+'</td><td>'+wn+'</td>'
+      +'<td style="text-align:right">'+num(i.units_per_pallet)+'</td>'
+      +'<td>'+(i.pallet_type||'–')+'</td>'
+      +'<td style="text-align:right">'+(i.min_stock||'–')+'</td>'
+      +'<td style="text-align:right">'+sb+'</td>'
       +'<td><div style="display:flex;gap:4px">'
         +'<a href="wms_item.html?id='+i.id+'" class="btn btn-secondary btn-sm">Detail</a>'
         +'<button class="btn btn-secondary btn-sm" onclick="edit('+i.id+')">✏️</button>'
         +'<button class="btn btn-danger btn-sm" onclick="del('+i.id+')">🗑</button>'
       +'</div></td></tr>';}).join('');
 }
-function filter(){var q=document.getElementById('search').value.toLowerCase();var wid=document.getElementById('f-wh').value;var cid=document.getElementById('f-cl').value;render(data.filter(function(i){return(!q||i.sku.toLowerCase().includes(q)||(i.ean&&i.ean.toLowerCase().includes(q))||(i.category&&i.category.toLowerCase().includes(q)))&&(!wid||String(i.warehouse_id)===wid)&&(!cid||String(i.client_id)===cid);}));}
+function filter(){var q=document.getElementById('search').value.toLowerCase();var wid=document.getElementById('f-wh').value;var cid=document.getElementById('f-cl').value;render(data.filter(function(i){return(!q||i.sku.toLowerCase().includes(q)||(i.description&&i.description.toLowerCase().includes(q))||(i.ean&&i.ean.toLowerCase().includes(q))||(i.category&&i.category.toLowerCase().includes(q)))&&(!wid||String(i.warehouse_id)===wid)&&(!cid||String(i.client_id)===cid);}));}
 function openModal(item){
   editId=item?item.id:null;
-  document.getElementById('modal-title').textContent=item?'Upravit kartu':'Nová skladová karta';
+  document.getElementById('modal-title').textContent=item?'Upravit SKU':'Nové SKU';
   document.getElementById('f-sku').value=item?item.sku:'';
   document.getElementById('f-ean').value=item?(item.ean||''):'';
   document.getElementById('f-cat').value=item?(item.category||''):'';
   document.getElementById('f-sup').value=item?(item.supplier||''):'';
   document.getElementById('f-price').value=item?(item.price||''):'';
   document.getElementById('f-min').value=item?(item.min_stock||0):0;
-  document.getElementById('f-loc').value=item?(item.location||''):'';
-  document.getElementById('f-lot').value=item?(item.lot||''):'';
-  document.getElementById('f-qty').value=item?(item.quantity||0):0;
+  document.getElementById('f-desc').value=item?(item.description||''):'';
+  document.getElementById('f-upp').value=item&&item.units_per_pallet!=null?item.units_per_pallet:'';
+  document.getElementById('f-ptype').value=item?(item.pallet_type||''):'';
+  document.getElementById('f-pw').value=item&&item.pallet_width_mm!=null?item.pallet_width_mm:'';
+  document.getElementById('f-ph').value=item&&item.pallet_height_mm!=null?item.pallet_height_mm:'';
+  document.getElementById('f-pkg').value=item&&item.pallet_weight_kg!=null?item.pallet_weight_kg:'';
   document.getElementById('f-photo').value=item?(item.photo_url||''):'';
   document.getElementById('f-notes').value=item?(item.notes||''):'';
   document.getElementById('f-wh2').value=item?(item.warehouse_id||''):((window.PRG_DC&&PRG_DC.currentId()!=null)?PRG_DC.currentId():'');
@@ -218,12 +237,15 @@ function openModal(item){
 function edit(id){openModal(data.find(function(i){return i.id===id;}));}
 async function save(){
   var sku=document.getElementById('f-sku').value.trim();if(!sku){toast('⚠️ Zadej SKU');return;}
-  var p={sku,ean:document.getElementById('f-ean').value.trim()||null,category:document.getElementById('f-cat').value.trim()||null,supplier:document.getElementById('f-sup').value.trim()||null,price:parseFloat(document.getElementById('f-price').value)||null,min_stock:parseInt(document.getElementById('f-min').value)||0,location:document.getElementById('f-loc').value.trim()||null,lot:document.getElementById('f-lot').value.trim()||null,quantity:parseInt(document.getElementById('f-qty').value)||0,photo_url:document.getElementById('f-photo').value.trim()||null,notes:document.getElementById('f-notes').value.trim()||null,warehouse_id:parseInt(document.getElementById('f-wh2').value)||null,client_id:parseInt(document.getElementById('f-cl2').value)||null,created_by:currentUser.id};
+  var iv=function(id){var v=parseInt(document.getElementById(id).value);return isNaN(v)?null:v;};
+  var fv=function(id){var v=parseFloat(document.getElementById(id).value);return isNaN(v)?null:v;};
+  var p={sku,ean:document.getElementById('f-ean').value.trim()||null,description:document.getElementById('f-desc').value.trim()||null,category:document.getElementById('f-cat').value.trim()||null,supplier:document.getElementById('f-sup').value.trim()||null,price:parseFloat(document.getElementById('f-price').value)||null,min_stock:parseInt(document.getElementById('f-min').value)||0,units_per_pallet:iv('f-upp'),pallet_type:document.getElementById('f-ptype').value.trim()||null,pallet_width_mm:iv('f-pw'),pallet_height_mm:iv('f-ph'),pallet_weight_kg:fv('f-pkg'),photo_url:document.getElementById('f-photo').value.trim()||null,notes:document.getElementById('f-notes').value.trim()||null,warehouse_id:parseInt(document.getElementById('f-wh2').value)||null,client_id:parseInt(document.getElementById('f-cl2').value)||null};
+  if(!editId){p.quantity=0;p.created_by=currentUser.id;}
   var res=editId?await supa.from('stock_items').update(p).eq('id',editId):await supa.from('stock_items').insert(p);
   if(res.error){toast('❌ '+res.error.message);return;}
-  toast(editId?'✅ Karta uložena':'✅ Karta vytvořena');closeModal('modal');load();
+  toast(editId?'✅ SKU uloženo':'✅ SKU vytvořeno');closeModal('modal');load();
 }
-async function del(id){if(!confirm('Smazat kartu?'))return;await supa.from('stock_items').delete().eq('id',id);toast('🗑 Smazáno');load();}
+async function del(id){if(!confirm('Smazat SKU?'))return;await supa.from('stock_items').delete().eq('id',id);toast('🗑 Smazáno');load();}
 
 </script>
 </body></html>

@@ -112,7 +112,7 @@ body{overflow-x:hidden;}
 
           <div id="tab-stock">
             <div style="overflow-x:auto;">
-            <table><thead><tr><th>SKU</th><th>EAN</th><th>Stav</th><th>Lokace</th><th></th></tr></thead>
+            <table><thead><tr><th>SKU</th><th>EAN</th><th>Popis</th><th>Ks / paleta</th><th></th></tr></thead>
             <tbody id="stock-tbody"><tr class="empty-row"><td colspan="5">Nacitam...</td></tr></tbody></table>
             </div>
           </div>
@@ -212,10 +212,9 @@ async function loadStock(){
   var tb=document.getElementById('stock-tbody');
   if(!data.length){tb.innerHTML='<tr class="empty-row"><td colspan="5">Zadne SKU karty</td></tr>';return;}
   tb.innerHTML=data.map(function(i){
-    var qb=i.quantity<=i.min_stock?'<span class="badge badge-orange">'+i.quantity+'</span>':'<span class="badge badge-green">'+i.quantity+'</span>';
     return '<tr><td><a href="wms_item.html?id='+i.id+'" style="font-weight:700;color:var(--accent);text-decoration:none">'+i.sku+'</a></td>'
       +'<td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+(i.ean||'-')+'</td>'
-      +'<td>'+qb+'</td><td>'+(i.location||'-')+'</td>'
+      +'<td>'+(i.description||'-')+'</td><td>'+(i.units_per_pallet!=null?i.units_per_pallet:'-')+'</td>'
       +'<td><a href="wms_item.html?id='+i.id+'" class="btn btn-secondary btn-sm">Detail</a></td></tr>';
   }).join('');
 }

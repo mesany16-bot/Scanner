@@ -2,7 +2,7 @@
 <html lang="cs">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Detail karty – PRG WMS</title>
+<title>Detail SKU – PRG WMS</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="wms_nav.js"></script>
 <style>
@@ -96,10 +96,11 @@ body{overflow-x:hidden;}
   <div id="main">
     <div class="topbar">
       <button class="hamburger-btn" onclick="toggleSidebar()">☰</button>
-      <h2 id="page-title">🏷️ Detail karty</h2>
-      <div class="topbar-actions"><a class="back-btn" href="wms_stock.html">← Zpět na Sklad</a></div>
+      <h2 id="page-title">🏷️ Detail SKU</h2>
+      <div class="topbar-actions"><a class="back-btn" href="wms_stock.html">← Zpět na SKU Setup</a></div>
     </div>
     <div class="content">
+      <div class="card" id="bal-card" style="margin-bottom:16px"><div class="card-header"><h3>📍 Zásoby v lokacích <span style="font-weight:400;font-size:12px;color:var(--muted)">(jen pro čtení, ze stránky Zásoby)</span></h3><span id="bal-sum" style="font-weight:700"></span></div><div style="overflow-x:auto"><table><thead><tr><th>DC</th><th>Lokace</th><th>LPN</th><th>LOT</th><th>Stav</th><th style="text-align:right">Kusy</th><th style="text-align:right">Dostupné</th><th>Příjem</th></tr></thead><tbody id="bal-tbody"><tr class="empty-row"><td colspan="8">Načítám…</td></tr></tbody></table></div></div>
       <div class="card">
         <div class="card-header">
           <h3 id="card-title">Načítám…</h3>
@@ -120,22 +121,30 @@ body{overflow-x:hidden;}
           <div class="form-group"><label>Min. stav</label><input id="f-min" type="number" disabled></div>
         </div>
         <div class="form-row" style="padding:0 20px">
-          <div class="form-group"><label>Sklad</label><select id="f-wh" disabled><option value="">– bez skladu –</option></select></div>
+          <div class="form-group"><label>DC</label><select id="f-wh" disabled><option value="">– bez DC –</option></select></div>
           <div class="form-group"><label>Klient</label><select id="f-cl" disabled><option value="">– bez klienta –</option></select></div>
         </div>
         <div class="form-row" style="padding:0 20px">
-          <div class="form-group"><label>Lokace</label><input id="f-loc" type="text" disabled></div>
-          <div class="form-group"><label>LOT</label><input id="f-lot" type="text" disabled></div>
+          <div class="form-group"><label>Popis</label><input id="f-desc" type="text" disabled></div>
+          <div class="form-group"><label>Typ palety</label><input id="f-ptype" type="text" disabled></div>
         </div>
         <div class="form-row" style="padding:0 20px">
-          <div class="form-group"><label>Množství</label><input id="f-qty" type="number" disabled></div>
+          <div class="form-group"><label>Ks na paletu</label><input id="f-upp" type="number" min="0" disabled></div>
+          <div class="form-group"><label>Váha palety (kg)</label><input id="f-pkg" type="number" step="0.1" min="0" disabled></div>
+        </div>
+        <div class="form-row" style="padding:0 20px">
+          <div class="form-group"><label>Šířka palety (mm)</label><input id="f-pw" type="number" min="0" disabled></div>
+          <div class="form-group"><label>Výška palety (mm)</label><input id="f-ph" type="number" min="0" disabled></div>
+        </div>
+        <div class="form-row" style="padding:0 20px">
           <div class="form-group"><label>Foto URL</label><input id="f-photo" type="url" disabled></div>
+          <div class="form-group"></div>
         </div>
         <div class="form-row single" style="padding:0 20px">
           <div class="form-group"><label>Poznámka</label><textarea id="f-notes" disabled></textarea></div>
         </div>
         <div style="padding:16px 20px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);margin-top:16px">
-          <div id="view-actions"><button class="btn btn-danger btn-sm" onclick="delItem()">🗑 Smazat kartu</button></div>
+          <div id="view-actions"><button class="btn btn-danger btn-sm" onclick="delItem()">🗑 Smazat SKU</button></div>
           <div id="edit-actions" style="display:none;gap:8px">
             <button class="btn btn-secondary" onclick="toggleEdit(false)">Zrušit</button>
             <button class="btn btn-primary" onclick="saveItem()">💾 Uložit</button>
@@ -230,13 +239,34 @@ async function loadItem(){
   document.getElementById('f-min').value=i.min_stock!=null?i.min_stock:0;
   whSel.value=i.warehouse_id||'';
   clSel.value=i.client_id||'';
-  document.getElementById('f-loc').value=i.location||'';
-  document.getElementById('f-lot').value=i.lot||'';
-  document.getElementById('f-qty').value=i.quantity!=null?i.quantity:0;
+  document.getElementById('f-desc').value=i.description||'';
+  document.getElementById('f-upp').value=i.units_per_pallet!=null?i.units_per_pallet:'';
+  document.getElementById('f-ptype').value=i.pallet_type||'';
+  document.getElementById('f-pw').value=i.pallet_width_mm!=null?i.pallet_width_mm:'';
+  document.getElementById('f-ph').value=i.pallet_height_mm!=null?i.pallet_height_mm:'';
+  document.getElementById('f-pkg').value=i.pallet_weight_kg!=null?i.pallet_weight_kg:'';
+  loadBalances(i);
   document.getElementById('f-photo').value=i.photo_url||'';
   document.getElementById('f-notes').value=i.notes||'';
 }
 
+async function loadBalances(i){
+  var tb=document.getElementById('bal-tbody'),sm=document.getElementById('bal-sum');
+  try{
+    var rows=[],from=0;
+    while(true){
+      var r=await supa.from('stock_balances').select('dc_id,location_code,lpn,lot,condition_code,units_total,units_available,receipt_no').eq('sku',i.sku).order('location_code').range(from,from+999);
+      if(r.error){tb.innerHTML='<tr class="empty-row"><td colspan="8">Zásoby nejsou k dispozici</td></tr>';return;}
+      var d=r.data||[];rows=rows.concat(d);if(d.length<1000)break;from+=1000;
+    }
+    if(i.warehouse_id!=null)rows=rows.filter(function(x){return String(x.dc_id)===String(i.warehouse_id);});
+    var tot=rows.reduce(function(a,x){return a+(Number(x.units_total)||0);},0);
+    sm.textContent=rows.length?('Celkem '+tot+' ks'):'';
+    if(!rows.length){tb.innerHTML='<tr class="empty-row"><td colspan="8">Žádné zásoby pro toto SKU</td></tr>';return;}
+    var dcn={};(warehouses||[]).forEach(function(w){dcn[w.id]=w.code||w.name;});
+    tb.innerHTML=rows.slice(0,300).map(function(x){return '<tr><td>'+(dcn[x.dc_id]||'–')+'</td><td style="font-weight:600">'+(x.location_code||'–')+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+(x.lpn||'–')+'</td><td>'+(x.lot||'–')+'</td><td>'+(x.condition_code||'–')+'</td><td style="text-align:right">'+x.units_total+'</td><td style="text-align:right">'+x.units_available+'</td><td>'+(x.receipt_no||'–')+'</td></tr>';}).join('')+(rows.length>300?'<tr class="empty-row"><td colspan="8">… zobrazeno prvních 300 z '+rows.length+'</td></tr>':'');
+  }catch(e){tb.innerHTML='<tr class="empty-row"><td colspan="8">Zásoby nejsou k dispozici</td></tr>';}
+}
 function toggleEdit(on){
   document.querySelectorAll('.form-group input,.form-group select,.form-group textarea').forEach(function(el){el.disabled=!on;});
   document.getElementById('view-actions').style.display=on?'none':'block';
@@ -254,9 +284,12 @@ async function saveItem(){
     min_stock:parseInt(document.getElementById('f-min').value)||0,
     warehouse_id:document.getElementById('f-wh').value||null,
     client_id:document.getElementById('f-cl').value||null,
-    location:document.getElementById('f-loc').value.trim()||null,
-    lot:document.getElementById('f-lot').value.trim()||null,
-    quantity:parseInt(document.getElementById('f-qty').value)||0,
+    description:document.getElementById('f-desc').value.trim()||null,
+    units_per_pallet:isNaN(parseInt(document.getElementById('f-upp').value))?null:parseInt(document.getElementById('f-upp').value),
+    pallet_type:document.getElementById('f-ptype').value.trim()||null,
+    pallet_width_mm:isNaN(parseInt(document.getElementById('f-pw').value))?null:parseInt(document.getElementById('f-pw').value),
+    pallet_height_mm:isNaN(parseInt(document.getElementById('f-ph').value))?null:parseInt(document.getElementById('f-ph').value),
+    pallet_weight_kg:isNaN(parseFloat(document.getElementById('f-pkg').value))?null:parseFloat(document.getElementById('f-pkg').value),
     photo_url:document.getElementById('f-photo').value.trim()||null,
     notes:document.getElementById('f-notes').value.trim()||null
   };
@@ -269,7 +302,7 @@ async function saveItem(){
 }
 
 async function delItem(){
-  if(!confirm('Opravdu smazat tuto skladovou kartu?'))return;
+  if(!confirm('Opravdu smazat toto SKU?'))return;
   var res=await supa.from('stock_items').delete().eq('id',itemId);
   if(res.error){toast('❌ '+res.error.message);return;}
   toast('🗑 Smazáno');

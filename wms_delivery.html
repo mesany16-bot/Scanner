@@ -217,7 +217,7 @@ async function loadDoc(){
 function addRow(item){
   var tbody=document.getElementById('items-tbody');
   var idx=rowIndex++;
-  var opts=stockItems.map(function(s){return '<option value="'+s.id+'"'+(item&&item.stock_item_id===s.id?' selected':'')+'>'+s.sku+' ('+s.quantity+' ks)</option>';}).join('');
+  var opts=stockItems.map(function(s){return '<option value="'+s.id+'"'+(item&&item.stock_item_id===s.id?' selected':'')+'>'+s.sku+'</option>';}).join('');
   var tr=document.createElement('tr');tr.id='row-'+idx;if(item){var ex={};['sku','location_code','full_pallet'].forEach(function(f){if(item[f]!==undefined)ex[f]=item[f];});tr.dataset.extra=JSON.stringify(ex);}
   tr.innerHTML='<td><select onchange="fillEan('+idx+',this)" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;width:100%;background:#fff"><option value="">- vyberte -</option>'+opts+'</select></td>'
     +'<td><input id="ean-'+idx+'" type="text" value="'+(item&&item.ean||'')+'" placeholder="EAN"></td>'

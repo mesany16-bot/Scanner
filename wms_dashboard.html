@@ -181,7 +181,7 @@ setTimeout(function(){
     </div>
     <div class="content">
       <div class="stat-grid">
-        <div class="stat-card"><div class="label">SKU položky</div><div class="value" id="stat-stock">–</div><div class="sub">celkem karet</div></div>
+        <div class="stat-card"><div class="label">SKU</div><div class="value" id="stat-stock">–</div><div class="sub">v SKU Setupu</div></div>
         <div class="stat-card"><div class="label">Klienti</div><div class="value" id="stat-clients">–</div><div class="sub">registrovaných</div></div>
         <div class="stat-card"><div class="label">Skeny dnes</div><div class="value" id="stat-scans">–</div><div class="sub">naskenováno</div></div>
         <div class="stat-card"><div class="label">Nízký stav</div><div class="value" id="stat-low" style="color:var(--warning)">–</div><div class="sub">pod minimem</div></div>
@@ -190,7 +190,7 @@ setTimeout(function(){
         <div>
           <div class="card"><div class="card-header"><h3>📥 Poslední příjmy</h3><a href="wms_receipts.html" class="btn btn-secondary btn-sm">Všechny →</a></div>
           <div style="overflow-x:auto;"><table><thead><tr><th>Číslo</th><th>Dodavatel</th><th>Stav</th><th>Datum</th></tr></thead><tbody id="t-receipts"><tr class="empty-row"><td colspan="4">Načítám…</td></tr></tbody></table></div></div>
-          <div class="card"><div class="card-header"><h3>⚠️ Nízký stav</h3><a href="wms_stock.html" class="btn btn-secondary btn-sm">Sklad →</a></div>
+          <div class="card"><div class="card-header"><h3>⚠️ Nízký stav</h3><a href="wms_stock.html" class="btn btn-secondary btn-sm">SKU Setup →</a></div>
           <div style="overflow-x:auto;"><table><thead><tr><th>SKU</th><th>Stav</th><th>Min.</th></tr></thead><tbody id="t-low"><tr class="empty-row"><td colspan="3">Načítám…</td></tr></tbody></table></div></div>
         </div>
         <div>
@@ -407,15 +407,21 @@ async function loadDashboard(){
     dcq(supa.from('stock_items').select('id',{count:'exact'}),'warehouse_id'),
     supa.from('clients').select('id',{count:'exact'}),
     dcq(supa.from('scans').select('id',{count:'exact'}).gte('scanned_at',today),'dc_id'),
-    dcq(supa.from('stock_items').select('id,sku,quantity,min_stock').order('quantity'),'warehouse_id'),
+    dcq(supa.from('stock_items').select('id,sku,min_stock,warehouse_id').gt('min_stock',0),'warehouse_id'),
     dcq(supa.from('receipts').select('*').order('created_at',{ascending:false}).limit(5),'warehouse_id'),
     dcq(supa.from('deliveries').select('*,clients(name)').order('created_at',{ascending:false}).limit(5),'warehouse_id')
   ]);
   document.getElementById('stat-stock').textContent=sr.count||0;
   document.getElementById('stat-clients').textContent=cr.count||0;
   document.getElementById('stat-scans').textContent=scr.count||0;
-  var low=(lr.data||[]).filter(function(i){return i.quantity<=i.min_stock;});
-  document.getElementById('stat-low').textContent=low.length;
+  var low=[];
+  try{
+    var sums={},from=0;
+    while(true){var sq=dcq(supa.from('v_sku_stock').select('dc_id,sku_key,units_total').range(from,from+999),'dc_id');var sres=await sq;if(sres.error)throw sres.error;var sd=sres.data||[];sd.forEach(function(x){sums[x.dc_id+'|'+x.sku_key]=Number(x.units_total)||0;});if(sd.length<1000)break;from+=1000;}
+    (lr.data||[]).forEach(function(i){var q=sums[i.warehouse_id+'|'+String(i.sku||'').trim().toUpperCase()]||0;if(q<=i.min_stock)low.push({id:i.id,sku:i.sku,quantity:q,min_stock:i.min_stock});});
+    low.sort(function(a,b){return (a.quantity-a.min_stock)-(b.quantity-b.min_stock);});
+    document.getElementById('stat-low').textContent=low.length;
+  }catch(e){document.getElementById('stat-low').textContent='–';}
   // Low stock table
   var lt=document.getElementById('t-low');
   lt.innerHTML=low.length?low.slice(0,6).map(function(i){return '<tr><td><a href="wms_item.html?id='+i.id+'" style="color:var(--accent);font-weight:600">'+i.sku+'</a></td><td><span class="badge badge-orange">'+i.quantity+'</span></td><td>'+i.min_stock+'</td></tr>';}).join(''):'<tr class="empty-row"><td colspan="3">✅ Vše OK</td></tr>';

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Adjustments – PRG WMS</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="wms_nav.js"></script>
+<script src="wms_dc.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+:root{--bg:#f0f2f5;--surface:#fff;--border:#e2e6ed;--accent:#0a7c4e;--accent-light:#e8f7f1;--danger:#c0392b;--danger-light:#fdecea;--warning:#e67e22;--warning-light:#fef3e8;--info:#2980b9;--info-light:#eaf4fb;--text:#1a1d27;--muted:#7a8090;--shadow:0 2px 12px rgba(0,0,0,0.07);--sidebar-w:220px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.btn{padding:9px 18px;border:none;border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;transition:opacity 0.15s;text-decoration:none;display:inline-flex;align-items:center;gap:6px;}
+.btn:active{opacity:0.8;}.btn-primary{background:var(--accent);color:#fff;}.btn-secondary{background:var(--bg);color:var(--muted);border:1.5px solid var(--border);}.btn-danger{background:var(--danger);color:#fff;}.btn-warning{background:var(--warning);color:#fff;}.btn-info{background:var(--info);color:#fff;}.btn-sm{padding:6px 12px;font-size:12px;}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
+.badge-green{background:var(--accent-light);color:var(--accent);}.badge-orange{background:var(--warning-light);color:var(--warning);}.badge-red{background:var(--danger-light);color:var(--danger);}.badge-blue{background:var(--info-light);color:var(--info);}.badge-gray{background:#f0f2f5;color:var(--muted);}
+.card{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden;margin-bottom:20px;}
+.card-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.card-header h3{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+thead{background:#f8f9fb;}
+th{padding:9px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;}
+td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tbody tr:last-child td{border-bottom:none;}tbody tr:hover{background:#fafbfc;}
+.empty-row td{text-align:center;color:var(--muted);padding:28px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.form-row.single{grid-template-columns:1fr;}.form-row.triple{grid-template-columns:1fr 1fr 1fr;}
+.form-group{display:flex;flex-direction:column;gap:5px;}
+.form-group label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;}
+.form-group input,.form-group select,.form-group textarea{padding:9px 12px;border:1.5px solid var(--border);border-radius:7px;font-family:'Inter',sans-serif;font-size:13px;outline:none;transition:border-color 0.2s;background:#fff;}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--accent);}
+.form-group textarea{resize:vertical;min-height:70px;}
+.form-section{font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;}
+.modal-box{background:var(--surface);border-radius:14px;width:100%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,0.2);max-height:90vh;overflow-y:auto;}
+.modal-header{padding:18px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.modal-header h3{font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:700;}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);}
+.modal-body{padding:18px 22px;}.modal-footer{padding:12px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+#sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);background:#0a7c4e;display:flex;flex-direction:column;z-index:50;transition:transform 0.25s ease;}
+.sidebar-logo{padding:20px 18px 14px;font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:#fff;letter-spacing:1.5px;border-bottom:1px solid rgba(255,255,255,0.15);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;}
+.sidebar-logo span{font-size:11px;font-weight:400;opacity:0.7;width:100%;letter-spacing:0;}
+#sidebar-close-btn{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;opacity:0.8;display:none;}
+nav{flex:1;padding:10px 0;overflow-y:auto;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:11px 18px;color:rgba(255,255,255,0.75);cursor:pointer;font-size:14px;font-weight:500;transition:background 0.15s,color 0.15s;border-left:3px solid transparent;}
+.nav-item:hover{background:rgba(255,255,255,0.1);color:#fff;}
+.nav-item.active{background:rgba(255,255,255,0.15);color:#fff;border-left-color:#fff;}
+.nav-icon{font-size:17px;width:22px;text-align:center;}
+.sidebar-user{padding:12px 18px;border-top:1px solid rgba(255,255,255,0.15);font-size:12px;color:rgba(255,255,255,0.7);display:flex;flex-direction:column;gap:4px;}
+.sidebar-user strong{color:#fff;font-size:13px;}
+.sidebar-user button{background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;margin-top:4px;}
+#main{margin-left:var(--sidebar-w);min-height:100vh;}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:13px 24px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow);position:sticky;top:0;z-index:40;}
+.topbar h2{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;flex:1;}
+.topbar-actions{display:flex;gap:8px;align-items:center;}
+.hamburger-btn{display:inline-flex;align-items:center;background:none;border:none;font-size:24px;cursor:pointer;color:var(--text);padding:4px 8px;margin-right:4px;border-radius:6px;}
+.content{padding:24px;}
+#sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:49;}
+#toast{position:fixed;bottom:24px;right:24px;background:#1a1d27;color:#fff;padding:12px 20px;border-radius:9px;font-size:13px;font-weight:500;z-index:999;opacity:0;transition:opacity 0.3s;pointer-events:none;}
+#toast.show{opacity:1;}
+.back-btn{background:var(--bg);border:1.5px solid var(--border);border-radius:7px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;text-decoration:none;display:flex;align-items:center;gap:6px;}
+.back-btn:hover{border-color:var(--accent);color:var(--accent);}
+@media(min-width:901px){.hamburger-btn{display:none;}#sidebar-close-btn{display:none !important;}}
+@media(max-width:900px){:root{--sidebar-w:0px;}#sidebar{transform:translateX(-220px);width:220px;}#sidebar.open{transform:translateX(0);}#sidebar-close-btn{display:block !important;}#main{margin-left:0;}.content{padding:14px;}.topbar{padding:11px 14px;}}
+
+/* mobilní zobrazení – sjednoceno s Inventory Tool */
+@media(max-width:900px){
+body{overflow-x:hidden;}
+#main{min-width:0;max-width:100%;}
+.content{padding:12px !important;min-width:0;max-width:100%;}
+.card{min-width:0;max-width:100%;}
+.topbar{flex-wrap:wrap;gap:8px;padding:10px 12px !important;}
+.topbar h2{font-size:19px !important;min-width:0;flex:1 1 auto;}
+.topbar-actions{flex-wrap:wrap;gap:6px;margin-left:auto;}
+#last-refresh{display:none;}
+#theme-popover{right:8px !important;max-width:calc(100vw - 16px);}
+.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:10px !important;}
+.two-col{grid-template-columns:minmax(0,1fr) !important;}
+.stat-grid>*,.two-col>*{min-width:0;}
+.form-row{grid-template-columns:1fr !important;}
+}
+.lf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px;padding:12px 16px;}
+.lf-grid label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;}
+.lf-grid input,.lf-grid select{width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none;background:#fff;font-family:inherit;}
+.lf-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 16px;border-top:1px solid var(--border);background:#fafbfc;}
+@media(max-width:900px){.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;}}
+.stl{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase}.stv{font-size:24px;font-weight:700}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.tabs{display:flex;gap:4px;padding:0 16px;border-bottom:1px solid var(--border);background:#fafbfc}
+.tabs .tab{padding:11px 16px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent}
+.tabs .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.rowbtns{display:flex;gap:4px;flex-wrap:wrap}
+.hint{font-size:12px;color:var(--muted)}
+.mv-qty{font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<div id="session-check" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+  <div style="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:16px;opacity:0.85;">Načítám…</div>
+</div>
+<div id="auth-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+  <div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
+    <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1>
+    <p style="font-size:13px;color:#7a8090;margin-bottom:20px">Warehouse Management System</p>
+    <div id="auth-msg" style="font-size:13px;color:#c0392b;min-height:18px;margin-bottom:8px"></div>
+    <input id="login-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
+    <input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
+    <button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Přihlásit se</button>
+  </div>
+</div>
+<div id="app" style="display:none">
+  <div id="sidebar">
+    <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
+    <nav id="wms-nav" data-active="adjustments"></nav>
+    <div class="sidebar-user">
+      <strong id="sidebar-user-name">–</strong>
+      <span id="sidebar-user-role" class="badge badge-gray"></span>
+      <button onclick="doLogout()">Odhlásit se</button>
+    </div>
+  </div>
+  <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+  <div id="main">
+    
+<div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">☰</button><h2>🔧 Adjustments</h2><div class="topbar-actions"><button class="btn btn-primary btn-sm" onclick="openAdd()">+ Přidat zásobu</button></div></div>
+<div class="content">
+  <div class="card">
+    <div class="tabs"><div class="tab active" id="tab-b-adj" onclick="showTab('adj')">Úpravy zásob</div><div class="tab" id="tab-b-hist" onclick="showTab('hist')">Historie změn</div></div>
+
+    <div id="tab-adj">
+      <div class="lf-grid" style="grid-template-columns:minmax(220px,3fr) auto;align-items:end">
+        <div><label>Hledat zásobu (SKU, LPN, lokace, lot)</label><input id="adj-q" type="text" placeholder="alespoň 2 znaky, např. SKU nebo R12P05" onkeydown="if(event.key==='Enter')searchBalances()"></div>
+        <div><button class="btn btn-primary" onclick="searchBalances()">🔍 Hledat</button></div>
+      </div>
+      <div class="lf-bar"><span id="adj-info" class="hint" style="flex:1">Zadej hledaný výraz. Změny se zapisují do historie.</span></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>SKU</th><th>Popis</th><th>Klient</th><th>DC</th><th>Lokace</th><th>LPN</th><th>Lot</th><th>Kond.</th><th style="text-align:right">Celkem</th><th style="text-align:right">Dostupné</th><th style="text-align:right">Rezerv.</th><th>Akce</th></tr></thead>
+      <tbody id="adj-tbody"><tr class="empty-row"><td colspan="12">Nic zatím nehledáno</td></tr></tbody></table></div>
+    </div>
+
+    <div id="tab-hist" style="display:none">
+      <div class="lf-grid">
+        <div><label>Od</label><input id="h-from" type="date"></div>
+        <div><label>Do</label><input id="h-to" type="date"></div>
+        <div><label>Typ</label><select id="h-type"><option value="">Všechny</option><option value="qty">Množství</option><option value="param">Parametr</option><option value="move">Přesun</option><option value="add">Přidání</option></select></div>
+        <div><label>Uživatel</label><select id="h-user"><option value="">Všichni</option></select></div>
+        <div><label>Hledat (SKU, LPN, lokace)</label><input id="h-q" type="text" onkeydown="if(event.key==='Enter')loadHistory()"></div>
+      </div>
+      <div class="lf-bar"><span id="h-info" class="hint" style="flex:1">–</span>
+        <button class="btn btn-secondary" onclick="loadHistory()">↻ Načíst</button>
+        <button class="btn btn-secondary" onclick="exportHistory()">📊 Export XLSX</button></div>
+      <div style="overflow-x:auto"><table><thead><tr><th>Čas</th><th>Uživatel</th><th>DC</th><th>Typ</th><th>SKU</th><th>LPN</th><th>Lot</th><th>Z lokace</th><th>Do lokace</th><th style="text-align:right">Před</th><th style="text-align:right">Změna</th><th style="text-align:right">Po</th><th>Parametr</th><th>Důvod</th><th>Poznámka</th></tr></thead>
+      <tbody id="h-tbody"><tr class="empty-row"><td colspan="15">Načítám…</td></tr></tbody></table></div>
+    </div>
+  </div>
+</div>
+
+  </div>
+</div>
+
+<div class="modal-backdrop" id="m-qty" style="display:none"><div class="modal-box" style="max-width:480px">
+  <div class="modal-header"><h3>Změna množství</h3><button class="modal-close" onclick="closeModal('m-qty')">✕</button></div>
+  <div class="modal-body">
+    <div id="q-desc" class="hint" style="margin-bottom:12px"></div>
+    <div class="form-row"><div class="form-group"><label>Nové celkové množství</label><input id="q-new" type="number" min="0" step="1"></div><div class="form-group"><label>Rozdíl</label><input id="q-diff" type="text" disabled></div></div>
+    <div class="form-row single"><div class="form-group"><label>Důvod *</label><select id="q-reason"></select></div></div>
+    <div class="form-row single"><div class="form-group"><label>Poznámka</label><textarea id="q-note"></textarea></div></div>
+    <div class="hint">Při množství 0 se řádek zásoby odstraní (zůstane v historii).</div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('m-qty')">Zrušit</button><button class="btn btn-primary" onclick="doQty()">Uložit</button></div>
+</div></div>
+
+<div class="modal-backdrop" id="m-param" style="display:none"><div class="modal-box" style="max-width:480px">
+  <div class="modal-header"><h3>Změna parametru</h3><button class="modal-close" onclick="closeModal('m-param')">✕</button></div>
+  <div class="modal-body">
+    <div id="p-desc" class="hint" style="margin-bottom:12px"></div>
+    <div class="form-row"><div class="form-group"><label>Parametr</label><select id="p-field" onchange="paramFieldChanged()"><option value="condition_code">Kondice</option><option value="lot">Lot</option><option value="lpn">LPN</option><option value="description">Popis</option></select></div><div class="form-group"><label>Nová hodnota</label><input id="p-new" type="text"></div></div>
+    <div class="form-row single"><div class="form-group"><label>Důvod *</label><select id="p-reason"></select></div></div>
+    <div class="form-row single"><div class="form-group"><label>Poznámka</label><textarea id="p-note"></textarea></div></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('m-param')">Zrušit</button><button class="btn btn-primary" onclick="doParam()">Uložit</button></div>
+</div></div>
+
+<div class="modal-backdrop" id="m-move" style="display:none"><div class="modal-box" style="max-width:480px">
+  <div class="modal-header"><h3>Přesun do jiné lokace</h3><button class="modal-close" onclick="closeModal('m-move')">✕</button></div>
+  <div class="modal-body">
+    <div id="mv-desc" class="hint" style="margin-bottom:12px"></div>
+    <div class="form-row"><div class="form-group"><label>Cílová lokace *</label><input id="mv-to" type="text" list="mv-locs" placeholder="např. R12P05L02BA" style="text-transform:uppercase"><datalist id="mv-locs"></datalist></div><div class="form-group"><label>Množství k přesunu</label><input id="mv-qty" type="number" min="1" step="1"></div></div>
+    <div class="form-row single"><div class="form-group"><label>Důvod *</label><select id="mv-reason"></select></div></div>
+    <div class="form-row single"><div class="form-group"><label>Poznámka</label><textarea id="mv-note"></textarea></div></div>
+    <div class="hint">Přesunout lze jen dostupné kusy. Při částečném přesunu se řádek rozdělí (LPN zůstává stejné).</div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('m-move')">Zrušit</button><button class="btn btn-primary" onclick="doMove()">Přesunout</button></div>
+</div></div>
+
+<div class="modal-backdrop" id="m-add" style="display:none"><div class="modal-box" style="max-width:520px">
+  <div class="modal-header"><h3>Přidat zásobu</h3><button class="modal-close" onclick="closeModal('m-add')">✕</button></div>
+  <div class="modal-body">
+    <div class="form-row"><div class="form-group"><label>DC *</label><select id="a-dc" onchange="loadLocs(this.value)"></select></div><div class="form-group"><label>Lokace *</label><input id="a-loc" type="text" list="mv-locs" style="text-transform:uppercase"></div></div>
+    <div class="form-row"><div class="form-group"><label>SKU *</label><input id="a-sku" type="text"></div><div class="form-group"><label>Množství *</label><input id="a-qty" type="number" min="1" step="1"></div></div>
+    <div class="form-row"><div class="form-group"><label>LPN</label><input id="a-lpn" type="text"></div><div class="form-group"><label>Lot</label><input id="a-lot" type="text"></div></div>
+    <div class="form-row"><div class="form-group"><label>Kondice</label><input id="a-cond" type="text" placeholder="např. OK"></div><div class="form-group"><label>Klient</label><select id="a-client"><option value="">– bez klienta –</option></select></div></div>
+    <div class="form-row single"><div class="form-group"><label>Důvod *</label><select id="a-reason"></select></div></div>
+    <div class="form-row single"><div class="form-group"><label>Poznámka</label><textarea id="a-note"></textarea></div></div>
+  </div>
+  <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('m-add')">Zrušit</button><button class="btn btn-primary" onclick="doAdd()">Přidat</button></div>
+</div></div>
+<div id="toast"></div>
+<script>
+var SUPA_URL="https://ujvqanqqhmnfxsfeqixc.supabase.co";
+var SUPA_KEY="sb_publishable_5o19BnZUEi8j-rU5DDAgBA_HwKB7V-v";
+var supa=supabase.createClient(SUPA_URL,SUPA_KEY);
+var currentUser=null,currentProfile=null;
+async function doLogin(){var email=document.getElementById('login-email').value.trim();var pass=document.getElementById('login-pass').value;if(!email||!pass){document.getElementById('auth-msg').textContent='⚠️ Vyplň e-mail a heslo';return;}document.getElementById('auth-msg').textContent='⏳ Přihlašuji…';var res=await supa.auth.signInWithPassword({email,password:pass});if(res.error){document.getElementById('auth-msg').textContent='❌ '+res.error.message;return;}await onLoggedIn(res.data.user);}
+// idle logout
+var SESSION_IDLE_MS=2*60*60*1000;var sessionIdleTimer=null;function startSessionIdleWatch(){function reset(){clearTimeout(sessionIdleTimer);sessionIdleTimer=setTimeout(async function(){await supa.auth.signOut();alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');window.location.href='wms_dashboard.html';},SESSION_IDLE_MS);}['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){document.addEventListener(evt,reset,{passive:true});});reset();}
+async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}var allowed=currentProfile.allowed_apps;if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1){alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';(async function(){try{if(window.PRG_DC)await PRG_DC.init(supa,currentProfile);}catch(e){console.warn('DC',e);}if(typeof afterLogin==='function')afterLogin();})();startSessionIdleWatch();}
+async function doLogout(){await supa.auth.signOut();window.location.href='wms_dashboard.html';}
+function go(u){window.location.href=u;}
+function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
+var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(_tt);_tt=setTimeout(function(){e.classList.remove('show');},2800);}
+function closeModal(id){document.getElementById(id).style.display='none';}
+function fmt(dt){return new Date(dt).toLocaleString('cs-CZ');}
+function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
+supa.auth.getSession().then(function(res){
+  if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}
+  else{window.location.href='wms_dashboard.html';}
+});
+
+function escH(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function nf(n){return (Number(n)||0).toLocaleString('cs-CZ');}
+var REASONS=[['count','Inventura / přepočet'],['damage','Poškození'],['found','Nález'],['lost','Ztráta'],['quality','Kvalita / karanténa'],['relabel','Přeznačení'],['replenish','Doplnění'],['consolidate','Konsolidace / úklid'],['other','Jiné']];
+var TYPE_CS={qty:'Množství',param:'Parametr',move:'Přesun',add:'Přidání'};
+var FIELD_CS={condition_code:'Kondice',lot:'Lot',lpn:'LPN',description:'Popis'};
+var dcMap={},rows=[],cur=null,userMap={},locCache={},histRows=[];
+function dcCode(id){var w=dcMap[String(id)];return w?w.code:'–';}
+function reasonName(c){for(var i=0;i<REASONS.length;i++)if(REASONS[i][0]===c)return REASONS[i][1];return c||'';}
+function errMsg(e){
+  var m=String((e&&e.message)||e||'');
+  if(m.indexOf('NOT_FOUND')===0)return 'Záznam zásoby už neexistuje (obnov vyhledávání).';
+  if(m.indexOf('NEG_QTY')===0)return 'Množství musí být 0 nebo více.';
+  if(m.indexOf('NO_CHANGE')===0)return 'Nic se nezměnilo.';
+  if(m.indexOf('BELOW_RESERVED')===0){var n=m.split(':')[1];return 'Nelze: dostupných je jen '+(n||'?')+' ks (zbytek je rezervovaný nebo nedostupný).';}
+  if(m.indexOf('BAD_FIELD')===0)return 'Tento parametr nelze měnit.';
+  if(m.indexOf('NO_LOCATION')===0)return 'Cílová lokace v tomto DC neexistuje nebo není aktivní.';
+  if(m.indexOf('SAME_LOCATION')===0)return 'Zásoba už v této lokaci je.';
+  if(m.indexOf('QTY_RANGE')===0)return 'Množství je mimo povolený rozsah.';
+  if(m.indexOf('NO_SKU')===0)return 'Chybí SKU.';
+  if(/function .* does not exist|schema cache|stock_ledger/i.test(m))return 'Chybí databázové funkce – spusť SQL adjustments_setup.sql.';
+  return m;
+}
+function fillReasons(id){var s=document.getElementById(id);s.innerHTML='<option value="">– vyber –</option>'+REASONS.map(function(r){return '<option value="'+r[0]+'">'+r[1]+'</option>';}).join('');}
+async function afterLogin(){
+  (window.PRG_DC?PRG_DC.allWarehouses():[]).forEach(function(w){dcMap[String(w.id)]=w;});
+  ['q-reason','p-reason','mv-reason','a-reason'].forEach(fillReasons);
+  var pr=await supa.from('profiles').select('id,name');
+  (pr.data||[]).forEach(function(p){userMap[p.id]=p.name||p.id;});
+  var hu=document.getElementById('h-user');Object.keys(userMap).sort(function(a,b){return String(userMap[a]).localeCompare(String(userMap[b]));}).forEach(function(id){hu.innerHTML+='<option value="'+id+'">'+escH(userMap[id])+'</option>';});
+  var d=new Date();document.getElementById('h-to').value=d.toISOString().slice(0,10);d.setDate(d.getDate()-30);document.getElementById('h-from').value=d.toISOString().slice(0,10);
+  var cl=await supa.from('clients').select('id,name').order('name');
+  var ac=document.getElementById('a-client');(cl.data||[]).forEach(function(c){ac.innerHTML+='<option value="'+c.id+'">'+escH(c.name)+'</option>';});
+  var ad=document.getElementById('a-dc');(window.PRG_DC?PRG_DC.list():[]).forEach(function(w){ad.innerHTML+='<option value="'+w.id+'">'+escH(w.code)+' – '+escH(w.name)+'</option>';});
+  var c=window.PRG_DC&&PRG_DC.currentId();if(c!=null)ad.value=c;
+  document.getElementById('adj-q').focus();
+}
+function showTab(t){
+  ['adj','hist'].forEach(function(x){document.getElementById('tab-'+x).style.display=x===t?'block':'none';document.getElementById('tab-b-'+x).classList.toggle('active',x===t);});
+  if(t==='hist')loadHistory();
+}
+function clean(q){return String(q||'').replace(/[,()%*\\]/g,' ').trim();}
+
+/* ---------- vyhledani zasob ---------- */
+async function searchBalances(){
+  var q=clean(document.getElementById('adj-q').value),info=document.getElementById('adj-info'),tb=document.getElementById('adj-tbody');
+  if(q.length<2){info.textContent='Zadej alespoň 2 znaky.';return;}
+  info.textContent='Hledám…';
+  var like='%'+q+'%';
+  var rq=supa.from('stock_balances').select('*').or('sku.ilike.'+like+',lpn.ilike.'+like+',location_code.ilike.'+like+',lot.ilike.'+like+',description.ilike.'+like).order('location_code').limit(201);
+  if(window.PRG_DC)rq=PRG_DC.apply(rq,'dc_id');
+  var r=await rq;
+  if(r.error){info.textContent='Chyba: '+r.error.message;return;}
+  rows=r.data||[];
+  var more=rows.length>200;if(more)rows=rows.slice(0,200);
+  info.textContent=rows.length?('Nalezeno '+(more?'více než 200':rows.length)+' řádků'+(more?' – zúž hledání':'')):'Nic nenalezeno';
+  if(!rows.length){tb.innerHTML='<tr class="empty-row"><td colspan="12">Nic nenalezeno</td></tr>';return;}
+  tb.innerHTML=rows.map(function(x,i){return '<tr><td style="font-weight:700">'+escH(x.sku)+'</td><td>'+escH(x.description||'–')+'</td><td>'+escH(x.customer||'–')+'</td><td>'+escH(dcCode(x.dc_id))+'</td><td style="font-weight:600">'+escH(x.location_code||'–')+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+escH(x.lpn||'–')+'</td><td>'+escH(x.lot||'–')+'</td><td>'+escH(x.condition_code||'–')+'</td><td style="text-align:right">'+nf(x.units_total)+'</td><td style="text-align:right">'+nf(x.units_available)+'</td><td style="text-align:right">'+nf(x.units_committed)+'</td>'
+    +'<td><div class="rowbtns"><button class="btn btn-secondary btn-sm" onclick="openQty('+i+')">Množství</button><button class="btn btn-secondary btn-sm" onclick="openParam('+i+')">Parametr</button><button class="btn btn-secondary btn-sm" onclick="openMove('+i+')">Přesun</button></div></td></tr>';}).join('');
+}
+function rowDesc(x){return '<b>'+escH(x.sku)+'</b>'+(x.description?' – '+escH(x.description):'')+'<br>Lokace '+escH(x.location_code||'–')+(x.lpn?' · LPN '+escH(x.lpn):'')+(x.lot?' · lot '+escH(x.lot):'')+' · celkem '+nf(x.units_total)+', dostupné '+nf(x.units_available);}
+function afterChange(msg){toast('✅ '+msg);searchBalances();}
+async function call(fn,args,modal,okMsg){
+  var r=await supa.rpc(fn,args);
+  if(r.error){toast('❌ '+errMsg(r.error));return false;}
+  closeModal(modal);afterChange(okMsg);return true;
+}
+function needReason(id){var v=document.getElementById(id).value;if(!v){toast('⚠️ Vyber důvod');return null;}return v;}
+
+/* ---------- mnozstvi ---------- */
+function openQty(i){cur=rows[i];document.getElementById('q-desc').innerHTML=rowDesc(cur);var n=document.getElementById('q-new');n.value=cur.units_total;document.getElementById('q-diff').value='0';document.getElementById('q-reason').value='';document.getElementById('q-note').value='';document.getElementById('m-qty').style.display='flex';n.focus();n.select();}
+document.addEventListener('input',function(e){if(e.target&&e.target.id==='q-new'&&cur){var d=(parseFloat(e.target.value)||0)-Number(cur.units_total);document.getElementById('q-diff').value=(d>0?'+':'')+d;}});
+async function doQty(){
+  var v=parseFloat(document.getElementById('q-new').value);if(isNaN(v)||v<0){toast('⚠️ Zadej množství');return;}
+  var rs=needReason('q-reason');if(!rs)return;
+  await call('wms_adjust_qty',{p_balance_id:cur.id,p_new_total:v,p_reason:rs,p_note:document.getElementById('q-note').value.trim()||null,p_user:currentUser.id},'m-qty','Množství upraveno');
+}
+
+/* ---------- parametr ---------- */
+function openParam(i){cur=rows[i];document.getElementById('p-desc').innerHTML=rowDesc(cur);document.getElementById('p-field').value='condition_code';paramFieldChanged();document.getElementById('p-reason').value='';document.getElementById('p-note').value='';document.getElementById('m-param').style.display='flex';}
+function paramFieldChanged(){var f=document.getElementById('p-field').value;document.getElementById('p-new').value=cur&&cur[f]!=null?cur[f]:'';}
+async function doParam(){
+  var rs=needReason('p-reason');if(!rs)return;
+  await call('wms_adjust_param',{p_balance_id:cur.id,p_field:document.getElementById('p-field').value,p_value:document.getElementById('p-new').value,p_reason:rs,p_note:document.getElementById('p-note').value.trim()||null,p_user:currentUser.id},'m-param','Parametr upraven');
+}
+
+/* ---------- presun ---------- */
+async function loadLocs(dcId){
+  var dl=document.getElementById('mv-locs');if(!dcId){dl.innerHTML='';return;}
+  if(!locCache[dcId]){var all=[],from=0;
+    while(true){var r=await supa.from('locations').select('code').eq('dc_id',dcId).eq('is_active',true).order('code').range(from,from+999);var d=(r&&r.data)||[];all=all.concat(d.map(function(x){return x.code;}));if(d.length<1000)break;from+=1000;}
+    locCache[dcId]=all;}
+  dl.innerHTML=locCache[dcId].map(function(c){return '<option value="'+escH(c)+'">';}).join('');
+}
+function openMove(i){cur=rows[i];document.getElementById('mv-desc').innerHTML=rowDesc(cur);document.getElementById('mv-to').value='';document.getElementById('mv-qty').value=cur.units_available;document.getElementById('mv-reason').value='';document.getElementById('mv-note').value='';document.getElementById('m-move').style.display='flex';loadLocs(cur.dc_id);}
+async function doMove(){
+  var to=document.getElementById('mv-to').value.trim();if(!to){toast('⚠️ Zadej cílovou lokaci');return;}
+  var q=parseFloat(document.getElementById('mv-qty').value);if(isNaN(q)||q<=0){toast('⚠️ Zadej množství');return;}
+  var rs=needReason('mv-reason');if(!rs)return;
+  await call('wms_move',{p_balance_id:cur.id,p_to:to,p_qty:q,p_reason:rs,p_note:document.getElementById('mv-note').value.trim()||null,p_user:currentUser.id},'m-move','Zásoba přesunuta');
+}
+
+/* ---------- pridani zasoby ---------- */
+function openAdd(){['a-loc','a-sku','a-qty','a-lpn','a-lot','a-cond','a-note'].forEach(function(id){document.getElementById(id).value='';});document.getElementById('a-client').value='';document.getElementById('a-reason').value='found';document.getElementById('m-add').style.display='flex';loadLocs(document.getElementById('a-dc').value);}
+async function doAdd(){
+  var dc=document.getElementById('a-dc').value,loc=document.getElementById('a-loc').value.trim(),sku=document.getElementById('a-sku').value.trim(),q=parseFloat(document.getElementById('a-qty').value);
+  if(!dc||!loc||!sku||isNaN(q)||q<=0){toast('⚠️ Vyplň DC, lokaci, SKU a množství');return;}
+  var rs=needReason('a-reason');if(!rs)return;
+  await call('wms_add_stock',{p_dc:dc,p_location:loc,p_sku:sku,p_qty:q,p_lpn:document.getElementById('a-lpn').value.trim()||null,p_lot:document.getElementById('a-lot').value.trim()||null,p_condition:document.getElementById('a-cond').value.trim()||null,p_client:document.getElementById('a-client').value||null,p_reason:rs,p_note:document.getElementById('a-note').value.trim()||null,p_user:currentUser.id},'m-add','Zásoba přidána');
+}
+
+/* ---------- historie ---------- */
+async function loadHistory(){
+  var info=document.getElementById('h-info'),tb=document.getElementById('h-tbody');info.textContent='Načítám…';
+  var q=supa.from('stock_ledger').select('*').order('created_at',{ascending:false}).limit(1001);
+  var f=document.getElementById('h-from').value,t=document.getElementById('h-to').value,ty=document.getElementById('h-type').value,us=document.getElementById('h-user').value,s=clean(document.getElementById('h-q').value);
+  if(f)q=q.gte('created_at',new Date(f+'T00:00:00').toISOString());
+  if(t)q=q.lt('created_at',new Date(new Date(t+'T00:00:00').getTime()+86400000).toISOString());
+  if(ty)q=q.eq('movement_type',ty);
+  if(us)q=q.eq('created_by',us);
+  if(s){var like='%'+s+'%';q=q.or('sku.ilike.'+like+',lpn.ilike.'+like+',from_location.ilike.'+like+',to_location.ilike.'+like+',lot.ilike.'+like);}
+  if(window.PRG_DC)q=PRG_DC.apply(q,'dc_id');
+  var r=await q;
+  if(r.error){info.textContent='Chyba: '+errMsg(r.error);tb.innerHTML='<tr class="empty-row"><td colspan="15">'+escH(errMsg(r.error))+'</td></tr>';return;}
+  histRows=r.data||[];var more=histRows.length>1000;if(more)histRows=histRows.slice(0,1000);
+  info.textContent=histRows.length+(more?'+':'')+' záznamů'+(more?' (zobrazeno prvních 1000, zúž filtr)':'');
+  if(!histRows.length){tb.innerHTML='<tr class="empty-row"><td colspan="15">Žádné záznamy</td></tr>';return;}
+  tb.innerHTML=histRows.map(function(m){
+    var delta=Number(m.qty_delta)||0;
+    var param=m.field_name?(FIELD_CS[m.field_name]||m.field_name)+': '+escH(m.old_value||'–')+' → '+escH(m.new_value||'–'):'';
+    return '<tr><td style="white-space:nowrap">'+escH(new Date(m.created_at).toLocaleString('cs-CZ'))+'</td><td>'+escH(userMap[m.created_by]||'–')+'</td><td>'+escH(dcCode(m.dc_id))+'</td><td><span class="badge badge-blue">'+escH(TYPE_CS[m.movement_type]||m.movement_type)+'</span></td><td style="font-weight:600">'+escH(m.sku||'')+'</td><td style="font-size:11px">'+escH(m.lpn||'')+'</td><td>'+escH(m.lot||'')+'</td><td>'+escH(m.from_location||'')+'</td><td>'+escH(m.to_location||'')+'</td><td class="mv-qty" style="text-align:right">'+nf(m.qty_before)+'</td><td class="mv-qty" style="text-align:right;font-weight:700;color:'+(delta<0?'var(--danger)':delta>0?'var(--accent)':'inherit')+'">'+(m.movement_type==='param'?'–':(delta>0?'+':'')+nf(delta))+'</td><td class="mv-qty" style="text-align:right">'+nf(m.qty_after)+'</td><td>'+param+'</td><td>'+escH(reasonName(m.reason_code))+'</td><td>'+escH(m.reason_note||'')+'</td></tr>';}).join('');
+}
+function exportHistory(){
+  if(!histRows.length){toast('⚠️ Není co exportovat');return;}
+  if(!window.XLSX){toast('❌ Knihovna XLSX se nenačetla');return;}
+  var hdr=['Čas','Uživatel','DC','Typ','SKU','Klient','LPN','Lot','Z lokace','Do lokace','Množství před','Změna','Množství po','Parametr','Stará hodnota','Nová hodnota','Důvod','Poznámka'];
+  var aoa=[hdr].concat(histRows.map(function(m){return [new Date(m.created_at).toLocaleString('cs-CZ'),userMap[m.created_by]||'',dcCode(m.dc_id),TYPE_CS[m.movement_type]||m.movement_type,m.sku||'',m.customer||'',m.lpn||'',m.lot||'',m.from_location||'',m.to_location||'',Number(m.qty_before)||0,Number(m.qty_delta)||0,Number(m.qty_after)||0,m.field_name?(FIELD_CS[m.field_name]||m.field_name):'',m.old_value||'',m.new_value||'',reasonName(m.reason_code),m.reason_note||''];}));
+  var wb=XLSX.utils.book_new(),ws=XLSX.utils.aoa_to_sheet(aoa);ws['!cols']=hdr.map(function(h){return {wch:Math.max(12,h.length+3)};});
+  XLSX.utils.book_append_sheet(wb,ws,'Historie');XLSX.writeFile(wb,'adjustments_'+new Date().toISOString().slice(0,10)+'.xlsx');toast('Export hotov ('+histRows.length+' řádků)');
+}
+</script>
+</body></html>

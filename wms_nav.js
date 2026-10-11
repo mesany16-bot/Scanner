@@ -4,8 +4,9 @@
   var ITEMS=[
     {k:'hub',      i:'📊', t:'Hub',        u:'wms_dashboard.html'},
     {k:'wms',      i:'🏭', t:'PRG WMS',    u:'wms_dashboard.html?app=wms'},
-    {k:'stock',    i:'📦', t:'Inventory',  u:'wms_stock.html'},
+    {k:'stock',    i:'🏷️', t:'SKU Setup',  u:'wms_stock.html'},
     {k:'balances', i:'🧮', t:'Zásoby',     u:'wms_balances.html'},
+    {k:'adjustments',i:'🔧', t:'Adjustments', u:'wms_adjustments.html'},
     {k:'dc',       i:'🏬', t:'DC',         u:'wms_warehouses.html'},
     {k:'locations',i:'📍', t:'Lokace',     u:'wms_locations.html'},
     {k:'clients',  i:'🏢', t:'Klienti',    u:'wms_clients.html'},
