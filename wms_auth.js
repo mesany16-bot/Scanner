@@ -71,7 +71,7 @@ async function onLoggedIn(user){
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('app').style.display='block';
   startSessionIdleWatch();
-  if(typeof afterLogin==='function')afterLogin();
+  (async function(){try{if(window.PRG_DC)await PRG_DC.init(supa,currentProfile);}catch(e){console.warn('DC',e);}if(typeof afterLogin==='function')afterLogin();})();
 }
 
 // ── Automatické odhlášení po 2h nečinnosti ──────────────────
