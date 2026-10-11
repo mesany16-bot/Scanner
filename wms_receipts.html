@@ -5,6 +5,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="wms_nav.js"></script>
 <script src="wms_dc.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="wms_docimport.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
 :root{--bg:#f0f2f5;--surface:#fff;--border:#e2e6ed;--accent:#0a7c4e;--accent-light:#e8f7f1;--danger:#c0392b;--danger-light:#fdecea;--warning:#e67e22;--warning-light:#fef3e8;--info:#2980b9;--info-light:#eaf4fb;--text:#1a1d27;--muted:#7a8090;--shadow:0 2px 12px rgba(0,0,0,0.07);--sidebar-w:220px;}
@@ -81,7 +83,7 @@ function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
 supa.auth.getSession().then(function(res){if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}else{window.location.href='wms_dashboard.html';}});
 
 var data=[];
-async function afterLogin(){load();}
+async function afterLogin(){load();if(window.PRG_DOCIMPORT)PRG_DOCIMPORT.attach({kind:'receipt',supa:supa,user:function(){return currentUser;},reload:load});}
 async function load(){
   var rq=supa.from('receipts').select('*,warehouses(name),profiles(name)').order('created_at',{ascending:false});if(window.PRG_DC)rq=PRG_DC.apply(rq,'warehouse_id');var res=await rq;
   data=res.data||[];renderDocs(data);
