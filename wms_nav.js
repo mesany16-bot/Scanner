@@ -13,6 +13,7 @@
     {k:'receipts', i:'📥', t:'Příjmy',     u:'wms_receipts.html'},
     {k:'deliveries',i:'📤',t:'Výdeje',     u:'wms_deliveries.html'},
     {k:'scans',    i:'📱', t:'Skeny',      u:'wms_scans.html'},
+    {k:'print',    i:'🖨️', t:'Šablony tisku', u:'wms_print.html', admin:true},
     {sep:true},
     {k:'inventura',i:'📋', t:'Inventory Tool', u:'wms_inventura.html'},
     {k:'users',    i:'👥', t:'Uživatelé',  u:'wms_users.html', admin:true}

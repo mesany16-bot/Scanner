@@ -6,6 +6,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="wms_nav.js"></script>
 <script src="wms_dc.js"></script>
+<script src="wms_print.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
@@ -134,6 +135,7 @@ body{overflow-x:hidden;}
     </div>
     <div class="lf-bar"><span id="lf-info" style="flex:1;min-width:160px;font-size:12px;color:var(--muted)">Načítám…</span>
       <button class="btn btn-secondary" onclick="resetFilters()">Zrušit filtry</button>
+      <button class="btn btn-secondary" onclick="printLocLabels()">🖨 Štítky lokací</button>
       <button class="btn btn-secondary" onclick="exportXlsx()">📊 Export XLSX</button></div>
     <div style="overflow-x:auto;">
     <table><thead><tr><th>Kód</th><th>Typ</th><th>Řada</th><th>Pole</th><th>Patro</th><th>Pozice</th><th>Max. výška</th><th>DC</th><th>Stav</th><th id="th-act" style="display:none">Akce</th></tr></thead>
@@ -306,6 +308,13 @@ async function delLoc(id){
 /* ---- export / šablona ---- */
 var COLS=['Kód','Typ','Řada','Pole','Patro','Pozice','Nosník','Kapacita nosníku (mm)','Max. výška (mm)','X (m)','Y (m)','Aktivní','Poznámka'];
 function rowToArr(l){return [l.code,l.zone_type,l.row_no,l.bay_no,l.level_no,l.slot,l.beam_key,l.beam_cap_mm,l.max_height_mm,l.x_m,l.y_m,l.is_active===false?'ne':'ano',l.note];}
+function printLocLabels(){
+  if(!window.PRG_PRINT){toast('Modul tisku se nenačetl');return;}
+  if(!shown.length){toast('⚠️ Žádné lokace k tisku (uprav filtr)');return;}
+  if(shown.length>300&&!confirm('Vytisknout '+shown.length+' štítků? Doporučuju zúžit filtr.'))return;
+  var list=shown.map(function(l){return {dc:dcCode(l.dc_id),code:l.code,row:l.row_no,bay:l.bay_no,level:l.level_no,zone:l.zone_type};});
+  PRG_PRINT.printLabels(supa,'label_location',list,{dcId:shown[0].dc_id,userId:currentUser&&currentUser.id});
+}
 function exportXlsx(){
   if(!shown.length){toast('Není co exportovat');return;}
   var aoa=[COLS.concat(['DC'])].concat(shown.map(function(l){return rowToArr(l).concat([dcCode(l.dc_id)]);}));

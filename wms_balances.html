@@ -6,6 +6,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="wms_nav.js"></script>
 <script src="wms_dc.js"></script>
+<script src="wms_print.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
@@ -136,6 +137,7 @@ body{overflow-x:hidden;}
     </div>
     <div class="lf-bar"><span id="lf-info" style="flex:1;min-width:160px;font-size:12px;color:var(--muted)">Načítám…</span>
       <button class="btn btn-secondary" onclick="resetFilters()">Zrušit filtry</button>
+      <button class="btn btn-secondary" onclick="printPalletLabels()">🖨 Štítky palet</button>
       <button class="btn btn-secondary" onclick="exportXlsx()">📊 Export XLSX</button></div>
     <div style="overflow-x:auto;">
     <table><thead><tr><th>SKU</th><th>Popis</th><th>Klient</th><th>Lokace</th><th>LPN</th><th>Lot</th><th>Kond.</th><th style="text-align:right">Celkem</th><th style="text-align:right">Dostupné</th><th style="text-align:right">Rezerv.</th><th style="text-align:right">Nedost.</th><th>Příjem</th></tr></thead>
@@ -256,6 +258,13 @@ function render(){
     var rc=[r.receipt_no,r.received_at?new Date(r.received_at).toLocaleDateString('cs-CZ'):''].filter(Boolean).join(' · ');
     return '<tr><td style="font-family:\'JetBrains Mono\',monospace;font-size:12px">'+escH(r.sku)+'</td><td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escH(r.description)+'">'+escH(r.description||'–')+'</td><td>'+escH(r.customer||'–')+'</td><td style="font-family:\'JetBrains Mono\',monospace;font-size:12px">'+lc+'</td><td>'+escH(r.lpn||'–')+'</td><td>'+escH(r.lot||'–')+'</td><td>'+escH(r.condition_code||'–')+'</td><td class="num">'+nf(r.units_total)+'</td><td class="num">'+nf(r.units_available)+'</td><td class="num">'+nf(r.units_committed)+'</td><td class="num">'+nf(r.units_unavailable)+'</td><td style="font-size:11px;color:var(--muted)">'+escH(rc||'–')+'</td></tr>';
   }).join('');
+}
+function printPalletLabels(){
+  if(!window.PRG_PRINT){toast('Modul tisku se nenačetl');return;}
+  if(!shown.length){toast('⚠️ Žádné zásoby k tisku (uprav filtr)');return;}
+  if(shown.length>300&&!confirm('Vytisknout '+shown.length+' štítků? Doporučuju zúžit filtr.'))return;
+  var list=shown.map(function(r){return {customer:r.customer||'',dc:dcCode(r.dc_id),sku:r.sku,description:r.description||'',ean:'',qty:r.units_total,lot:r.lot||'',location:r.location_code||'',lpn:r.lpn||'',sscc:'',received:r.received_at||''};});
+  PRG_PRINT.printLabels(supa,'label_pallet',list,{dcId:shown[0].dc_id,userId:currentUser&&currentUser.id});
 }
 function exportXlsx(){
   if(!shown.length){toast('Není co exportovat');return;}

@@ -6,6 +6,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="wms_nav.js"></script>
 <script src="wms_dc.js"></script>
+<script src="wms_print.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
 :root{--bg:#f0f2f5;--surface:#fff;--border:#e2e6ed;--accent:#0a7c4e;--accent-light:#e8f7f1;--danger:#c0392b;--danger-light:#fdecea;--warning:#e67e22;--warning-light:#fef3e8;--info:#2980b9;--info-light:#eaf4fb;--text:#1a1d27;--muted:#7a8090;--shadow:0 2px 12px rgba(0,0,0,0.07);--sidebar-w:220px;}
@@ -208,7 +209,7 @@ function render(d){
       +'<td style="text-align:right">'+sb+'</td>'
       +'<td><div style="display:flex;gap:4px">'
         +'<a href="wms_item.html?id='+i.id+'" class="btn btn-secondary btn-sm">Detail</a>'
-        +'<button class="btn btn-secondary btn-sm" onclick="edit('+i.id+')">✏️</button>'
+        +'<button class="btn btn-secondary btn-sm" title="Štítek SKU" onclick="printSkuLabel('+i.id+')">🖨</button>'+'<button class="btn btn-secondary btn-sm" onclick="edit('+i.id+')">✏️</button>'
         +'<button class="btn btn-danger btn-sm" onclick="del('+i.id+')">🗑</button>'
       +'</div></td></tr>';}).join('');
 }
@@ -233,6 +234,14 @@ function openModal(item){
   document.getElementById('f-wh2').value=item?(item.warehouse_id||''):((window.PRG_DC&&PRG_DC.currentId()!=null)?PRG_DC.currentId():'');
   document.getElementById('f-cl2').value=item?(item.client_id||''):'';
   document.getElementById('modal').style.display='flex';
+}
+function printSkuLabel(id){
+  if(!window.PRG_PRINT){toast('Modul tisku se nenačetl');return;}
+  var i=data.find(function(x){return x.id===id;});if(!i)return;
+  var n=parseInt(prompt('Kolik štítků vytisknout?','1'),10);if(!n||n<1)return;if(n>500)n=500;
+  var c={sku:i.sku,description:i.description||'',ean:i.ean||i.sku,client:(i.clients&&i.clients.name)||'',dc:(i.warehouses&&(i.warehouses.code||i.warehouses.name))||''};
+  var list=[];for(var k=0;k<n;k++)list.push(c);
+  PRG_PRINT.printLabels(supa,'label_sku',list,{dcId:i.warehouse_id,clientId:i.client_id,userId:currentUser&&currentUser.id});
 }
 function edit(id){openModal(data.find(function(i){return i.id===id;}));}
 async function save(){

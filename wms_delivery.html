@@ -5,6 +5,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="wms_nav.js"></script>
 <script src="wms_dc.js"></script>
+<script src="wms_print.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
 :root{--bg:#f0f2f5;--surface:#fff;--border:#e2e6ed;--accent:#0a7c4e;--accent-light:#e8f7f1;--danger:#c0392b;--danger-light:#fdecea;--warning:#e67e22;--warning-light:#fef3e8;--info:#2980b9;--info-light:#eaf4fb;--text:#1a1d27;--muted:#7a8090;--shadow:0 2px 12px rgba(0,0,0,0.07);--sidebar-w:220px;}
@@ -66,6 +67,7 @@ body{overflow-x:hidden;}
   <button class="hamburger-btn" onclick="toggleSidebar()">&#9776;</button>
   <a href="wms_deliveries.html" class="back-btn">&#8592; Zpet</a>
   <h2 id="page-title">&#128228; Novy vydejovy doklad</h2>
+  <span id="print-btns" style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm" style="background:#fff;color:var(--text);border:1.5px solid var(--border)" onclick="printDoc('pick_list')">🖨 Pick list</button><button class="btn btn-sm" style="background:#fff;color:var(--text);border:1.5px solid var(--border)" onclick="printDoc('packing_list')">🖨 Packing list</button><button class="btn btn-sm" style="background:#fff;color:var(--text);border:1.5px solid var(--border)" onclick="printDoc('delivery_note')">🖨 Dodací list</button></span>
   <div class="topbar-actions" id="topbar-actions"></div>
 </div>
 <div class="content" style="max-width:1000px">
@@ -142,6 +144,12 @@ function statusBadge(s){
   return m[s]||s;
 }
 
+
+function printDoc(type){
+  if(!docId){toast('Nejdřív doklad ulož');return;}
+  if(!window.PRG_PRINT){toast('Modul tisku se nenačetl');return;}
+  PRG_PRINT.printDocument(supa,type,docId,{user:(currentProfile&&currentProfile.name)||'',userId:currentUser&&currentUser.id});
+}
 async function afterLogin(){
   var params=new URLSearchParams(window.location.search);
   docId=parseInt(params.get('id'))||null;
