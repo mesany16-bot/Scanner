@@ -4,6 +4,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>PRG Systems</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="wms_dc.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
 :root{--bg:#f0f2f5;--surface:#fff;--border:#e2e6ed;--accent:#0a7c4e;--accent-light:#e8f7f1;--danger:#c0392b;--danger-light:#fdecea;--warning:#e67e22;--warning-light:#fef3e8;--info:#2980b9;--info-light:#eaf4fb;--text:#1a1d27;--muted:#7a8090;--shadow:0 2px 12px rgba(0,0,0,0.07);--sidebar-w:220px;}
@@ -59,6 +60,24 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 .mode-select-btn .msb-sub{font-size:12px;font-weight:400;opacity:0.85;display:block;margin-top:2px;}
 .mode-select-btn.wms{background:var(--accent);}
 .mode-select-btn.inv{background:var(--info);}
+/* mobilní zobrazení – sjednoceno s Inventory Tool */
+@media(max-width:900px){
+body{overflow-x:hidden;}
+#main{min-width:0;max-width:100%;}
+.content{padding:12px !important;min-width:0;max-width:100%;}
+.card{min-width:0;max-width:100%;}
+.topbar{flex-wrap:wrap;gap:8px;padding:10px 12px !important;}
+.topbar h2{font-size:19px !important;min-width:0;flex:1 1 auto;}
+.topbar-actions{flex-wrap:wrap;gap:6px;margin-left:auto;}
+#last-refresh{display:none;}
+#theme-popover{right:8px !important;max-width:calc(100vw - 16px);}
+.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:10px !important;}
+.two-col{grid-template-columns:minmax(0,1fr) !important;}
+.stat-grid>*,.two-col>*{min-width:0;}
+.form-row{grid-template-columns:1fr !important;}
+.stat-card{padding:14px !important;}
+.stat-card .value{font-size:28px;}
+}
 </style>
 </head>
 <body>
@@ -132,9 +151,10 @@ setTimeout(function(){
   <div id="sidebar">
     <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
     <nav>
-      <div class="nav-item active" onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Hub</div>
+      <div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Hub</div>
+      <div class="nav-item active" onclick="go('wms_dashboard.html?app=wms')"><span class="nav-icon">🏭</span> PRG WMS</div>
       <div class="nav-item" onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Inventory</div>
-      <div class="nav-item" onclick="go('wms_warehouses.html')"><span class="nav-icon">🏭</span> Sklady</div>
+      <div class="nav-item" onclick="go('wms_warehouses.html')"><span class="nav-icon">🏬</span> DC</div>
       <div class="nav-item" onclick="go('wms_clients.html')"><span class="nav-icon">🏢</span> Klienti</div>
       <div class="nav-item" onclick="go('wms_receipts.html')"><span class="nav-icon">📥</span> Příjmy</div>
       <div class="nav-item" onclick="go('wms_deliveries.html')"><span class="nav-icon">📤</span> Výdeje</div>
@@ -370,10 +390,11 @@ async function onLoggedIn(user){
   document.getElementById('mode-select-screen').style.display='flex';
 }
 
-function enterMode(mode){
+async function enterMode(mode){
   if(mode==='inventura'){ window.location.href='wms_inventura.html'; return; }
   document.getElementById('mode-select-screen').style.display='none';
   document.getElementById('app').style.display='block';
+  try{if(window.PRG_DC)await PRG_DC.init(supa,currentProfile);}catch(e){console.warn('DC',e);}
   loadDashboard();
 }
 
@@ -382,15 +403,16 @@ function go(u){window.location.href=u;}
 function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
 var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(_tt);_tt=setTimeout(function(){e.classList.remove('show');},2800);}
 
+function dcq(q,c){return window.PRG_DC?PRG_DC.apply(q,c):q;}
 async function loadDashboard(){
   var today=new Date().toISOString().slice(0,10);
   var [sr,cr,scr,lr,rr,dr]=await Promise.all([
-    supa.from('stock_items').select('id',{count:'exact'}),
+    dcq(supa.from('stock_items').select('id',{count:'exact'}),'warehouse_id'),
     supa.from('clients').select('id',{count:'exact'}),
-    supa.from('scans').select('id',{count:'exact'}).gte('scanned_at',today),
-    supa.from('stock_items').select('id,sku,quantity,min_stock').order('quantity'),
-    supa.from('receipts').select('*').order('created_at',{ascending:false}).limit(5),
-    supa.from('deliveries').select('*,clients(name)').order('created_at',{ascending:false}).limit(5)
+    dcq(supa.from('scans').select('id',{count:'exact'}).gte('scanned_at',today),'dc_id'),
+    dcq(supa.from('stock_items').select('id,sku,quantity,min_stock').order('quantity'),'warehouse_id'),
+    dcq(supa.from('receipts').select('*').order('created_at',{ascending:false}).limit(5),'warehouse_id'),
+    dcq(supa.from('deliveries').select('*,clients(name)').order('created_at',{ascending:false}).limit(5),'warehouse_id')
   ]);
   document.getElementById('stat-stock').textContent=sr.count||0;
   document.getElementById('stat-clients').textContent=cr.count||0;

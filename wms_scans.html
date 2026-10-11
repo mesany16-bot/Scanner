@@ -4,6 +4,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Skeny – PRG WMS</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
 :root{--bg:#f0f2f5;--surface:#fff;--border:#e2e6ed;--accent:#0a7c4e;--accent-light:#e8f7f1;--danger:#c0392b;--danger-light:#fdecea;--warning:#e67e22;--warning-light:#fef3e8;--info:#2980b9;--info-light:#eaf4fb;--text:#1a1d27;--muted:#7a8090;--shadow:0 2px 12px rgba(0,0,0,0.07);--sidebar-w:220px;}
@@ -62,6 +63,34 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 @media(min-width:901px){.hamburger-btn{display:none;}#sidebar-close-btn{display:none !important;}}
 @media(max-width:900px){:root{--sidebar-w:0px;}#sidebar{transform:translateX(-220px);width:220px;}#sidebar.open{transform:translateX(0);}#sidebar-close-btn{display:block !important;}#main{margin-left:0;}.content{padding:14px;}.topbar{padding:11px 14px;}}
 
+/* mobilní zobrazení – sjednoceno s Inventory Tool */
+@media(max-width:900px){
+body{overflow-x:hidden;}
+#main{min-width:0;max-width:100%;}
+.content{padding:12px !important;min-width:0;max-width:100%;}
+.card{min-width:0;max-width:100%;}
+.topbar{flex-wrap:wrap;gap:8px;padding:10px 12px !important;}
+.topbar h2{font-size:19px !important;min-width:0;flex:1 1 auto;}
+.topbar-actions{flex-wrap:wrap;gap:6px;margin-left:auto;}
+#last-refresh{display:none;}
+#theme-popover{right:8px !important;max-width:calc(100vw - 16px);}
+.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:10px !important;}
+.two-col{grid-template-columns:minmax(0,1fr) !important;}
+.stat-grid>*,.two-col>*{min-width:0;}
+.form-row{grid-template-columns:1fr !important;}
+}
+
+.sf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;padding:12px 16px;}
+.sf-grid label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;}
+.sf-grid input,.sf-grid select{width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none;background:#fff;font-family:inherit;}
+.sf-grid input:focus,.sf-grid select:focus{border-color:var(--accent);}
+.sf-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 16px;border-top:1px solid var(--border);background:#fafbfc;}
+.sf-bar .sf-info{flex:1;min-width:160px;font-size:12px;color:var(--muted);}
+.sf-quick{display:flex;gap:6px;flex-wrap:wrap;padding:12px 16px 0;}
+.sf-quick button{padding:5px 11px;border:1.5px solid var(--border);border-radius:20px;background:#fff;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;}
+.sf-quick button:hover{border-color:var(--accent);color:var(--accent);}
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap;}
+th.sortable:hover{color:var(--accent);}
 </style>
 </head>
 <body>
@@ -83,7 +112,8 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
     <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
     <nav>
       <div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Hub</div>
-      <div class="nav-item " onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Sklad</div>
+      <div class="nav-item " onclick="go('wms_dashboard.html?app=wms')"><span class="nav-icon">🏭</span> PRG WMS</div>
+      <div class="nav-item " onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Inventory</div>
       <div class="nav-item " onclick="go('wms_warehouses.html')"><span class="nav-icon">🏭</span> Sklady</div>
       <div class="nav-item " onclick="go('wms_clients.html')"><span class="nav-icon">🏢</span> Klienti</div>
       <div class="nav-item " onclick="go('wms_receipts.html')"><span class="nav-icon">📥</span> Příjmy</div>
@@ -105,13 +135,41 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 <div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">☰</button><h2>📱 Skeny</h2></div>
 <div class="content">
   <div class="card">
-    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">
-      <input id="search" type="text" placeholder="Hledat EAN, IoT ID…" oninput="filter()" style="flex:1;min-width:150px;padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none">
-      <input id="f-date" type="date" onchange="filter()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none">
+    <div class="sf-quick">
+      <button onclick="quickRange(0)">Dnes</button>
+      <button onclick="quickRange(1)">Včera</button>
+      <button onclick="quickRange(7)">7 dní</button>
+      <button onclick="quickRange(30)">30 dní</button>
+      <button onclick="quickRange(-1)">Vše</button>
+    </div>
+    <div class="sf-grid">
+      <div><label>Hledat</label><input id="search" type="text" placeholder="EAN, IoT ID, box, lokace…" oninput="applyFilters()"></div>
+      <div><label>Od</label><input id="f-from" type="date" onchange="reloadRange()"></div>
+      <div><label>Do</label><input id="f-to" type="date" onchange="reloadRange()"></div>
+      <div><label>Uživatel</label><select id="f-user" onchange="applyFilters()"><option value="">Všichni</option></select></div>
+      <div><label>Režim</label><select id="f-mode" onchange="applyFilters()"><option value="">Všechny</option><option value="outer">Outer</option><option value="inner">Inner</option><option value="none">Bez režimu</option></select></div>
+      <div><label>Ověřeno</label><select id="f-ver" onchange="applyFilters()"><option value="">Vše</option><option value="1">Ověřeno</option><option value="0">Neověřeno</option></select></div>
+      <div><label>Lokace</label><select id="f-loc" onchange="applyFilters()"><option value="">Všechny</option></select></div>
+      <div><label>Typ kódu</label><select id="f-kind" onchange="applyFilters()"><option value="">Vše</option><option value="ean">EAN</option><option value="iot">IoT ID</option></select></div>
+      <div><label>Čas od</label><input id="f-tfrom" type="time" onchange="applyFilters()"></div>
+      <div><label>Čas do</label><input id="f-tto" type="time" onchange="applyFilters()"></div>
+    </div>
+    <div class="sf-bar">
+      <span class="sf-info" id="sf-info">Načítám…</span>
+      <button class="btn btn-secondary" onclick="resetFilters()">Zrušit filtry</button>
+      <button class="btn btn-primary" onclick="exportScansXlsx()">📊 Export XLSX</button>
     </div>
     <div style="overflow-x:auto;">
-    <table><thead><tr><th>EAN / IoT ID</th><th>Box</th><th>Lokace</th><th>Režim</th><th>Ověřeno</th><th>Uživatel</th><th>Čas</th></tr></thead>
-    <tbody id="tbody"><tr class="empty-row"><td colspan="7">Načítám…</td></tr></tbody></table>
+    <table><thead><tr>
+      <th class="sortable" onclick="sortBy('code')">EAN / IoT ID <span id="s-code"></span></th>
+      <th class="sortable" onclick="sortBy('box')">Box <span id="s-box"></span></th>
+      <th class="sortable" onclick="sortBy('loc')">Lokace <span id="s-loc"></span></th>
+      <th>Režim</th><th>Ověřeno</th>
+      <th class="sortable" onclick="sortBy('qty')">Množství <span id="s-qty"></span></th>
+      <th class="sortable" onclick="sortBy('user')">Uživatel <span id="s-user"></span></th>
+      <th class="sortable" onclick="sortBy('time')">Čas <span id="s-time">▼</span></th>
+    </tr></thead>
+    <tbody id="tbody"><tr class="empty-row"><td colspan="8">Načítám…</td></tr></tbody></table>
     </div>
   </div>
 </div>
@@ -126,8 +184,8 @@ var supa=supabase.createClient(SUPA_URL,SUPA_KEY);
 var currentUser=null,currentProfile=null;
 async function doLogin(){var email=document.getElementById('login-email').value.trim();var pass=document.getElementById('login-pass').value;if(!email||!pass){document.getElementById('auth-msg').textContent='⚠️ Vyplň e-mail a heslo';return;}document.getElementById('auth-msg').textContent='⏳ Přihlašuji…';var res=await supa.auth.signInWithPassword({email,password:pass});if(res.error){document.getElementById('auth-msg').textContent='❌ '+res.error.message;return;}await onLoggedIn(res.data.user);}
 // idle logout
-var SESSION_IDLE_MS=2*60*60*1000;var sessionIdleTimer=null;function startSessionIdleWatch(){function reset(){clearTimeout(sessionIdleTimer);sessionIdleTimer=setTimeout(async function(){await supa.auth.signOut();alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');window.location.reload();},SESSION_IDLE_MS);}['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){document.addEventListener(evt,reset,{passive:true});});reset();}
-async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}var allowed=currentProfile.allowed_apps;if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1){alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';if(typeof afterLogin==='function')afterLogin();startSessionIdleWatch();}
+var SESSION_IDLE_MS=2*60*60*1000;var sessionIdleTimer=null;function startSessionIdleWatch(){function reset(){clearTimeout(sessionIdleTimer);sessionIdleTimer=setTimeout(async function(){await supa.auth.signOut();alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');window.location.href='wms_dashboard.html';},SESSION_IDLE_MS);}['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){document.addEventListener(evt,reset,{passive:true});});reset();}
+async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}var allowed=currentProfile.allowed_apps;if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1){alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';if(typeof afterLogin==='function')afterLogin();startSessionIdleWatch();}
 async function doLogout(){await supa.auth.signOut();window.location.href='wms_dashboard.html';}
 function go(u){window.location.href=u;}
 function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
@@ -137,24 +195,131 @@ function fmt(dt){return new Date(dt).toLocaleString('cs-CZ');}
 function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
 supa.auth.getSession().then(function(res){
   if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}
-  else{document.getElementById('session-check').style.display='none';document.getElementById('auth-screen').style.display='flex';}
+  else{window.location.href='wms_dashboard.html';}
 });
 
-var data=[];
-async function afterLogin(){load();}
-async function load(){var res=await supa.from('scans').select('*,profiles(name)').order('scanned_at',{ascending:false}).limit(200);data=res.data||[];render(data);}
-function render(d){
+var data=[],shown=[],truncated=false,sortKey='time',sortDir=-1;
+var MAX_ROWS=10000,PAGE=1000;
+function escH(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function pad(n){return (n<10?'0':'')+n;}
+function dstr(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+async function afterLogin(){
+  var t=new Date(),f=new Date();f.setDate(f.getDate()-7);
+  document.getElementById('f-from').value=dstr(f);document.getElementById('f-to').value=dstr(t);
+  await load();
+}
+function quickRange(days){
+  var t=new Date(),f=new Date(),to=document.getElementById('f-to'),from=document.getElementById('f-from');
+  if(days===-1){from.value='';to.value='';}
+  else if(days===0){from.value=dstr(t);to.value=dstr(t);}
+  else if(days===1){f.setDate(f.getDate()-1);from.value=dstr(f);to.value=dstr(f);}
+  else{f.setDate(f.getDate()-days);from.value=dstr(f);to.value=dstr(t);}
+  load();
+}
+function reloadRange(){load();}
+async function load(){
+  var info=document.getElementById('sf-info');info.textContent='Načítám…';
+  var from=document.getElementById('f-from').value,to=document.getElementById('f-to').value;
+  var rows=[],off=0;truncated=false;
+  while(off<MAX_ROWS){
+    var q=supa.from('scans').select('*,profiles(name)').order('scanned_at',{ascending:false}).range(off,off+PAGE-1);
+    if(from)q=q.gte('scanned_at',new Date(from+'T00:00:00').toISOString());
+    if(to){var e=new Date(to+'T00:00:00');e.setDate(e.getDate()+1);q=q.lt('scanned_at',e.toISOString());}
+    var res=await q;
+    if(res.error){info.textContent='❌ '+res.error.message;return;}
+    var got=res.data||[];rows=rows.concat(got);
+    if(got.length<PAGE)break;
+    off+=PAGE;
+    if(off>=MAX_ROWS){truncated=true;}
+  }
+  data=rows;
+  fillSelects();
+  applyFilters();
+}
+function fillSelects(){
+  var us={},lc={};
+  data.forEach(function(s){var u=(s.profiles&&s.profiles.name)||'–';us[u]=1;if(s.location)lc[s.location]=1;});
+  var cu=document.getElementById('f-user').value,cl=document.getElementById('f-loc').value;
+  document.getElementById('f-user').innerHTML='<option value="">Všichni</option>'+Object.keys(us).sort().map(function(k){return '<option value="'+escH(k)+'">'+escH(k)+'</option>';}).join('');
+  document.getElementById('f-loc').innerHTML='<option value="">Všechny</option>'+Object.keys(lc).sort().map(function(k){return '<option value="'+escH(k)+'">'+escH(k)+'</option>';}).join('');
+  document.getElementById('f-user').value=cu;document.getElementById('f-loc').value=cl;
+}
+function hhmm(iso){var d=new Date(iso);return pad(d.getHours())+':'+pad(d.getMinutes());}
+function currentFilters(){
+  return {q:document.getElementById('search').value.trim(),from:document.getElementById('f-from').value,to:document.getElementById('f-to').value,
+    user:document.getElementById('f-user').value,mode:document.getElementById('f-mode').value,ver:document.getElementById('f-ver').value,
+    loc:document.getElementById('f-loc').value,kind:document.getElementById('f-kind').value,tfrom:document.getElementById('f-tfrom').value,tto:document.getElementById('f-tto').value};
+}
+function applyFilters(){
+  var f=currentFilters(),q=f.q.toLowerCase();
+  shown=data.filter(function(s){
+    var uname=(s.profiles&&s.profiles.name)||'–';
+    if(q){var hay=((s.ean||'')+' '+(s.iot_id||'')+' '+(s.box_number||'')+' '+(s.location||'')).toLowerCase();if(hay.indexOf(q)===-1)return false;}
+    if(f.user&&uname!==f.user)return false;
+    if(f.mode){var m=s.placement_mode||'none';if(m!==f.mode)return false;}
+    if(f.ver){if((f.ver==='1')!==!!s.verified)return false;}
+    if(f.loc&&s.location!==f.loc)return false;
+    if(f.kind==='ean'&&!s.ean)return false;
+    if(f.kind==='iot'&&!s.iot_id)return false;
+    if(f.tfrom||f.tto){var h=hhmm(s.scanned_at);if(f.tfrom&&h<f.tfrom)return false;if(f.tto&&h>f.tto)return false;}
+    return true;
+  });
+  sortRows();render();
+}
+function sortVal(s,k){
+  if(k==='code')return (s.ean||s.iot_id||'').toLowerCase();
+  if(k==='box')return String(s.box_number||'').toLowerCase();
+  if(k==='loc')return (s.location||'').toLowerCase();
+  if(k==='qty')return Number(s.quantity)||0;
+  if(k==='user')return ((s.profiles&&s.profiles.name)||'').toLowerCase();
+  return new Date(s.scanned_at).getTime();
+}
+function sortRows(){shown.sort(function(a,b){var x=sortVal(a,sortKey),y=sortVal(b,sortKey);return x<y?-sortDir:x>y?sortDir:0;});}
+function sortBy(k){if(sortKey===k)sortDir=-sortDir;else{sortKey=k;sortDir=(k==='time'||k==='qty')?-1:1;}
+  ['code','box','loc','qty','user','time'].forEach(function(x){var el=document.getElementById('s-'+x);if(el)el.textContent=x===sortKey?(sortDir===1?'▲':'▼'):'';});
+  sortRows();render();}
+function resetFilters(){
+  ['search','f-user','f-mode','f-ver','f-loc','f-kind','f-tfrom','f-tto'].forEach(function(id){document.getElementById(id).value='';});
+  var t=new Date(),f=new Date();f.setDate(f.getDate()-7);
+  document.getElementById('f-from').value=dstr(f);document.getElementById('f-to').value=dstr(t);
+  load();
+}
+function render(){
   var tb=document.getElementById('tbody');
-  if(!d.length){tb.innerHTML='<tr class="empty-row"><td colspan="7">Žádné skeny</td></tr>';return;}
-  tb.innerHTML=d.map(function(s){
+  var totalQty=shown.reduce(function(a,s){return a+(Number(s.quantity)||0);},0);
+  document.getElementById('sf-info').textContent='Zobrazeno '+shown.length+' z '+data.length+' načtených skenů · množství celkem '+totalQty+(truncated?' · ⚠️ načteno max '+MAX_ROWS+' řádků, zúž období':'');
+  var visible=shown.slice(0,1000);
+  if(!shown.length){tb.innerHTML='<tr class="empty-row"><td colspan="8">Žádné skeny</td></tr>';return;}
+  tb.innerHTML=visible.map(function(s){
     var code=s.ean||s.iot_id||'–';
     var uname=(s.profiles&&s.profiles.name)||'–';
     var mode=s.placement_mode==='outer'?'<span class="badge badge-blue">Outer</span>':s.placement_mode==='inner'?'<span class="badge badge-orange">Inner</span>':'–';
     var verified=s.verified?'<span class="badge badge-green">✅</span>':'<span class="badge badge-gray">–</span>';
-    return '<tr><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+code+'</td><td>'+(s.box_number||'–')+'</td><td>'+(s.location||'–')+'</td><td>'+mode+'</td><td>'+verified+'</td><td>'+uname+'</td><td style="font-size:11px;color:var(--muted)">'+new Date(s.scanned_at).toLocaleString('cs-CZ')+'</td></tr>';
-  }).join('');
+    return '<tr><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+escH(code)+'</td><td>'+escH(s.box_number||'–')+'</td><td>'+escH(s.location||'–')+'</td><td>'+mode+'</td><td>'+verified+'</td><td>'+escH(s.quantity==null?'–':s.quantity)+'</td><td>'+escH(uname)+'</td><td style="font-size:11px;color:var(--muted)">'+escH(fmt(s.scanned_at))+'</td></tr>';
+  }).join('')+(shown.length>1000?'<tr class="empty-row"><td colspan="8">Zobrazeno prvních 1000 řádků, export obsahuje všech '+shown.length+'.</td></tr>':'');
 }
-function filter(){var q=document.getElementById('search').value.toLowerCase();var d=document.getElementById('f-date').value;render(data.filter(function(s){var c=(s.ean||'')+(s.iot_id||'');return(!q||c.toLowerCase().includes(q))&&(!d||s.scanned_at.slice(0,10)===d);}));}
-
+function exportScansXlsx(){
+  if(!shown.length){toast('Není co exportovat');return;}
+  if(typeof XLSX==='undefined'){toast('Knihovna XLSX se nenačetla');return;}
+  var rows=shown.map(function(s){return {
+    'Čas':new Date(s.scanned_at),'EAN':s.ean||'','IoT ID':s.iot_id||'','Box':s.box_number||'','Lokace':s.location||'',
+    'Režim':s.placement_mode==='outer'?'Outer':s.placement_mode==='inner'?'Inner':'','Ověřeno':s.verified?'Ano':'Ne',
+    'Množství':Number(s.quantity)||0,'Uživatel':(s.profiles&&s.profiles.name)||''};});
+  var cols=['Čas','EAN','IoT ID','Box','Lokace','Režim','Ověřeno','Množství','Uživatel'];
+  var ws=XLSX.utils.json_to_sheet(rows,{header:cols,cellDates:true});
+  ws['!cols']=[{wch:19},{wch:18},{wch:18},{wch:10},{wch:14},{wch:9},{wch:9},{wch:10},{wch:20}];
+  ws['!autofilter']={ref:ws['!ref']};
+  for(var r=2;r<=rows.length+1;r++){var c=ws['A'+r];if(c){c.t='d';c.z='dd.mm.yyyy hh:mm:ss';}}
+  var f=currentFilters(),sum=[['Export skenů – PRG WMS'],['Vytvořeno',new Date().toLocaleString('cs-CZ')],['Vytvořil',(currentProfile&&currentProfile.name)||''],[],
+    ['Použité filtry'],['Hledat',f.q||'–'],['Období od',f.from||'–'],['Období do',f.to||'–'],['Čas od',f.tfrom||'–'],['Čas do',f.tto||'–'],
+    ['Uživatel',f.user||'Všichni'],['Režim',f.mode||'Všechny'],['Ověřeno',f.ver===''?'Vše':f.ver==='1'?'Ověřeno':'Neověřeno'],['Lokace',f.loc||'Všechny'],['Typ kódu',f.kind||'Vše'],[],
+    ['Počet skenů',shown.length],['Množství celkem',shown.reduce(function(a,s){return a+(Number(s.quantity)||0);},0)],[],['Podle uživatele','Skenů','Množství']];
+  var by={};shown.forEach(function(s){var u=(s.profiles&&s.profiles.name)||'–';by[u]=by[u]||[0,0];by[u][0]++;by[u][1]+=Number(s.quantity)||0;});
+  Object.keys(by).sort().forEach(function(u){sum.push([u,by[u][0],by[u][1]]);});
+  var ws2=XLSX.utils.aoa_to_sheet(sum);ws2['!cols']=[{wch:22},{wch:26},{wch:12}];
+  var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Skeny');XLSX.utils.book_append_sheet(wb,ws2,'Filtry a souhrn');
+  XLSX.writeFile(wb,'skeny_'+dstr(new Date())+'.xlsx');
+  toast('Export hotov ('+shown.length+' řádků)');
+}
 </script>
 </body></html>

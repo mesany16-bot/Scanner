@@ -4,6 +4,7 @@
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Inventura – PRG WMS</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="wms_dc.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
@@ -78,8 +79,9 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
     <div class="sidebar-logo">PRG Inventory Tool<span>Asset Inventory</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
     <nav>
       <div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Hub</div>
+      <div class="nav-item active" onclick="go('wms_inventura.html')"><span class="nav-icon">📋</span> Inventory Tool</div>
+      <div style="height:1px;background:rgba(255,255,255,0.15);margin:8px 18px"></div>
       <div class="nav-item" onclick="go('wms_dashboard.html?app=wms')"><span class="nav-icon">🏭</span> PRG WMS</div>
-      <div class="nav-item active" onclick="go('wms_inventura.html')"><span class="nav-icon">📋</span> Inventura</div>
       <div class="nav-item admin-only" onclick="go('wms_users.html')"><span class="nav-icon">👥</span> Uživatelé</div>
     </nav>
     <div class="sidebar-user">
@@ -264,6 +266,7 @@ async function onLoggedIn(user){
   document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});
   document.getElementById('auth-screen').style.display='none';
   document.getElementById('app').style.display='block';
+  try{if(window.PRG_DC)await PRG_DC.init(supa,currentProfile);}catch(e){console.warn('DC',e);}
   loadInvPage();
   startSessionIdleWatch();
 }
@@ -284,7 +287,7 @@ async function loadInvPage(){
   at.innerHTML='<tr class="empty-row"><td colspan="7">Načítám…</td></tr>';
   ct.innerHTML='<tr class="empty-row"><td colspan="8">Načítám…</td></tr>';
 
-  var lr=await supa.from('inventory_lists').select('id,name,created_at,status,started_by,started_at,completed_by,completed_at').order('created_at',{ascending:false});
+  var lq=supa.from('inventory_lists').select('id,name,created_at,status,started_by,started_at,completed_by,completed_at,dc_id').order('created_at',{ascending:false});if(window.PRG_DC)lq=PRG_DC.apply(lq,'dc_id');var lr=await lq;
   if(lr.error){
     ut.innerHTML='<tr class="empty-row"><td colspan="4">Chyba: '+lr.error.message+'</td></tr>';
     at.innerHTML='<tr class="empty-row"><td colspan="7">Chyba: '+lr.error.message+'</td></tr>';
@@ -318,7 +321,10 @@ async function loadInvPage(){
       '<td>'+found+' / '+total+'</td>'+
       '<td><span class="badge '+(extra>0?'badge-orange':'badge-gray')+'">'+extra+'</span></td>'+
       '<td style="font-size:12px;color:var(--muted)">'+(l.started_at?new Date(l.started_at).toLocaleString('cs-CZ'):'–')+'</td>'+
-      '<td style="text-align:right;white-space:nowrap"><button class="btn btn-primary btn-sm" onclick="finishInvFromDashboard('+l.id+',\''+esc(l.name)+'\')">✅ Dokončit</button></td>'+
+      '<td style="text-align:right;white-space:nowrap">'+
+        '<button class="btn btn-secondary btn-sm" onclick="restartInvList('+l.id+',\''+esc(l.name)+'\')">🔁 Restart</button> '+
+        '<button class="btn btn-primary btn-sm" onclick="finishInvFromDashboard('+l.id+',\''+esc(l.name)+'\')">✅ Dokončit</button>'+
+      '</td>'+
       '<td style="text-align:right;white-space:nowrap">'+
         '<button class="btn btn-secondary btn-sm" onclick="downloadInvCsv('+l.id+',\''+esc(l.name)+'\')">📥 CSV</button> '+
         '<button class="btn btn-secondary btn-sm" onclick="downloadInvXlsx('+l.id+',\''+esc(l.name)+'\')">📊 XLSX</button>'+
@@ -379,6 +385,17 @@ async function downloadInvXlsx(listId, listName){
   var wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Inventura');
   XLSX.writeFile(wb, 'inventura_'+listName.replace(/[^a-z0-9_-]/gi,'_')+'.xlsx');
+}
+
+async function restartInvList(id,name){
+  if(!confirm('Restartovat inventuru "'+name+'"?\n\nSmaže se veškerý dosavadní průběh: nalezené položky, nová umístění i přebývající položky. Inventura zůstane aktivní a začne se od nuly. Nejde to vrátit zpět (nejdřív si případně stáhni CSV/XLSX).'))return;
+  var r1=await supa.from('inventory_list_items').update({status:'pending',found_by:null,found_at:null,new_location:null}).eq('list_id',id);
+  if(r1.error){toast('❌ '+r1.error.message);return;}
+  var r2=await supa.from('inventory_extra_scans').delete().eq('list_id',id);
+  if(r2.error){toast('❌ '+r2.error.message);return;}
+  await supa.from('inventory_lists').update({started_at:new Date().toISOString()}).eq('id',id);
+  toast('🔁 Inventura restartována');
+  loadInvPage();
 }
 
 async function finishInvFromDashboard(id, name){
@@ -442,7 +459,9 @@ function uploadInvList(){
       var items=data.map(parseInvColumns).filter(function(it){return it.code;});
       if(!items.length){msg.style.color='var(--danger)';msg.textContent='❌ V souboru nebyl nalezen žádný sloupec s kódem.';return;}
       msg.textContent='⏳ Ukládám '+items.length+' položek…';
-      var listIns=await supa.from('inventory_lists').insert({name:listName}).select().single();
+      var dcId=window.PRG_DC?PRG_DC.currentId():null;
+      if(dcId==null){msg.style.color='var(--danger)';msg.textContent='❌ Vyber nahoře konkrétní DC (ne „Všechna DC“), do kterého se inventura nahraje.';return;}
+      var listIns=await supa.from('inventory_lists').insert({name:listName,dc_id:dcId}).select().single();
       if(listIns.error)throw listIns.error;
       var listId=listIns.data.id;
       var rows=items.map(function(it){return {list_id:listId,code:it.code,name:it.name,location:it.location};});

@@ -62,6 +62,22 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 @media(min-width:901px){.hamburger-btn{display:none;}#sidebar-close-btn{display:none !important;}}
 @media(max-width:900px){:root{--sidebar-w:0px;}#sidebar{transform:translateX(-220px);width:220px;}#sidebar.open{transform:translateX(0);}#sidebar-close-btn{display:block !important;}#main{margin-left:0;}.content{padding:14px;}.topbar{padding:11px 14px;}}
 
+/* mobilní zobrazení – sjednoceno s Inventory Tool */
+@media(max-width:900px){
+body{overflow-x:hidden;}
+#main{min-width:0;max-width:100%;}
+.content{padding:12px !important;min-width:0;max-width:100%;}
+.card{min-width:0;max-width:100%;}
+.topbar{flex-wrap:wrap;gap:8px;padding:10px 12px !important;}
+.topbar h2{font-size:19px !important;min-width:0;flex:1 1 auto;}
+.topbar-actions{flex-wrap:wrap;gap:6px;margin-left:auto;}
+#last-refresh{display:none;}
+#theme-popover{right:8px !important;max-width:calc(100vw - 16px);}
+.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:10px !important;}
+.two-col{grid-template-columns:minmax(0,1fr) !important;}
+.stat-grid>*,.two-col>*{min-width:0;}
+.form-row{grid-template-columns:1fr !important;}
+}
 </style>
 </head>
 <body>
@@ -83,8 +99,9 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
     <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
     <nav>
       <div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Hub</div>
-      <div class="nav-item " onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Sklad</div>
-      <div class="nav-item " onclick="go('wms_warehouses.html')"><span class="nav-icon">🏭</span> Sklady</div>
+      <div class="nav-item " onclick="go('wms_dashboard.html?app=wms')"><span class="nav-icon">🏭</span> PRG WMS</div>
+      <div class="nav-item " onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Inventory</div>
+      <div class="nav-item " onclick="go('wms_warehouses.html')"><span class="nav-icon">🏬</span> DC</div>
       <div class="nav-item active" onclick="go('wms_clients.html')"><span class="nav-icon">🏢</span> Klienti</div>
       <div class="nav-item " onclick="go('wms_receipts.html')"><span class="nav-icon">📥</span> Příjmy</div>
       <div class="nav-item " onclick="go('wms_deliveries.html')"><span class="nav-icon">📤</span> Výdeje</div>
@@ -137,8 +154,8 @@ var supa=supabase.createClient(SUPA_URL,SUPA_KEY);
 var currentUser=null,currentProfile=null;
 async function doLogin(){var email=document.getElementById('login-email').value.trim();var pass=document.getElementById('login-pass').value;if(!email||!pass){document.getElementById('auth-msg').textContent='⚠️ Vyplň e-mail a heslo';return;}document.getElementById('auth-msg').textContent='⏳ Přihlašuji…';var res=await supa.auth.signInWithPassword({email,password:pass});if(res.error){document.getElementById('auth-msg').textContent='❌ '+res.error.message;return;}await onLoggedIn(res.data.user);}
 // idle logout
-var SESSION_IDLE_MS=2*60*60*1000;var sessionIdleTimer=null;function startSessionIdleWatch(){function reset(){clearTimeout(sessionIdleTimer);sessionIdleTimer=setTimeout(async function(){await supa.auth.signOut();alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');window.location.reload();},SESSION_IDLE_MS);}['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){document.addEventListener(evt,reset,{passive:true});});reset();}
-async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}var allowed=currentProfile.allowed_apps;if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1){alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';if(typeof afterLogin==='function')afterLogin();startSessionIdleWatch();}
+var SESSION_IDLE_MS=2*60*60*1000;var sessionIdleTimer=null;function startSessionIdleWatch(){function reset(){clearTimeout(sessionIdleTimer);sessionIdleTimer=setTimeout(async function(){await supa.auth.signOut();alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');window.location.href='wms_dashboard.html';},SESSION_IDLE_MS);}['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){document.addEventListener(evt,reset,{passive:true});});reset();}
+async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}var allowed=currentProfile.allowed_apps;if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1){alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';if(typeof afterLogin==='function')afterLogin();startSessionIdleWatch();}
 async function doLogout(){await supa.auth.signOut();window.location.href='wms_dashboard.html';}
 function go(u){window.location.href=u;}
 function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
@@ -148,7 +165,7 @@ function fmt(dt){return new Date(dt).toLocaleString('cs-CZ');}
 function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
 supa.auth.getSession().then(function(res){
   if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}
-  else{document.getElementById('session-check').style.display='none';document.getElementById('auth-screen').style.display='flex';}
+  else{window.location.href='wms_dashboard.html';}
 });
 
 var data=[],editId=null;

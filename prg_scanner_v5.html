@@ -148,6 +148,21 @@
       background: var(--info-light); border-radius: 20px;
       padding: 5px 11px; font-size: 12px; font-weight: 700; color: var(--info);
     }
+    #dc-badge {
+      display: none;
+      align-items: center; gap: 4px;
+      background: #eef0f6; border-radius: 20px;
+      padding: 5px 10px; font-size: 12px; font-weight: 700; color: #3b4a6b;
+      cursor: pointer; user-select: none; white-space: nowrap;
+    }
+    .dc-opt {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      width: 100%; padding: 13px 14px; margin-bottom: 8px; border-radius: 12px;
+      border: 2px solid var(--border); background: var(--surface); color: var(--text);
+      font-size: 15px; font-weight: 600; text-align: left; cursor: pointer; font-family: inherit;
+    }
+    .dc-opt.sel { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+    .dc-opt small { font-weight: 500; color: var(--muted); }
     #switch-badge {
       display: none;
       align-items: center; gap: 4px;
@@ -402,6 +417,20 @@
   </div>
 </div>
 
+<!-- Modal: výběr DC -->
+<div class="modal-backdrop" id="modal-dc" style="display:none">
+  <div class="modal">
+    <h2>🏬 Distribuční centrum</h2>
+    <p id="dc-modal-hint" style="margin-bottom:10px">Vyber DC, ve kterém právě pracuješ.</p>
+    <div id="dc-opts"></div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin:6px 0 14px;cursor:pointer;">
+      <input type="checkbox" id="dc-make-default" style="width:18px;height:18px;"> Nastavit jako moje výchozí DC
+    </label>
+    <button class="modal-btn" style="background:var(--accent)" onclick="dcApply()">✅ Potvrdit</button>
+    <button class="modal-btn secondary" id="dc-cancel" onclick="closeModal('modal-dc')">Zrušit</button>
+  </div>
+</div>
+
 <!-- Modal: Hub - rozjetá inventura -->
 <div class="modal-backdrop" id="modal-hub-inv" style="display:none">
   <div class="modal">
@@ -563,6 +592,7 @@
 <header>
   <h1 id="hub-title" onclick="openHub()" style="cursor:pointer" title="Zpět do Hubu">📦 PRG Scanner</h1>
   <div style="display:flex;gap:8px;align-items:center;">
+    <div id="dc-badge" onclick="openDcModal()" title="Distribuční centrum">🏬 <span id="dc-label">–</span></div>
     <div id="switch-badge" onclick="switchAppMode(appMode==='inventura'?'wms':'inventura')">🔀 <span id="switch-badge-label">Inventura</span></div>
     <div id="mode-badge">📱 myDevices</div>
     <div id="user-badge" onclick="doLogout()">
@@ -757,6 +787,91 @@ function startSessionIdleWatch(){
   reset();
 }
 
+// ── DC (distribuční centra) ─────────────────────────────────
+var dcList = [], currentDcId = null, currentDcCode = '', dcDefaultId = null, dcPick = null, dcFirstPick = false;
+function dcSid(v) { return v == null ? '' : String(v); }
+function dcById(id) { for (var i = 0; i < dcList.length; i++) { if (dcSid(dcList[i].id) === dcSid(id)) return dcList[i]; } return null; }
+async function loadDcs(role) {
+  dcList = []; currentDcId = null; currentDcCode = ''; dcDefaultId = null;
+  try {
+    var wr = await supa.from('warehouses').select('id,code,name,is_active').order('code');
+    if (wr.error) throw wr.error;
+    var pr = await supa.from('profiles').select('allowed_dcs,default_dc').eq('id', currentUserId).single();
+    var allowed = pr.data ? pr.data.allowed_dcs : null;
+    dcDefaultId = pr.data ? pr.data.default_dc : null;
+    var active = (wr.data || []).filter(function(w){ return w.is_active !== false; });
+    var restricted = role !== 'admin' && Array.isArray(allowed);
+    dcList = restricted ? active.filter(function(w){ return allowed.map(dcSid).indexOf(dcSid(w.id)) !== -1; }) : active;
+    if (restricted && !dcList.length) return 'none';
+  } catch (e) {
+    console.warn('DC load failed', e);   // např. SQL pro DC ještě nebylo spuštěno – skener funguje bez DC
+    dcList = [];
+  }
+  var saved = null; try { saved = sessionStorage.getItem('prg_scanner_dc'); } catch (e) {}
+  if (saved && dcById(saved)) currentDcId = dcById(saved).id;
+  else if (dcDefaultId != null && dcById(dcDefaultId)) currentDcId = dcById(dcDefaultId).id;
+  else if (dcList.length) currentDcId = dcList[0].id;
+  updateDcBadge();
+  return (dcList.length > 1 && (dcDefaultId == null || !dcById(dcDefaultId)) && !saved) ? 'pick' : 'ok';
+}
+function updateDcBadge() {
+  var b = document.getElementById('dc-badge'), l = document.getElementById('dc-label');
+  var c = currentDcId != null ? dcById(currentDcId) : null;
+  currentDcCode = c ? c.code : '';
+  if (!c) { b.style.display = 'none'; return; }
+  l.textContent = c.code;
+  b.style.display = 'flex';
+  b.style.cursor = dcList.length > 1 ? 'pointer' : 'default';
+}
+function openDcModal(forcePick) {
+  if (!currentUser) return;
+  if (dcList.length <= 1) { if (dcList.length === 1) setStatus('🏬 Máš přístup jen do ' + dcList[0].code); return; }
+  dcPick = currentDcId;
+  var wrap = document.getElementById('dc-opts');
+  wrap.innerHTML = '';
+  dcList.forEach(function(w) {
+    var bt = document.createElement('button');
+    bt.className = 'dc-opt' + (dcSid(w.id) === dcSid(dcPick) ? ' sel' : '');
+    bt.innerHTML = '<span>' + escHtml(w.code) + ' <small>' + escHtml(w.name || '') + '</small></span><span>' + (dcSid(w.id) === dcSid(dcPick) ? '✔' : '') + '</span>';
+    bt.onclick = function() { dcPick = w.id; Array.prototype.forEach.call(wrap.children, function(c){ c.classList.remove('sel'); c.lastChild.textContent = ''; }); bt.classList.add('sel'); bt.lastChild.textContent = '✔'; syncDcDefaultBox(); };
+    wrap.appendChild(bt);
+  });
+  var first = !!forcePick; dcFirstPick = first;
+  document.getElementById('dc-modal-hint').textContent = first ? 'Vyber DC, ve kterém pracuješ. Můžeš ho nastavit jako výchozí – příště se zvolí samo.' : 'Přepnutí platí pro tuto relaci. Chceš-li změnit výchozí DC, zaškrtni volbu níže.';
+  document.getElementById('dc-cancel').style.display = first ? 'none' : 'block';
+  document.getElementById('dc-make-default').checked = first || (dcDefaultId != null && dcSid(dcDefaultId) === dcSid(dcPick));
+  document.getElementById('modal-dc').style.display = 'flex';
+}
+function syncDcDefaultBox() {
+  if (dcFirstPick) return;
+  document.getElementById('dc-make-default').checked = (dcDefaultId != null && dcSid(dcDefaultId) === dcSid(dcPick));
+}
+async function dcApply() {
+  if (dcPick == null) return;
+  var changed = dcSid(dcPick) !== dcSid(currentDcId);
+  if (changed && invList.length) {
+    var nm = invListMeta ? invListMeta.name : 'z Excelu v telefonu';
+    var warn = 'Právě máš rozjetou inventuru „' + nm + '“ (patří k DC ' + currentDcCode + '). Přepnutím DC se z ní odhlásíš.';
+    warn += (invListMeta && invListMeta.id) ? ' Na serveru zůstane aktivní.' : ' Je jen v tomto telefonu, její průběh se ztratí.';
+    if (!confirm(warn + ' Pokračovat?')) return;
+    stopCam();
+    clearInterval(invPollTimer);
+    invMode = false; invList = []; invExtra = []; invListMeta = null;
+    renderInvTable();
+  }
+  currentDcId = dcPick;
+  try { sessionStorage.setItem('prg_scanner_dc', dcSid(currentDcId)); } catch (e) {}
+  if (document.getElementById('dc-make-default').checked && dcSid(dcDefaultId) !== dcSid(currentDcId)) {
+    var up = await supa.from('profiles').update({ default_dc: currentDcId }).eq('id', currentUserId);
+    if (up.error) { setStatus('⚠️ Výchozí DC se nepodařilo uložit: ' + up.error.message); }
+    else { dcDefaultId = currentDcId; }
+  }
+  updateDcBadge();
+  closeModal('modal-dc');
+  refreshModeUI(); updateScanBtn();
+  setStatus('🏬 DC: ' + currentDcCode + (changed ? ' · přepnuto' : ''));
+}
+
 async function onLoggedIn(user) {
   currentUserId = user.id;
   // Get profile name
@@ -787,11 +902,19 @@ async function onLoggedIn(user) {
     window.location.reload();
     return;
   }
+  var dcState = await loadDcs(prof.data.role);
+  if (dcState === 'none') {
+    alert('Nemáš přidělené žádné DC. Kontaktuj administrátora.');
+    await supa.auth.signOut();
+    window.location.reload();
+    return;
+  }
   currentUser = prof.data.name;
   document.getElementById('user-display').textContent = currentUser;
   document.getElementById('modal-login').style.display = 'none';
   setStatus('✅ Přihlášen jako '+currentUser);
   if (!appMode) { document.getElementById('mode-select-screen').style.display = 'flex'; }
+  if (dcState === 'pick') openDcModal(true);
   startSessionIdleWatch();
 }
 
@@ -808,6 +931,7 @@ async function doCompleteOnboarding() {
   if (pwRes.error) { document.getElementById('onboard-msg').textContent = '❌ '+pwRes.error.message; return; }
   currentUser = name;
   document.getElementById('user-display').textContent = currentUser;
+  try { await loadDcs('user'); } catch (e) {}
   closeModal('modal-onboard');
   setStatus('✅ Vítej, '+currentUser+'!');
   if (!appMode) { document.getElementById('mode-select-screen').style.display = 'flex'; }
@@ -930,7 +1054,8 @@ function bottomModeBtn() {
 async function doLogout() {
   if (!confirm('Odhlásit se?')) return;
   await supa.auth.signOut();
-  currentUser=''; currentUserId=null;
+  currentUser=''; currentUserId=null; currentDcId=null; dcList=[]; try { sessionStorage.removeItem('prg_scanner_dc'); } catch (e) {}
+  document.getElementById('dc-badge').style.display='none';
   document.getElementById('user-display').textContent = '–';
   document.getElementById('login-msg').textContent = 'Přihlas se pro pokračování.';
   document.getElementById('modal-login').style.display = 'flex';
@@ -1186,7 +1311,7 @@ async function triggerScan() {
 async function sendScan(data) {
   if (!currentUserId) return;
   try {
-    await supa.from('scans').insert({
+    var row = {
       user_id: currentUserId,
       iot_id:  data.iot_id  || null,
       ean:     data.ean     || null,
@@ -1194,8 +1319,11 @@ async function sendScan(data) {
       location:       data.location || null,
       placement_mode: data.placement_mode || null,
       verified:       data.verified || false,
-      quantity:       data.quantity || 1
-    });
+      quantity:       data.quantity || 1,
+      dc_id:          currentDcId
+    };
+    if (currentDcId == null) delete row.dc_id;
+    await supa.from('scans').insert(row);
   } catch(e) { console.warn('Supabase sync failed:', e); }
 }
 
@@ -1507,7 +1635,9 @@ async function openInvServerPick() {
   var wrap = document.getElementById('inv-server-list-wrap');
   wrap.innerHTML = '<p style="color:var(--muted);font-size:14px;">Načítám…</p>';
   try {
-    var res = await supa.from('inventory_lists').select('id,name,created_at,status,started_by').in('status', ['uploaded','active']).order('created_at', {ascending:false}).limit(30);
+    var lq = supa.from('inventory_lists').select('id,name,created_at,status,started_by').in('status', ['uploaded','active']).order('created_at', {ascending:false}).limit(30);
+    if (currentDcId != null) lq = lq.eq('dc_id', currentDcId);
+    var res = await lq;
     if (res.error) throw res.error;
     var lists = res.data || [];
     if (!lists.length) { wrap.innerHTML = '<p style="color:var(--muted);font-size:14px;">Žádné dostupné seznamy na serveru.</p>'; return; }
@@ -1589,12 +1719,20 @@ async function pollInvServerState() {
       if (srv.status==='found' && item.status!=='found') {
         item.status='found'; item.ts=srv.found_at||''; item.tsn=0; item.user=srv.found_by||'';
         changed = true;
+      } else if (srv.status!=='found' && item.status==='found' && (!item.tsn || Date.now()-item.tsn>20000)) {
+        // inventura byla na serveru restartována
+        item.status='pending'; item.ts=''; item.tsn=0; item.user=''; changed = true;
       }
       var nl = srv.new_location || '';
       if (nl !== (item.newLoc||'')) { item.newLoc = nl; changed = true; }
     });
     var extraRes = await supa.from('inventory_extra_scans').select('code,found_by,found_at,new_location').eq('list_id', invListMeta.id);
     if (!extraRes.error) {
+      var srvCodes = {};
+      (extraRes.data||[]).forEach(function(r){ srvCodes[normalizeCode(r.code)] = 1; });
+      var before = invExtra.length;
+      invExtra = invExtra.filter(function(e){ return srvCodes[normalizeCode(e.code)] || (e.tsn && Date.now()-e.tsn<=20000); });
+      if (invExtra.length !== before) changed = true;
       (extraRes.data||[]).forEach(function(r){
         var norm = normalizeCode(r.code);
         var ex = invExtra.find(function(e){ return normalizeCode(e.code)===norm; });
@@ -1623,6 +1761,7 @@ async function handleInvCode(code) {
         var r = await supa.from('inventory_list_items').select('status,found_by,found_at,new_location').eq('id', item.id).single();
         if (r.data) {
           if (r.data.status==='found' && item.status!=='found') { item.status='found'; item.ts=r.data.found_at||''; item.tsn=0; item.user=r.data.found_by||''; }
+          else if (r.data.status!=='found' && item.status==='found') { item.status='pending'; item.ts=''; item.tsn=0; item.user=''; }
           item.newLoc = r.data.new_location || '';
         }
       } catch(e) {}

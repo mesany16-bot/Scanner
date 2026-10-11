@@ -2,7 +2,7 @@
 <html lang="cs">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Sklady – PRG WMS</title>
+<title>DC – PRG WMS</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
@@ -62,6 +62,22 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 @media(min-width:901px){.hamburger-btn{display:none;}#sidebar-close-btn{display:none !important;}}
 @media(max-width:900px){:root{--sidebar-w:0px;}#sidebar{transform:translateX(-220px);width:220px;}#sidebar.open{transform:translateX(0);}#sidebar-close-btn{display:block !important;}#main{margin-left:0;}.content{padding:14px;}.topbar{padding:11px 14px;}}
 
+/* mobilní zobrazení – sjednoceno s Inventory Tool */
+@media(max-width:900px){
+body{overflow-x:hidden;}
+#main{min-width:0;max-width:100%;}
+.content{padding:12px !important;min-width:0;max-width:100%;}
+.card{min-width:0;max-width:100%;}
+.topbar{flex-wrap:wrap;gap:8px;padding:10px 12px !important;}
+.topbar h2{font-size:19px !important;min-width:0;flex:1 1 auto;}
+.topbar-actions{flex-wrap:wrap;gap:6px;margin-left:auto;}
+#last-refresh{display:none;}
+#theme-popover{right:8px !important;max-width:calc(100vw - 16px);}
+.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:10px !important;}
+.two-col{grid-template-columns:minmax(0,1fr) !important;}
+.stat-grid>*,.two-col>*{min-width:0;}
+.form-row{grid-template-columns:1fr !important;}
+}
 </style>
 </head>
 <body>
@@ -83,8 +99,9 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
     <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
     <nav>
       <div class="nav-item " onclick="go('wms_dashboard.html')"><span class="nav-icon">📊</span> Hub</div>
-      <div class="nav-item " onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Sklad</div>
-      <div class="nav-item active" onclick="go('wms_warehouses.html')"><span class="nav-icon">🏭</span> Sklady</div>
+      <div class="nav-item " onclick="go('wms_dashboard.html?app=wms')"><span class="nav-icon">🏭</span> PRG WMS</div>
+      <div class="nav-item " onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Inventory</div>
+      <div class="nav-item active" onclick="go('wms_warehouses.html')"><span class="nav-icon">🏬</span> DC</div>
       <div class="nav-item " onclick="go('wms_clients.html')"><span class="nav-icon">🏢</span> Klienti</div>
       <div class="nav-item " onclick="go('wms_receipts.html')"><span class="nav-icon">📥</span> Příjmy</div>
       <div class="nav-item " onclick="go('wms_deliveries.html')"><span class="nav-icon">📤</span> Výdeje</div>
@@ -102,21 +119,22 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
   <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
   <div id="main">
     
-<div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">☰</button><h2>🏭 Sklady</h2><div class="topbar-actions"><button class="btn btn-primary btn-sm" onclick="openModal()">+ Nový sklad</button></div></div>
+<div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">☰</button><h2>🏬 DC (distribuční centra)</h2><div class="topbar-actions"><button class="btn btn-primary btn-sm" onclick="openModal()">+ Nový sklad</button></div></div>
 <div class="content">
   <div class="card">
     <div style="padding:12px 16px;border-bottom:1px solid var(--border)"><input id="search" type="text" placeholder="Hledat sklad…" oninput="filter()" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"></div>
     <div style="overflow-x:auto;">
-    <table><thead><tr><th>Kód</th><th>Název</th><th>Město</th><th>Kontakt</th><th>Telefon</th><th>Akce</th></tr></thead>
-    <tbody id="tbody"><tr class="empty-row"><td colspan="6">Načítám…</td></tr></tbody></table>
+    <table><thead><tr><th>Kód</th><th>Název</th><th>Město</th><th>Stav</th><th>Kontakt</th><th>Telefon</th><th>Akce</th></tr></thead>
+    <tbody id="tbody"><tr class="empty-row"><td colspan="7">Načítám…</td></tr></tbody></table>
     </div>
   </div>
 </div>
 <div class="modal-backdrop" id="modal" style="display:none">
   <div class="modal-box">
-    <div class="modal-header"><h3 id="modal-title">Nový sklad</h3><button class="modal-close" onclick="closeModal('modal')">✕</button></div>
+    <div class="modal-header"><h3 id="modal-title">Nové DC / sklad</h3><button class="modal-close" onclick="closeModal('modal')">✕</button></div>
     <div class="modal-body">
-      <div class="form-row"><div class="form-group"><label>Kód *</label><input id="f-code" type="text" placeholder="SKLAD-01"></div><div class="form-group"><label>Název *</label><input id="f-name" type="text" placeholder="Hlavní sklad"></div></div>
+      <div class="form-row"><div class="form-group"><label>Kód *</label><input id="f-code" type="text" placeholder="DC29"></div><div class="form-group"><label>Název *</label><input id="f-name" type="text" placeholder="DC 29 Praha"></div></div>
+      <div class="form-row single"><div class="form-group"><label>Stav</label><select id="f-active"><option value="true">Aktivní</option><option value="false">Neaktivní (nezobrazuje se v přepínači DC)</option></select></div></div>
       <div class="form-row single"><div class="form-group"><label>Adresa</label><input id="f-address" type="text"></div></div>
       <div class="form-row"><div class="form-group"><label>Město</label><input id="f-city" type="text"></div><div class="form-group"><label>Stát</label><input id="f-country" type="text" value="CZ"></div></div>
       <div class="form-section">Kontaktní osoba</div>
@@ -138,8 +156,8 @@ var supa=supabase.createClient(SUPA_URL,SUPA_KEY);
 var currentUser=null,currentProfile=null;
 async function doLogin(){var email=document.getElementById('login-email').value.trim();var pass=document.getElementById('login-pass').value;if(!email||!pass){document.getElementById('auth-msg').textContent='⚠️ Vyplň e-mail a heslo';return;}document.getElementById('auth-msg').textContent='⏳ Přihlašuji…';var res=await supa.auth.signInWithPassword({email,password:pass});if(res.error){document.getElementById('auth-msg').textContent='❌ '+res.error.message;return;}await onLoggedIn(res.data.user);}
 // idle logout
-var SESSION_IDLE_MS=2*60*60*1000;var sessionIdleTimer=null;function startSessionIdleWatch(){function reset(){clearTimeout(sessionIdleTimer);sessionIdleTimer=setTimeout(async function(){await supa.auth.signOut();alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');window.location.reload();},SESSION_IDLE_MS);}['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){document.addEventListener(evt,reset,{passive:true});});reset();}
-async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}var allowed=currentProfile.allowed_apps;if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1){alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');await supa.auth.signOut();window.location.reload();return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';if(typeof afterLogin==='function')afterLogin();startSessionIdleWatch();}
+var SESSION_IDLE_MS=2*60*60*1000;var sessionIdleTimer=null;function startSessionIdleWatch(){function reset(){clearTimeout(sessionIdleTimer);sessionIdleTimer=setTimeout(async function(){await supa.auth.signOut();alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');window.location.href='wms_dashboard.html';},SESSION_IDLE_MS);}['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){document.addEventListener(evt,reset,{passive:true});});reset();}
+async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}var allowed=currentProfile.allowed_apps;if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1){alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';if(typeof afterLogin==='function')afterLogin();startSessionIdleWatch();}
 async function doLogout(){await supa.auth.signOut();window.location.href='wms_dashboard.html';}
 function go(u){window.location.href=u;}
 function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
@@ -149,7 +167,7 @@ function fmt(dt){return new Date(dt).toLocaleString('cs-CZ');}
 function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
 supa.auth.getSession().then(function(res){
   if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}
-  else{document.getElementById('session-check').style.display='none';document.getElementById('auth-screen').style.display='flex';}
+  else{window.location.href='wms_dashboard.html';}
 });
 
 var data=[],editId=null;
@@ -160,11 +178,12 @@ async function load(){
 }
 function render(d){
   var tb=document.getElementById('tbody');
-  if(!d.length){tb.innerHTML='<tr class="empty-row"><td colspan="6">Žádné sklady</td></tr>';return;}
+  if(!d.length){tb.innerHTML='<tr class="empty-row"><td colspan="7">Žádná DC</td></tr>';return;}
   tb.innerHTML=d.map(function(w){return '<tr>'
     +'<td><strong style="font-family:\'JetBrains Mono\',monospace">'+w.code+'</strong></td>'
     +'<td><strong>'+w.name+'</strong></td>'
     +'<td>'+(w.city||'–')+'</td>'
+    +'<td>'+(w.is_active===false?'<span class="badge badge-gray">Neaktivní</span>':'<span class="badge badge-green">Aktivní</span>')+'</td>'
     +'<td>'+(w.contact_person||'–')+'</td>'
     +'<td>'+(w.contact_phone||'–')+'</td>'
     +'<td><div style="display:flex;gap:6px">'
@@ -175,9 +194,10 @@ function render(d){
 function filter(){var q=document.getElementById('search').value.toLowerCase();render(data.filter(function(w){return !q||w.name.toLowerCase().includes(q)||w.code.toLowerCase().includes(q);}));}
 function openModal(w){
   editId=w?w.id:null;
-  document.getElementById('modal-title').textContent=w?'Upravit sklad':'Nový sklad';
+  document.getElementById('modal-title').textContent=w?'Upravit DC':'Nové DC';
   document.getElementById('f-code').value=w?w.code:'';
   document.getElementById('f-name').value=w?w.name:'';
+  document.getElementById('f-active').value=(w&&w.is_active===false)?'false':'true';
   document.getElementById('f-address').value=w?(w.address||''):'';
   document.getElementById('f-city').value=w?(w.city||''):'';
   document.getElementById('f-country').value=w?(w.country||'CZ'):'CZ';
@@ -192,12 +212,12 @@ async function save(){
   var code=document.getElementById('f-code').value.trim();
   var name=document.getElementById('f-name').value.trim();
   if(!code||!name){toast('⚠️ Zadej kód a název');return;}
-  var p={code,name,address:document.getElementById('f-address').value.trim()||null,city:document.getElementById('f-city').value.trim()||null,country:document.getElementById('f-country').value.trim()||'CZ',contact_person:document.getElementById('f-contact').value.trim()||null,contact_phone:document.getElementById('f-phone').value.trim()||null,contact_email:document.getElementById('f-email').value.trim()||null,notes:document.getElementById('f-notes').value.trim()||null,created_by:currentUser.id};
+  var p={code,name,is_active:document.getElementById('f-active').value==='true',address:document.getElementById('f-address').value.trim()||null,city:document.getElementById('f-city').value.trim()||null,country:document.getElementById('f-country').value.trim()||'CZ',contact_person:document.getElementById('f-contact').value.trim()||null,contact_phone:document.getElementById('f-phone').value.trim()||null,contact_email:document.getElementById('f-email').value.trim()||null,notes:document.getElementById('f-notes').value.trim()||null,created_by:currentUser.id};
   var res=editId?await supa.from('warehouses').update(p).eq('id',editId):await supa.from('warehouses').insert(p);
   if(res.error){toast('❌ '+res.error.message);return;}
-  toast(editId?'✅ Sklad uložen':'✅ Sklad vytvořen');closeModal('modal');load();
+  toast(editId?'✅ DC uloženo':'✅ DC vytvořeno');closeModal('modal');load();
 }
-async function del(id){if(!confirm('Smazat sklad?'))return;await supa.from('warehouses').delete().eq('id',id);toast('🗑 Smazáno');load();}
+async function del(id){if(!confirm('Smazat DC? Pokud k němu patří data, smazání se nepovede – raději ho deaktivuj.'))return;await supa.from('warehouses').delete().eq('id',id);toast('🗑 Smazáno');load();}
 
 </script>
 </body></html>
