@@ -113,7 +113,7 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
       <div class="form-row single"><div class="form-group"><label>Jméno</label><input id="f-name" type="text"></div></div>
       <div class="form-row"><div class="form-group"><label>Role</label><select id="f-role"><option value="user">User – může editovat</option><option value="admin">Admin – plná práva</option></select></div>
       <div class="form-group"><label>Stav</label><select id="f-active"><option value="true">Aktivní</option><option value="false">Deaktivován</option></select></div></div>
-      <div class="form-row single"><div class="form-group"><label>Přístup do prostředí</label><div id="f-apps" style="display:flex;gap:16px;margin-top:4px;"></div></div></div>
+      <div class="form-row single"><div class="form-group"><label>Přístup do prostředí</label><div id="f-apps" style="display:flex;gap:6px 16px;flex-wrap:wrap;margin-top:4px;"></div></div></div>
       <div class="form-row single"><div class="form-group"><label>Přístup do DC</label>
         <label style="display:flex;align-items:center;gap:6px;font-weight:600;text-transform:none;font-size:13px;color:var(--text);cursor:pointer;margin:4px 0;"><input type="checkbox" id="f-dc-all" onchange="toggleDcAll()"> Všechna DC (bez omezení, včetně budoucích)</label>
         <div id="f-dcs" style="display:flex;gap:6px 16px;flex-wrap:wrap;margin-top:4px;"></div></div></div>
@@ -209,7 +209,7 @@ async function resetPw(email){
   if(res.error){toast('❌ '+res.error.message);return;}
   toast('✅ Odkaz na reset hesla odeslán na '+email);
 }
-var APP_LIST=[{key:'wms',label:'PRG WMS'},{key:'inventura',label:'Inventory Tool'}];
+var APP_LIST=[{key:'wms',label:'PRG WMS'},{key:'inventura',label:'Inventory Tool'},{key:'simulator',label:'Retrak simulátor'}];
 function renderAppCheckboxes(allowed){
   var wrap=document.getElementById('f-apps');
   wrap.innerHTML=APP_LIST.map(function(a){

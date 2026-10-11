@@ -60,6 +60,7 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
 .mode-select-btn .msb-sub{font-size:12px;font-weight:400;opacity:0.85;display:block;margin-top:2px;}
 .mode-select-btn.wms{background:var(--accent);}
 .mode-select-btn.inv{background:var(--info);}
+.mode-select-btn.sim{background:#6c4fb3;}
 /* mobilní zobrazení – sjednoceno s Inventory Tool */
 @media(max-width:900px){
 body{overflow-x:hidden;}
@@ -143,8 +144,9 @@ setTimeout(function(){
   <div style="background:#fff;border-radius:16px;padding:32px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
     <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG Systems</h1>
     <p style="font-size:13px;color:#7a8090;margin-bottom:18px">Co chceš otevřít?</p>
-    <button class="mode-select-btn wms" onclick="enterMode('wms')"><span class="msb-icon">🏭</span><span class="msb-title">PRG WMS</span><span class="msb-sub">Sklad, klienti, příjmy, výdeje</span></button>
-    <button class="mode-select-btn inv" onclick="enterMode('inventura')"><span class="msb-icon">📋</span><span class="msb-title">Inventory Tool</span><span class="msb-sub">Seznamy majetku a výsledky inventur</span></button>
+    <button class="mode-select-btn wms" id="btn-wms" onclick="enterMode('wms')"><span class="msb-icon">🏭</span><span class="msb-title">PRG WMS</span><span class="msb-sub">Sklad, klienti, příjmy, výdeje</span></button>
+    <button class="mode-select-btn inv" id="btn-inv" onclick="enterMode('inventura')"><span class="msb-icon">📋</span><span class="msb-title">Inventory Tool</span><span class="msb-sub">Seznamy majetku a výsledky inventur</span></button>
+    <button class="mode-select-btn sim" id="btn-sim" onclick="enterMode('simulator')"><span class="msb-icon">🚜</span><span class="msb-title">Retrak simulátor</span><span class="msb-sub">Simulace provozu haly a retraků</span></button>
   </div>
 </div>
 <div id="app" style="display:none">
@@ -155,6 +157,7 @@ setTimeout(function(){
       <div class="nav-item active" onclick="go('wms_dashboard.html?app=wms')"><span class="nav-icon">🏭</span> PRG WMS</div>
       <div class="nav-item" onclick="go('wms_stock.html')"><span class="nav-icon">📦</span> Inventory</div>
       <div class="nav-item" onclick="go('wms_warehouses.html')"><span class="nav-icon">🏬</span> DC</div>
+      <div class="nav-item " onclick="go('wms_locations.html')"><span class="nav-icon">📍</span> Lokace</div>
       <div class="nav-item" onclick="go('wms_clients.html')"><span class="nav-icon">🏢</span> Klienti</div>
       <div class="nav-item" onclick="go('wms_receipts.html')"><span class="nav-icon">📥</span> Příjmy</div>
       <div class="nav-item" onclick="go('wms_deliveries.html')"><span class="nav-icon">📤</span> Výdeje</div>
@@ -370,7 +373,8 @@ async function onLoggedIn(user){
   var restricted=currentProfile.role!=='admin' && Array.isArray(allowed);
   var hasWms=!restricted || allowed.indexOf('wms')!==-1;
   var hasInv=!restricted || allowed.indexOf('inventura')!==-1;
-  if(!hasWms && !hasInv){
+  var hasSim=!restricted || allowed.indexOf('simulator')!==-1;
+  if(!hasWms && !hasInv && !hasSim){
     document.getElementById('session-check').style.display='none';
     alert('Tvůj účet čeká na schválení administrátorem.');
     await supa.auth.signOut();
@@ -385,13 +389,18 @@ async function onLoggedIn(user){
   document.getElementById('auth-screen').style.display='none';
   startSessionIdleWatch();
   var reqApp=new URLSearchParams(window.location.search).get('app');
-  if(!hasWms){ window.location.href='wms_inventura.html'; return; }
-  if(reqApp==='wms' || !hasInv){ enterMode('wms'); return; }
+  var availApps=[hasWms&&'wms',hasInv&&'inventura',hasSim&&'simulator'].filter(Boolean);
+  document.getElementById('btn-wms').style.display=hasWms?'block':'none';
+  document.getElementById('btn-inv').style.display=hasInv?'block':'none';
+  document.getElementById('btn-sim').style.display=hasSim?'block':'none';
+  if(reqApp==='wms' && hasWms){ enterMode('wms'); return; }
+  if(availApps.length===1){ enterMode(availApps[0]); return; }
   document.getElementById('mode-select-screen').style.display='flex';
 }
 
 async function enterMode(mode){
   if(mode==='inventura'){ window.location.href='wms_inventura.html'; return; }
+  if(mode==='simulator'){ window.location.href='wms_simulator.html'; return; }
   document.getElementById('mode-select-screen').style.display='none';
   document.getElementById('app').style.display='block';
   try{if(window.PRG_DC)await PRG_DC.init(supa,currentProfile);}catch(e){console.warn('DC',e);}
