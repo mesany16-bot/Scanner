@@ -137,6 +137,11 @@ body{overflow-x:hidden;}
             <div class="form-row single"><div class="form-group"><label>Adresa</label><input id="e-address" type="text"></div></div>
             <div class="form-row"><div class="form-group"><label>Mesto</label><input id="e-city" type="text"></div><div class="form-group"><label>Stat</label><input id="e-country" type="text" value="CZ"></div></div>
             <div class="form-row single"><div class="form-group"><label>Poznamka</label><textarea id="e-notes"></textarea></div></div>
+            <div style="border:1.5px solid var(--border);border-radius:9px;padding:12px 14px;margin-bottom:12px">
+              <div style="font-weight:700;font-size:13px;margin-bottom:8px">Pravidla skladu pro klienta</div>
+              <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-bottom:8px;cursor:pointer"><input type="checkbox" id="e-lotreq" style="margin-top:3px"> <span><b>Povinný LOT při příjmu</b> – příjem bez LOTu nepůjde potvrdit (u jednotlivých SKU lze udělit výjimku v SKU Setup).</span></label>
+              <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer"><input type="checkbox" id="e-fullpal" style="margin-top:3px"> <span><b>Výdej po celých paletách</b> – při vyskladnění se množství zaokrouhlí nahoru na celé palety (FIFO), palety se nerozbalují.</span></label>
+            </div>
             <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
               <button class="btn btn-secondary" onclick="switchTab('stock')">Zrusit</button>
               <button class="btn btn-primary" onclick="saveEdit()">&#128190; Ulozit zmeny</button>
@@ -200,6 +205,7 @@ async function loadClient(){
   document.getElementById('c-ico').textContent=[clientData.ico,clientData.dic].filter(Boolean).join(' / ')||'-';
   document.getElementById('c-addr').textContent=[clientData.address,clientData.city].filter(Boolean).join(', ')||'-';
   ['name','email','phone','ico','dic','address','city','notes'].forEach(function(k){var el=document.getElementById('e-'+k);if(el)el.value=clientData[k]||'';});
+  document.getElementById('e-lotreq').checked=!!clientData.lot_required;document.getElementById('e-fullpal').checked=!!clientData.round_full_pallets;
   document.getElementById('e-country').value=clientData.country||'CZ';
   loadStock();
   loadAttrs();
@@ -284,6 +290,7 @@ async function saveEdit(){
   if(!name){toast('Zadej nazev');return;}
   var payload={name,email:document.getElementById('e-email').value.trim()||null,phone:document.getElementById('e-phone').value.trim()||null,ico:document.getElementById('e-ico').value.trim()||null,dic:document.getElementById('e-dic').value.trim()||null,address:document.getElementById('e-address').value.trim()||null,city:document.getElementById('e-city').value.trim()||null,country:document.getElementById('e-country').value.trim()||'CZ',notes:document.getElementById('e-notes').value.trim()||null};
   var res=await supa.from('clients').update(payload).eq('id',clientId);
+  if(!res.error){var rr=await supa.from('clients').update({lot_required:document.getElementById('e-lotreq').checked,round_full_pallets:document.getElementById('e-fullpal').checked}).eq('id',clientId);if(rr.error)toast('Pravidla se neuložila – spusť batch_exp_setup.sql');}
   if(res.error){toast('Chyba: '+res.error.message);return;}
   Object.assign(clientData,payload);
   toast('Klient ulozen');switchTab('stock');loadClient();

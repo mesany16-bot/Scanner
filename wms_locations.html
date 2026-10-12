@@ -197,7 +197,7 @@ supa.auth.getSession().then(function(res){
 
 var data=[],shown=[],editId=null,page=0,PAGE_SZ=200,isAdmin=false,impRows=[];
 function escH(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-var TYPE_LBL={rack:'Regál',bulk:'Bulk',dock:'Rampa / DS',other:'Jiné'};
+var TYPE_LBL={rack:'Regál',bulk:'Bulk',dock:'Rampa / DS',other:'Jiné',system:'Systémová'};
 var dcMap={};
 async function afterLogin(){
   isAdmin=currentProfile&&currentProfile.role==='admin';

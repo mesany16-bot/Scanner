@@ -174,7 +174,7 @@ body{overflow-x:hidden;}
   <div class="modal-header"><h3>Změna parametru</h3><button class="modal-close" onclick="closeModal('m-param')">✕</button></div>
   <div class="modal-body">
     <div id="p-desc" class="hint" style="margin-bottom:12px"></div>
-    <div class="form-row"><div class="form-group"><label>Parametr</label><select id="p-field" onchange="paramFieldChanged()"><option value="condition_code">Kondice</option><option value="lot">Lot</option><option value="lpn">LPN</option><option value="description">Popis</option></select></div><div class="form-group"><label>Nová hodnota</label><input id="p-new" type="text"></div></div>
+    <div class="form-row"><div class="form-group"><label>Parametr</label><select id="p-field" onchange="paramFieldChanged()"><option value="condition_code">Kondice</option><option value="lot">Lot</option><option value="lpn">LPN</option><option value="description">Popis</option></select></div><div class="form-group"><label>Nová hodnota</label><input id="p-new" type="text" list="p-conds"><datalist id="p-conds"><option value="OK"><option value="DAMAGE"><option value="PIR"><option value="HOLD"><option value="QUARANTINE"></datalist></div></div>
     <div class="form-row single"><div class="form-group"><label>Důvod *</label><select id="p-reason"></select></div></div>
     <div class="form-row single"><div class="form-group"><label>Poznámka</label><textarea id="p-note"></textarea></div></div>
   </div>
@@ -246,6 +246,7 @@ function errMsg(e){
   if(m.indexOf('SAME_LOCATION')===0)return 'Zásoba už v této lokaci je.';
   if(m.indexOf('QTY_RANGE')===0)return 'Množství je mimo povolený rozsah.';
   if(m.indexOf('NO_SKU')===0)return 'Chybí SKU.';
+  if(m.indexOf('MIX_BULK:')===0)return 'Do bulk lokace '+m.split(':')[1]+' nelze míchat jiné SKU nebo LOT.';
   if(/function .* does not exist|schema cache|stock_ledger/i.test(m))return 'Chybí databázové funkce – spusť SQL adjustments_setup.sql.';
   return m;
 }
@@ -306,7 +307,7 @@ async function doQty(){
 
 /* ---------- parametr ---------- */
 function openParam(i){cur=rows[i];document.getElementById('p-desc').innerHTML=rowDesc(cur);document.getElementById('p-field').value='condition_code';paramFieldChanged();document.getElementById('p-reason').value='';document.getElementById('p-note').value='';document.getElementById('m-param').style.display='flex';}
-function paramFieldChanged(){var f=document.getElementById('p-field').value;document.getElementById('p-new').value=cur&&cur[f]!=null?cur[f]:'';}
+function paramFieldChanged(){var f=document.getElementById('p-field').value;document.getElementById('p-new').setAttribute('list',f==='condition_code'?'p-conds':'');document.getElementById('p-new').value=cur&&cur[f]!=null?cur[f]:'';}
 async function doParam(){
   var rs=needReason('p-reason');if(!rs)return;
   await call('wms_adjust_param',{p_balance_id:cur.id,p_field:document.getElementById('p-field').value,p_value:document.getElementById('p-new').value,p_reason:rs,p_note:document.getElementById('p-note').value.trim()||null,p_user:currentUser.id},'m-param','Parametr upraven');

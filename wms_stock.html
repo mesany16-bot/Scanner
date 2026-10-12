@@ -110,17 +110,19 @@ body{overflow-x:hidden;}
   <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
   <div id="main">
     
-<div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">☰</button><h2>🏷️ SKU Setup</h2><div class="topbar-actions"><button class="btn btn-primary btn-sm" onclick="openModal()">+ Nové SKU</button></div></div>
+<div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">☰</button><h2>🏷️ SKU Setup</h2><div class="topbar-actions"><button class="btn btn-secondary btn-sm" onclick="openRepl()">🔁 Doplnění pick lokací</button><button class="btn btn-primary btn-sm" onclick="openModal()">+ Nové SKU</button></div></div>
 <div class="content">
   <div class="card">
     <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">
       <input id="search" type="text" placeholder="Hledat SKU, popis, EAN, kategorie…" oninput="filter()" style="flex:1;min-width:150px;padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none">
       <select id="f-wh" onchange="filter()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"><option value="">Všechna DC</option></select>
       <select id="f-cl" onchange="filter()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"><option value="">Všichni klienti</option></select>
+      <select id="f-abc" onchange="filter()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"><option value="">ABC: vše</option><option>A</option><option>B</option><option>C</option><option>D</option><option value="-">bez třídy</option></select>
+      <select id="f-act" onchange="filter()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"><option value="1">Aktivní</option><option value="0">Neaktivní</option><option value="">Aktivní i neaktivní</option></select>
     </div>
     <div style="overflow-x:auto;">
-    <table><thead><tr><th>SKU</th><th>Popis</th><th>EAN</th><th>Kategorie</th><th>Klient</th><th>DC</th><th style="text-align:right">Ks / paleta</th><th>Typ palety</th><th style="text-align:right">Min.</th><th style="text-align:right">Na skladě</th><th>Akce</th></tr></thead>
-    <tbody id="tbody"><tr class="empty-row"><td colspan="11">Načítám…</td></tr></tbody></table>
+    <table><thead><tr><th>SKU</th><th>Popis</th><th>EAN</th><th>Kategorie</th><th>ABC</th><th>Pick lokace</th><th>Klient</th><th>DC</th><th style="text-align:right">Ks / paleta</th><th>Typ palety</th><th style="text-align:right">Min.</th><th style="text-align:right">Na skladě</th><th>Akce</th></tr></thead>
+    <tbody id="tbody"><tr class="empty-row"><td colspan="13">Načítám…</td></tr></tbody></table>
     </div>
   </div>
 </div>
@@ -134,6 +136,10 @@ body{overflow-x:hidden;}
       <div class="form-row"><div class="form-group"><label>Klient</label><select id="f-cl2"><option value="">– bez klienta –</option></select></div><div class="form-group"><label>DC</label><select id="f-wh2"><option value="">– bez DC –</option></select></div></div>
       <div class="form-row"><div class="form-group"><label>Ks na paletu</label><input id="f-upp" type="number" min="0"></div><div class="form-group"><label>Typ palety</label><input id="f-ptype" type="text" placeholder="např. EUR, A, B, C"></div></div>
       <div class="form-row"><div class="form-group"><label>Šířka palety (mm)</label><input id="f-pw" type="number" min="0"></div><div class="form-group"><label>Výška palety (mm)</label><input id="f-ph" type="number" min="0"></div></div>
+      <div class="form-row"><div class="form-group"><label>Ks v kartonu</label><input id="f-upc" type="number" min="0"></div><div class="form-group"><label>ABC třída</label><select id="f-abcc"><option value="">–</option><option>A</option><option>B</option><option>C</option><option>D</option></select></div></div>
+      <div class="form-row"><div class="form-group"><label>GTIN kartonu (14 číslic)</label><input id="f-gtc" type="text" maxlength="14"></div><div class="form-group"><label>GTIN palety (14 číslic)</label><input id="f-gtp" type="text" maxlength="14"></div></div>
+      <div class="form-row"><div class="form-group"><label>Pick lokace</label><input id="f-prim" type="text" placeholder="např. R01P01L1BA" style="text-transform:uppercase"></div><div class="form-group"><label>Min. v pick lokaci (ks)</label><input id="f-pmin" type="number" min="0"></div></div>
+      <div class="form-row"><div class="form-group"><label>LOT u tohoto SKU</label><select id="f-lotx"><option value="0">Podle klienta</option><option value="1">Nevyžadovat (výjimka)</option></select></div><div class="form-group"><label>Stav</label><select id="f-act2"><option value="1">Aktivní</option><option value="0">Neaktivní</option></select></div></div>
       <div class="form-row"><div class="form-group"><label>Váha palety (kg)</label><input id="f-pkg" type="number" step="0.1" min="0"></div><div class="form-group"><label>Min. stav (ks)</label><input id="f-min" type="number" value="0"></div></div>
       <div class="form-row"><div class="form-group"><label>Cena (Kč)</label><input id="f-price" type="number" step="0.01"></div><div class="form-group"><label>Foto URL</label><input id="f-photo" type="url"></div></div>
       <div class="form-row single"><div class="form-group"><label>Poznámka</label><textarea id="f-notes"></textarea></div></div>
@@ -144,6 +150,7 @@ body{overflow-x:hidden;}
 
   </div>
 </div>
+<div class="modal-backdrop" id="modal-repl" style="display:none"><div class="modal-box" style="max-width:820px"><div class="modal-header"><h3>Doplnění pick lokací</h3><button class="modal-close" onclick="closeModal('modal-repl')">✕</button></div><div class="modal-body" id="repl-body"></div></div></div>
 <div id="toast"></div>
 <script>
 var SUPA_URL="https://ujvqanqqhmnfxsfeqixc.supabase.co";
@@ -190,18 +197,20 @@ function stockOf(i){if(stockMap===null)return null;var k=String(i.sku||'').trim(
 async function load(){var q=supa.from('stock_items').select('*,warehouses(name,code),clients(name)').order('sku');if(window.PRG_DC)q=PRG_DC.apply(q,'warehouse_id');var res=await q;data=res.data||[];await loadStockSums();render(data);}
 function render(d){
   var tb=document.getElementById('tbody');
-  if(!d.length){tb.innerHTML='<tr class="empty-row"><td colspan="11">Žádné SKU</td></tr>';return;}
+  if(!d.length){tb.innerHTML='<tr class="empty-row"><td colspan="13">Žádné SKU</td></tr>';return;}
   tb.innerHTML=d.map(function(i){
     var wn=(i.warehouses&&(i.warehouses.code||i.warehouses.name))||'–';
     var cn=(i.clients&&i.clients.name)||'–';
     var st=stockOf(i);
     var sb=st===null?'–':(i.min_stock>0&&st<=i.min_stock?'<span class="badge badge-orange">'+st+'</span>':'<span class="badge badge-green">'+st+'</span>');
     var num=function(v){return v==null||v===''?'–':v;};
-    return '<tr>'
+    return '<tr'+(i.is_active===false?' style="opacity:.55"':'')+'>'
       +'<td><a href="wms_item.html?id='+i.id+'" style="font-weight:700;color:var(--accent);text-decoration:none">'+i.sku+'</a></td>'
       +'<td>'+(i.description||'–')+'</td>'
       +'<td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+(i.ean||'–')+'</td>'
       +'<td>'+(i.category?'<span class="badge badge-blue">'+i.category+'</span>':'–')+'</td>'
+      +'<td>'+(i.abc_class?'<b>'+i.abc_class+'</b>':'–')+'</td>'
+      +'<td>'+(i.primary_location||'–')+'</td>'
       +'<td>'+cn+'</td><td>'+wn+'</td>'
       +'<td style="text-align:right">'+num(i.units_per_pallet)+'</td>'
       +'<td>'+(i.pallet_type||'–')+'</td>'
@@ -213,7 +222,7 @@ function render(d){
         +'<button class="btn btn-danger btn-sm" onclick="del('+i.id+')">🗑</button>'
       +'</div></td></tr>';}).join('');
 }
-function filter(){var q=document.getElementById('search').value.toLowerCase();var wid=document.getElementById('f-wh').value;var cid=document.getElementById('f-cl').value;render(data.filter(function(i){return(!q||i.sku.toLowerCase().includes(q)||(i.description&&i.description.toLowerCase().includes(q))||(i.ean&&i.ean.toLowerCase().includes(q))||(i.category&&i.category.toLowerCase().includes(q)))&&(!wid||String(i.warehouse_id)===wid)&&(!cid||String(i.client_id)===cid);}));}
+function filter(){var q=document.getElementById('search').value.toLowerCase();var wid=document.getElementById('f-wh').value;var cid=document.getElementById('f-cl').value;render(data.filter(function(i){return(!q||i.sku.toLowerCase().includes(q)||(i.description&&i.description.toLowerCase().includes(q))||(i.ean&&i.ean.toLowerCase().includes(q))||(i.category&&i.category.toLowerCase().includes(q)))&&(!wid||String(i.warehouse_id)===wid)&&(!cid||String(i.client_id)===cid)&&(function(){var a=document.getElementById('f-abc').value;return !a||(a==='-'?!i.abc_class:i.abc_class===a);})()&&(function(){var a=document.getElementById('f-act').value;return a===''||(a==='1'?i.is_active!==false:i.is_active===false);})();}));}
 function openModal(item){
   editId=item?item.id:null;
   document.getElementById('modal-title').textContent=item?'Upravit SKU':'Nové SKU';
@@ -229,6 +238,14 @@ function openModal(item){
   document.getElementById('f-pw').value=item&&item.pallet_width_mm!=null?item.pallet_width_mm:'';
   document.getElementById('f-ph').value=item&&item.pallet_height_mm!=null?item.pallet_height_mm:'';
   document.getElementById('f-pkg').value=item&&item.pallet_weight_kg!=null?item.pallet_weight_kg:'';
+  document.getElementById('f-upc').value=item&&item.units_per_carton!=null?item.units_per_carton:'';
+  document.getElementById('f-abcc').value=item?(item.abc_class||''):'';
+  document.getElementById('f-gtc').value=item?(item.gtin_carton||''):'';
+  document.getElementById('f-gtp').value=item?(item.gtin_pallet||''):'';
+  document.getElementById('f-prim').value=item?(item.primary_location||''):'';
+  document.getElementById('f-pmin').value=item&&item.pick_min!=null?item.pick_min:'';
+  document.getElementById('f-lotx').value=item&&item.lot_exempt?'1':'0';
+  document.getElementById('f-act2').value=item&&item.is_active===false?'0':'1';
   document.getElementById('f-photo').value=item?(item.photo_url||''):'';
   document.getElementById('f-notes').value=item?(item.notes||''):'';
   document.getElementById('f-wh2').value=item?(item.warehouse_id||''):((window.PRG_DC&&PRG_DC.currentId()!=null)?PRG_DC.currentId():'');
@@ -243,12 +260,33 @@ function printSkuLabel(id){
   var list=[];for(var k=0;k<n;k++)list.push(c);
   PRG_PRINT.printLabels(supa,'label_sku',list,{dcId:i.warehouse_id,clientId:i.client_id,userId:currentUser&&currentUser.id});
 }
+async function openRepl(){
+  var m=document.getElementById('modal-repl');m.style.display='flex';var b=document.getElementById('repl-body');b.innerHTML='Počítám…';
+  var skus=data.filter(function(i){return i.primary_location&&i.is_active!==false;});
+  if(!skus.length){b.innerHTML='<p>Žádné SKU nemá nastavenou pick lokaci (pole „Pick lokace“ v kartě SKU).</p>';return;}
+  var names=skus.map(function(i){return i.sku;}),rows=[],from=0;
+  while(true){var q=supa.from('stock_balances').select('dc_id,sku,location_code,lpn,lot,condition_code,units_available,received_at').in('sku',names).gt('units_available',0).order('received_at',{ascending:true}).range(from,from+999);if(window.PRG_DC)q=PRG_DC.apply(q,'dc_id');var r=await q;if(r.error){b.innerHTML='Chyba: '+r.error.message;return;}var d=r.data||[];rows=rows.concat(d);if(d.length<1000)break;from+=1000;}
+  var bad={DAMAGE:1,PIR:1,HOLD:1,QUARANTINE:1},out=[];
+  skus.forEach(function(i){
+    var key=String(i.sku).trim().toUpperCase(),pl=String(i.primary_location).toUpperCase();
+    var mine=rows.filter(function(x){return String(x.sku).trim().toUpperCase()===key&&(i.warehouse_id==null||String(x.dc_id)===String(i.warehouse_id));});
+    var inPick=mine.filter(function(x){return String(x.location_code||'').toUpperCase()===pl;}).reduce(function(a,x){return a+Number(x.units_available);},0);
+    var min=Number(i.pick_min)||0;if(inPick>min&&!(min===0&&inPick===0))return;
+    var src=mine.filter(function(x){return String(x.location_code||'').toUpperCase()!==pl&&!bad[String(x.condition_code||'').toUpperCase()];})[0];
+    out.push({sku:i.sku,pick:i.primary_location,inPick:inPick,min:min,src:src,upc:i.units_per_carton});
+  });
+  if(!out.length){b.innerHTML='<p>✅ Všechny pick lokace jsou nad minimem.</p>';return;}
+  b.innerHTML='<p class="hint" style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Pick lokace na minimu nebo pod ním. Zdroj = nejstarší dostupná zásoba mimo pick lokaci (FIFO). Přesun udělej v Adjustments → Přesun.</p><div style="overflow-x:auto"><table><thead><tr><th>SKU</th><th>Pick lokace</th><th style="text-align:right">V pick lokaci</th><th style="text-align:right">Minimum</th><th>Doplnit z</th><th style="text-align:right">Dostupné</th></tr></thead><tbody>'+out.map(function(o){return '<tr><td><b>'+o.sku+'</b></td><td>'+o.pick+'</td><td style="text-align:right">'+o.inPick+'</td><td style="text-align:right">'+o.min+'</td><td>'+(o.src?('<b>'+(o.src.location_code||'–')+'</b>'+(o.src.lpn?' · '+o.src.lpn:'')+(o.src.lot?' · lot '+o.src.lot:'')):'<span style="color:var(--danger)">není zásoba</span>')+'</td><td style="text-align:right">'+(o.src?o.src.units_available:'–')+'</td></tr>';}).join('')+'</tbody></table></div>';
+}
 function edit(id){openModal(data.find(function(i){return i.id===id;}));}
 async function save(){
   var sku=document.getElementById('f-sku').value.trim();if(!sku){toast('⚠️ Zadej SKU');return;}
   var iv=function(id){var v=parseInt(document.getElementById(id).value);return isNaN(v)?null:v;};
   var fv=function(id){var v=parseFloat(document.getElementById(id).value);return isNaN(v)?null:v;};
   var p={sku,ean:document.getElementById('f-ean').value.trim()||null,description:document.getElementById('f-desc').value.trim()||null,category:document.getElementById('f-cat').value.trim()||null,supplier:document.getElementById('f-sup').value.trim()||null,price:parseFloat(document.getElementById('f-price').value)||null,min_stock:parseInt(document.getElementById('f-min').value)||0,units_per_pallet:iv('f-upp'),pallet_type:document.getElementById('f-ptype').value.trim()||null,pallet_width_mm:iv('f-pw'),pallet_height_mm:iv('f-ph'),pallet_weight_kg:fv('f-pkg'),photo_url:document.getElementById('f-photo').value.trim()||null,notes:document.getElementById('f-notes').value.trim()||null,warehouse_id:parseInt(document.getElementById('f-wh2').value)||null,client_id:parseInt(document.getElementById('f-cl2').value)||null};
+  var gc=document.getElementById('f-gtc').value.trim(),gp=document.getElementById('f-gtp').value.trim();
+  if((gc&&!/^\d{14}$/.test(gc))||(gp&&!/^\d{14}$/.test(gp))){toast('⚠️ GTIN kartonu/palety musí mít 14 číslic');return;}
+  Object.assign(p,{units_per_carton:iv('f-upc'),abc_class:document.getElementById('f-abcc').value||null,gtin_carton:gc||null,gtin_pallet:gp||null,primary_location:document.getElementById('f-prim').value.trim().toUpperCase()||null,pick_min:iv('f-pmin'),lot_exempt:document.getElementById('f-lotx').value==='1',is_active:document.getElementById('f-act2').value==='1'});
   if(!editId){p.quantity=0;p.created_by=currentUser.id;}
   var res=editId?await supa.from('stock_items').update(p).eq('id',editId):await supa.from('stock_items').insert(p);
   if(res.error){toast('❌ '+res.error.message);return;}

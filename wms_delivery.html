@@ -6,6 +6,7 @@
 <script src="wms_nav.js"></script>
 <script src="wms_dc.js"></script>
 <script src="wms_print.js"></script>
+<script src="wms_posting.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
 :root{--bg:#f0f2f5;--surface:#fff;--border:#e2e6ed;--accent:#0a7c4e;--accent-light:#e8f7f1;--danger:#c0392b;--danger-light:#fdecea;--warning:#e67e22;--warning-light:#fef3e8;--info:#2980b9;--info-light:#eaf4fb;--text:#1a1d27;--muted:#7a8090;--shadow:0 2px 12px rgba(0,0,0,0.07);--sidebar-w:220px;}
@@ -311,19 +312,8 @@ async function saveDraft(){
 async function confirmDoc(){
   if(!validateAttrs()){toast('Vyplnte povinna pole atributu');return;}
   await saveDraft();if(!docId)return;
-  var rows=collectRows();
-  for(var i=0;i<rows.length;i++){
-    var r=rows[i];
-    if(r.stock_item_id){
-      var si=await supa.from('stock_items').select('quantity').eq('id',r.stock_item_id).single();
-      var nq=Math.max(0,(si.data?si.data.quantity:0)-r.quantity);
-      await supa.from('stock_items').update({quantity:nq}).eq('id',r.stock_item_id);
-      await supa.from('stock_movements').insert({stock_item_id:r.stock_item_id,type:'out',quantity:r.quantity,lot:r.lot||null,note:'Vydej '+document.getElementById('f-num').value,user_id:currentUser.id});
-    }
-  }
-  await supa.from('deliveries').update({status:'loaded',confirmed_by:currentUser.id,confirmed_at:new Date().toISOString()}).eq('id',docId);
-  toast('Vydej potvrzen - sklad aktualizovan');
-  setTimeout(function(){window.location.href='wms_deliveries.html';},1500);
+  if(!window.PRG_POST){toast('Modul zaúčtování se nenačetl');return;}
+  PRG_POST.delivery({supa:supa,docId:docId,userId:currentUser&&currentUser.id,onDone:function(){toast('Výdej vyskladněn a potvrzen');setTimeout(function(){window.location.href='wms_deliveries.html';},1200);}});
 }
 
 </script></body></html>

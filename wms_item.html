@@ -137,6 +137,22 @@ body{overflow-x:hidden;}
           <div class="form-group"><label>Výška palety (mm)</label><input id="f-ph" type="number" min="0" disabled></div>
         </div>
         <div class="form-row" style="padding:0 20px">
+          <div class="form-group"><label>Ks v kartonu</label><input id="f-upc" type="number" min="0" disabled></div>
+          <div class="form-group"><label>ABC třída</label><select id="f-abcc" disabled><option value="">–</option><option>A</option><option>B</option><option>C</option><option>D</option></select></div>
+        </div>
+        <div class="form-row" style="padding:0 20px">
+          <div class="form-group"><label>GTIN kartonu</label><input id="f-gtc" type="text" maxlength="14" disabled></div>
+          <div class="form-group"><label>GTIN palety</label><input id="f-gtp" type="text" maxlength="14" disabled></div>
+        </div>
+        <div class="form-row" style="padding:0 20px">
+          <div class="form-group"><label>Pick lokace</label><input id="f-prim" type="text" style="text-transform:uppercase" disabled></div>
+          <div class="form-group"><label>Min. v pick lokaci (ks)</label><input id="f-pmin" type="number" min="0" disabled></div>
+        </div>
+        <div class="form-row" style="padding:0 20px">
+          <div class="form-group"><label>LOT u tohoto SKU</label><select id="f-lotx" disabled><option value="0">Podle klienta</option><option value="1">Nevyžadovat (výjimka)</option></select></div>
+          <div class="form-group"><label>Stav</label><select id="f-act2" disabled><option value="1">Aktivní</option><option value="0">Neaktivní</option></select></div>
+        </div>
+        <div class="form-row" style="padding:0 20px">
           <div class="form-group"><label>Foto URL</label><input id="f-photo" type="url" disabled></div>
           <div class="form-group"></div>
         </div>
@@ -245,6 +261,14 @@ async function loadItem(){
   document.getElementById('f-pw').value=i.pallet_width_mm!=null?i.pallet_width_mm:'';
   document.getElementById('f-ph').value=i.pallet_height_mm!=null?i.pallet_height_mm:'';
   document.getElementById('f-pkg').value=i.pallet_weight_kg!=null?i.pallet_weight_kg:'';
+  document.getElementById('f-upc').value=i.units_per_carton!=null?i.units_per_carton:'';
+  document.getElementById('f-abcc').value=i.abc_class||'';
+  document.getElementById('f-gtc').value=i.gtin_carton||'';
+  document.getElementById('f-gtp').value=i.gtin_pallet||'';
+  document.getElementById('f-prim').value=i.primary_location||'';
+  document.getElementById('f-pmin').value=i.pick_min!=null?i.pick_min:'';
+  document.getElementById('f-lotx').value=i.lot_exempt?'1':'0';
+  document.getElementById('f-act2').value=i.is_active===false?'0':'1';
   loadBalances(i);
   document.getElementById('f-photo').value=i.photo_url||'';
   document.getElementById('f-notes').value=i.notes||'';
@@ -293,6 +317,10 @@ async function saveItem(){
     photo_url:document.getElementById('f-photo').value.trim()||null,
     notes:document.getElementById('f-notes').value.trim()||null
   };
+  var gc=document.getElementById('f-gtc').value.trim(),gp=document.getElementById('f-gtp').value.trim();
+  if((gc&&!/^\d{14}$/.test(gc))||(gp&&!/^\d{14}$/.test(gp))){toast('⚠️ GTIN kartonu/palety musí mít 14 číslic');return;}
+  var ivv=function(id){var v=parseInt(document.getElementById(id).value);return isNaN(v)?null:v;};
+  Object.assign(p,{units_per_carton:ivv('f-upc'),abc_class:document.getElementById('f-abcc').value||null,gtin_carton:gc||null,gtin_pallet:gp||null,primary_location:document.getElementById('f-prim').value.trim().toUpperCase()||null,pick_min:ivv('f-pmin'),lot_exempt:document.getElementById('f-lotx').value==='1',is_active:document.getElementById('f-act2').value==='1'});
   if(!p.sku){toast('⚠️ SKU je povinné');return;}
   var res=await supa.from('stock_items').update(p).eq('id',itemId);
   if(res.error){toast('❌ '+res.error.message);return;}
