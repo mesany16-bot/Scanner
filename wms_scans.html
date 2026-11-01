@@ -137,7 +137,7 @@ th.sortable:hover{color:var(--accent);}
       <div><label>Od</label><input id="f-from" type="date" onchange="reloadRange()"></div>
       <div><label>Do</label><input id="f-to" type="date" onchange="reloadRange()"></div>
       <div><label>Uživatel</label><select id="f-user" onchange="applyFilters()"><option value="">Všichni</option></select></div>
-      <div><label>Režim</label><select id="f-mode" onchange="applyFilters()"><option value="">Všechny</option><option value="outer">Outer</option><option value="inner">Inner</option><option value="none">Bez režimu</option></select></div>
+      <div><label>Režim</label><select id="f-mode" onchange="applyFilters()"><option value="">Všechny</option><option value="outer">Outer</option><option value="inner">Inner</option><option value="inv_ean">Inventura – jen EAN</option><option value="inv_ean_loc">Inventura – EAN + lokace</option><option value="none">Bez režimu</option></select></div>
       <div><label>Ověřeno</label><select id="f-ver" onchange="applyFilters()"><option value="">Vše</option><option value="1">Ověřeno</option><option value="0">Neověřeno</option></select></div>
       <div><label>Lokace</label><select id="f-loc" onchange="applyFilters()"><option value="">Všechny</option></select></div>
       <div><label>Typ kódu</label><select id="f-kind" onchange="applyFilters()"><option value="">Vše</option><option value="ean">EAN</option><option value="iot">IoT ID</option></select></div>
@@ -284,7 +284,7 @@ function render(){
   tb.innerHTML=visible.map(function(s){
     var code=s.ean||s.iot_id||'–';
     var uname=(s.profiles&&s.profiles.name)||'–';
-    var mode=s.placement_mode==='outer'?'<span class="badge badge-blue">Outer</span>':s.placement_mode==='inner'?'<span class="badge badge-orange">Inner</span>':'–';
+    var mode=s.placement_mode==='outer'?'<span class="badge badge-blue">Outer</span>':s.placement_mode==='inner'?'<span class="badge badge-orange">Inner</span>':s.placement_mode==='inv_ean'?'<span class="badge badge-green">Inv. EAN</span>':s.placement_mode==='inv_ean_loc'?'<span class="badge badge-green">Inv. EAN + lok.</span>':'–';
     var verified=s.verified?'<span class="badge badge-green">✅</span>':'<span class="badge badge-gray">–</span>';
     return '<tr><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+escH(code)+'</td><td>'+escH(s.box_number||'–')+'</td><td>'+escH(s.location||'–')+'</td><td>'+mode+'</td><td>'+verified+'</td><td>'+escH(s.quantity==null?'–':s.quantity)+'</td><td>'+escH(uname)+'</td><td style="font-size:11px;color:var(--muted)">'+escH(fmt(s.scanned_at))+'</td></tr>';
   }).join('')+(shown.length>1000?'<tr class="empty-row"><td colspan="8">Zobrazeno prvních 1000 řádků, export obsahuje všech '+shown.length+'.</td></tr>':'');
@@ -294,7 +294,7 @@ function exportScansXlsx(){
   if(typeof XLSX==='undefined'){toast('Knihovna XLSX se nenačetla');return;}
   var rows=shown.map(function(s){return {
     'Čas':new Date(s.scanned_at),'EAN':s.ean||'','IoT ID':s.iot_id||'','Box':s.box_number||'','Lokace':s.location||'',
-    'Režim':s.placement_mode==='outer'?'Outer':s.placement_mode==='inner'?'Inner':'','Ověřeno':s.verified?'Ano':'Ne',
+    'Režim':s.placement_mode==='outer'?'Outer':s.placement_mode==='inner'?'Inner':s.placement_mode==='inv_ean'?'Inventura – jen EAN':s.placement_mode==='inv_ean_loc'?'Inventura – EAN + lokace':'','Ověřeno':s.verified?'Ano':'Ne',
     'Množství':Number(s.quantity)||0,'Uživatel':(s.profiles&&s.profiles.name)||''};});
   var cols=['Čas','EAN','IoT ID','Box','Lokace','Režim','Ověřeno','Množství','Uživatel'];
   var ws=XLSX.utils.json_to_sheet(rows,{header:cols,cellDates:true});

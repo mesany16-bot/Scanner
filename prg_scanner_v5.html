@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <link rel="manifest" href="prg_scanner.webmanifest">
+  <meta name="theme-color" content="#0a7c4e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="apple-touch-icon" href="prg_icon_192.png">
+  <script>/* offline režim: uloží scanner do zařízení – samostatně, aby fungovalo i když se nenačte knihovna */
+  if ('serviceWorker' in navigator) { navigator.serviceWorker.register('prg_scanner_sw.js').catch(function(){}); }</script>
   <title>PRG Scanner</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -173,6 +180,17 @@
 
     #cam-section { flex-shrink: 0; background: #000; position: relative; }
     #cam-wrap { position: relative; width: 100%; aspect-ratio: 4/3; overflow: hidden; }
+    #cam-wrap.reader { aspect-ratio: auto; height: 132px; background: #1d2b24; }
+    #cam-wrap.reader video, #cam-wrap.reader #aim, #cam-wrap.reader #focus-ring { display: none; }
+    #reader-panel { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; flex-direction: column; color: #fff; text-align: center; padding: 10px; }
+    #cam-wrap.reader #reader-panel { display: flex; }
+    #reader-panel .rp-t { font-family: 'Barlow Condensed', sans-serif; font-size: 24px; font-weight: 700; letter-spacing: .5px; }
+    #reader-panel .rp-s { font-size: 13px; opacity: .8; margin-top: 2px; }
+    #manual-row { display: flex; gap: 6px; padding: 8px 12px 2px; align-items: center; }
+    #manual-row input { flex: 1; min-width: 0; padding: 10px 12px; border: 1.5px solid #e2e6ed; border-radius: 9px; font-size: 15px; font-family: 'JetBrains Mono', monospace; outline: none; background: #fff; }
+    #manual-row input:focus { border-color: #0a7c4e; }
+    #manual-row button { padding: 10px 12px; border-radius: 9px; border: 1.5px solid #e2e6ed; background: #fff; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    #manual-row #manual-ok { background: #0a7c4e; color: #fff; border-color: #0a7c4e; }
     video { width: 100%; height: 100%; object-fit: cover; display: block; }
 
     #aim {
@@ -347,7 +365,7 @@
     <h2>📦 PRG Scanner</h2>
     <p id="login-msg">Přihlas se pro pokračování.</p>
     <input id="login-email" type="text" placeholder="E-mail nebo přezdívka" autocomplete="off">
-    <input id="login-password" type="password" placeholder="Heslo" autocomplete="off">
+    <input id="login-password" type="password" placeholder="Heslo" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
     <button class="modal-btn" onclick="doLogin()">🔐 Přihlásit se</button>
     <button class="modal-btn secondary" onclick="showForgot()">🔑 Zapomenuté heslo?</button>
   </div>
@@ -407,11 +425,11 @@
     <div id="hub-hint" style="display:none;font-size:12.5px;color:var(--muted);margin:0 0 14px;line-height:1.5;text-align:left;background:var(--bg);border-radius:8px;padding:10px 12px"></div>
     <button class="mode-select-btn wms" onclick="hubChoose('wms')">
       <span class="msb-icon">🏭</span><span class="msb-title">PRG WMS</span>
-      <span class="msb-sub">Skladové skenování EAN, lokace, myDevices</span>
+      <span class="msb-sub">Příjmy, výdeje a skladové operace · myDevices</span>
     </button>
     <button class="mode-select-btn inv" onclick="hubChoose('inventura')">
       <span class="msb-icon">📋</span><span class="msb-title">Inventory Tool</span>
-      <span class="msb-sub">Inventarizace majetku podle seznamu</span>
+      <span class="msb-sub">Inventura ze serveru, EAN + lokace, jen EAN</span>
     </button>
     <button class="modal-btn secondary" id="hub-exit" style="display:none" onclick="hubExit()">Odejít</button>
   </div>
@@ -439,6 +457,19 @@
     <button class="modal-btn info" onclick="hubInvContinue()">▶️ Pokračovat v rozjeté</button>
     <button class="modal-btn" style="background:var(--accent)" onclick="hubInvOther()">📋 Vybrat jinou inventuru</button>
     <button class="modal-btn secondary" onclick="closeModal('modal-hub-inv')">Zrušit</button>
+  </div>
+</div>
+
+<!-- Modal: PRG WMS – nabídka -->
+<div class="modal-backdrop" id="modal-wms-menu" style="display:none">
+  <div class="modal">
+    <h2>🏭 PRG WMS</h2>
+    <p>Co chceš dělat?</p>
+    <button class="modal-btn" style="opacity:.55" onclick="wmsSoon('Příjmy')">📥 Příjmy <span style="font-size:12px;font-weight:400">· připravujeme</span></button>
+    <button class="modal-btn" style="opacity:.55" onclick="wmsSoon('Výdeje')">📤 Výdeje <span style="font-size:12px;font-weight:400">· připravujeme</span></button>
+    <button class="modal-btn info" onclick="closeModal('modal-wms-menu');openMyDevices()">📱 myDevices</button>
+    <p style="font-size:12.5px;color:var(--muted);margin-top:4px">Inventury (seznam, EAN + lokace, jen EAN) najdeš v <b>Inventory Tool</b>.</p>
+    <button class="modal-btn secondary" onclick="closeModal('modal-wms-menu')">Zavřít</button>
   </div>
 </div>
 
@@ -520,11 +551,13 @@
 <!-- Modal: Inventura - zdroj seznamu -->
 <div class="modal-backdrop" id="modal-inv-source" style="display:none">
   <div class="modal">
-    <h2 class="info">📋 Inventura</h2>
-    <p>Odkud načíst seznam majetku k inventuře?</p>
+    <h2 class="info">📋 Inventory Tool</h2>
+    <p>Jakou inventuru chceš dělat?</p>
     <input type="file" id="inv-excel-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="loadInvExcelFile(this)">
-    <button class="modal-btn info" onclick="document.getElementById('inv-excel-input').click()">📂 Nahrát Excel/CSV ze zařízení</button>
-    <button class="modal-btn" style="background:var(--accent)" onclick="openInvServerPick()">☁️ Načíst uložený seznam ze serveru</button>
+    <button class="modal-btn" style="background:var(--accent)" onclick="openInvServerPick()">☁️ Inventura ze serveru (seznam)</button>
+    <button class="modal-btn info" onclick="startEanCount(true)">📍 EAN + lokace</button>
+    <button class="modal-btn info" onclick="startEanCount(false)">🔢 Jen EAN</button>
+    <button class="modal-btn secondary" onclick="document.getElementById('inv-excel-input').click()">📂 Seznam z Excelu/CSV v zařízení</button>
     <button class="modal-btn secondary" onclick="closeModal('modal-inv-source')">Zrušit</button>
   </div>
 </div>
@@ -588,10 +621,21 @@
   </div>
 </div>
 
+<div id="modal-net" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#fff;color:#1a1d27;border-radius:14px;width:100%;max-width:440px;max-height:85vh;overflow:auto;padding:18px">
+    <div style="display:flex;align-items:center;margin-bottom:10px"><b style="flex:1;font-size:17px">Připojení a odesílání</b><button onclick="closeNetModal()" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button></div>
+    <div id="net-body" style="font-size:14px;line-height:1.5"></div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+      <button onclick="netFlushNow()" style="flex:1;padding:11px;border:none;border-radius:9px;background:#0a7c4e;color:#fff;font-weight:700;font-size:14px">↻ Odeslat teď</button>
+      <button onclick="netClearLog()" style="padding:11px;border:1.5px solid #e2e6ed;border-radius:9px;background:#fff;font-size:14px">Vymazat hlášení</button>
+    </div>
+  </div>
+</div>
 <!-- Header -->
 <header>
   <h1 id="hub-title" onclick="openHub()" style="cursor:pointer" title="Zpět do Hubu">📦 PRG Scanner</h1>
   <div style="display:flex;gap:8px;align-items:center;">
+    <div id="net-badge" onclick="openNetModal()" title="Připojení a neodeslané záznamy" style="display:flex;align-items:center;gap:4px;padding:4px 9px;border-radius:14px;font-size:12px;font-weight:700;cursor:pointer;background:rgba(255,255,255,0.18);color:#fff;white-space:nowrap">🟢</div>
     <div id="dc-badge" onclick="openDcModal()" title="Distribuční centrum">🏬 <span id="dc-label">–</span></div>
     <div id="switch-badge" onclick="switchAppMode(appMode==='inventura'?'wms':'inventura')">🔀 <span id="switch-badge-label">Inventura</span></div>
     <div id="mode-badge">📱 myDevices</div>
@@ -609,6 +653,7 @@
     <div id="aim"><span class="c2"></span><span class="c3"></span></div>
     <div id="flash"></div>
     <div id="cam-status">Kamera vypnuta</div>
+    <div id="reader-panel"><div class="rp-t" id="rp-title">🔫 ČTEČKA VYPNUTA</div><div class="rp-s" id="rp-sub">Stiskni ▶ Start</div></div>
     <div id="loc-pill">📍 SKENUJ LOKACI</div>
     <div id="dev-pill">📦 SKENUJ BOX</div>
     <div id="room-pill" onclick="openRoomModal()">📍 Místnost: nenastavena</div>
@@ -623,6 +668,13 @@
 <!-- Table area -->
 <div id="table-area">
   <div id="status-bar">Čekám na spuštění…</div>
+  <div id="manual-row">
+    <input id="manual-code" type="text" placeholder="⌨️ Zadat kód ručně…" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" onkeydown="if(event.key==='Enter'){event.preventDefault();manualSubmit();}">
+    <button id="manual-ok" onclick="manualSubmit()">OK</button>
+    <button id="input-toggle" onclick="toggleInputMode()" title="Kamera nebo vestavěná čtečka (Honeywell, Zebra…)">📷</button>
+  </div>
+  <input id="wedge-input" type="text" inputmode="none" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="-1" aria-hidden="true" style="position:fixed;left:-2000px;top:0;width:10px;height:10px;opacity:0">
+  <button id="manual-btn" onclick="manualEntry()" style="display:none;margin:6px 16px 0;padding:9px 14px;border:1.5px solid #e2e6ed;border-radius:9px;background:#fff;font-size:14px;font-weight:600;cursor:pointer">⌨️ Kód nejde přečíst – zadat ručně</button>
   <div id="empty-state">Žádná naskenovaná data</div>
   <table id="main-table" style="display:none">
     <thead><tr id="table-head-row"></tr></thead>
@@ -646,7 +698,189 @@
 // ── Supabase ──────────────────────────────────────────────
 var SUPA_URL = "https://ujvqanqqhmnfxsfeqixc.supabase.co";
 var SUPA_KEY = "sb_publishable_5o19BnZUEi8j-rU5DDAgBA_HwKB7V-v";
-var supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+// ── Offline režim: časový limit požadavků (slabý signál nesmí aplikaci zaseknout) ──
+function prgFetch(input, init) {
+  init = init || {};
+  var ctl = new AbortController(), t = setTimeout(function(){ ctl.abort(); }, 12000);
+  if (init.signal) { try { if (init.signal.aborted) ctl.abort(); else init.signal.addEventListener('abort', function(){ ctl.abort(); }); } catch(e) {} }
+  return fetch(input, Object.assign({}, init, { signal: ctl.signal })).finally(function(){ clearTimeout(t); });
+}
+var supa = supabase.createClient(SUPA_URL, SUPA_KEY, { global: { fetch: prgFetch } });
+
+// ── Offline režim: fronta neodeslaných záznamů v zařízení (IndexedDB, záložně localStorage) ──
+var OB = { db: null, mem: null, chain: Promise.resolve(), count: 0, timer: null };
+function obOpen() {
+  return new Promise(function(res){
+    if (OB.db || OB.mem) return res();
+    try {
+      var rq = indexedDB.open('prg_scanner', 1);
+      rq.onupgradeneeded = function(){ rq.result.createObjectStore('outbox', { keyPath: 'k', autoIncrement: true }); };
+      rq.onsuccess = function(){ OB.db = rq.result; res(); };
+      rq.onerror = function(){ obMemInit(); res(); };
+    } catch(e) { obMemInit(); res(); }
+  });
+}
+function obMemInit() { try { OB.mem = JSON.parse(localStorage.getItem('prg_outbox') || '[]'); } catch(e) { OB.mem = []; } }
+function obMemSave() { try { localStorage.setItem('prg_outbox', JSON.stringify(OB.mem)); } catch(e) {} }
+function obTx(mode, fn) {
+  return new Promise(function(res, rej){
+    var tx = OB.db.transaction('outbox', mode), rq = fn(tx.objectStore('outbox'));
+    tx.oncomplete = function(){ res(rq ? rq.result : undefined); };
+    tx.onerror = function(){ rej(tx.error); };
+    tx.onabort = function(){ rej(tx.error); };
+  });
+}
+async function obAdd(op) {
+  await obOpen(); op.t = Date.now();
+  if (OB.mem) { op.k = OB.mem.length ? OB.mem[OB.mem.length-1].k + 1 : 1; OB.mem.push(op); obMemSave(); return op.k; }
+  return obTx('readwrite', function(st){ return st.add(op); });
+}
+async function obAll() {
+  await obOpen();
+  if (OB.mem) return OB.mem.slice();
+  var all = await obTx('readonly', function(st){ return st.getAll(); });
+  return (all || []).sort(function(a,b){ return a.k - b.k; });
+}
+async function obDel(k) {
+  await obOpen();
+  if (OB.mem) { OB.mem = OB.mem.filter(function(o){ return o.k !== k; }); obMemSave(); return; }
+  return obTx('readwrite', function(st){ return st.delete(k); });
+}
+function obUid() {
+  try { if (crypto.randomUUID) return crypto.randomUUID(); } catch(e) {}
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){ var r = Math.random()*16|0; return (c==='x' ? r : (r&3|8)).toString(16); });
+}
+function obIsNet(err) {
+  if (!navigator.onLine) return true;
+  if (err && err.status === 0) return true;
+  var m = String((err && (err.message || err.details)) || err || '');
+  return /fetch|network|abort|timeout|load failed|connection|ERR_/i.test(m);
+}
+function obRes(err) { if (!err) return { s: 'done' }; if (obIsNet(err)) return { s: 'net' }; return { s: 'fail', msg: err.message || String(err) }; }
+function obLogGet() { try { return JSON.parse(localStorage.getItem('prg_outbox_log') || '[]'); } catch(e) { return []; } }
+function obLog(kind, msg) { var l = obLogGet(); l.unshift({ t: new Date().toISOString(), kind: kind, msg: msg }); try { localStorage.setItem('prg_outbox_log', JSON.stringify(l.slice(0, 50))); } catch(e) {} }
+var OB_LABEL = { scan: 'sken', inv_found: 'inventura – nalezeno', inv_newloc_item: 'inventura – nové umístění', inv_newloc_extra: 'inventura – nové umístění', inv_extra: 'inventura – přebývá', inv_list_active: 'inventura – zahájení', inv_complete: 'inventura – uzavření' };
+
+async function obExec(op) {
+  try {
+    var r;
+    if (op.kind === 'scan') {
+      r = await supa.from('scans').upsert(op.row, { onConflict: 'client_uid', ignoreDuplicates: true });
+      if (r.error && /client_uid|conflict|unique or exclusion/i.test(r.error.message || '')) {   // SQL pro offline ještě neběželo
+        var row = Object.assign({}, op.row); delete row.client_uid;
+        r = await supa.from('scans').insert(row);
+      }
+      return obRes(r.error);
+    }
+    if (op.kind === 'inv_found') {
+      r = await supa.from('inventory_list_items').update(op.patch).eq('id', op.item_id).eq('status', 'pending').select();
+      if (r.error) return obRes(r.error);
+      if (!r.data || !r.data.length) {
+        var cur = await supa.from('inventory_list_items').select('found_by,found_at').eq('id', op.item_id).single();
+        if (cur.error && obIsNet(cur.error)) return { s: 'net' };
+        if (op.patch.new_location != null) await supa.from('inventory_list_items').update({ new_location: op.patch.new_location }).eq('id', op.item_id);
+        var by = cur.data ? (cur.data.found_by || '') : '';
+        if (by && by === op.patch.found_by) return { s: 'done' };   // náš vlastní dřívější zápis
+        return { s: 'conflict', by: by, at: cur.data ? (cur.data.found_at || '') : '', msg: (op.code || '') + ' mezitím naskenoval ' + (by || 'někdo jiný') };
+      }
+      return { s: 'done' };
+    }
+    if (op.kind === 'inv_newloc_item') { r = await supa.from('inventory_list_items').update({ new_location: op.new_location }).eq('id', op.item_id); return obRes(r.error); }
+    if (op.kind === 'inv_newloc_extra') { r = await supa.from('inventory_extra_scans').update({ new_location: op.new_location }).eq('list_id', op.list_id).eq('code', op.code); return obRes(r.error); }
+    if (op.kind === 'inv_extra') {
+      r = await supa.from('inventory_extra_scans').insert(op.row);
+      if (r.error && r.error.code === '23505') return { s: 'conflict', msg: op.row.code + ' už zaznamenal někdo jiný' };
+      return obRes(r.error);
+    }
+    if (op.kind === 'inv_list_active') {
+      var c2 = await supa.from('inventory_lists').select('started_by,started_at,status').eq('id', op.list_id).single();
+      if (c2.error) return obRes(c2.error);
+      if (c2.data && c2.data.status === 'completed') return { s: 'done' };
+      var patch = { status: 'active' };
+      if (!c2.data || !c2.data.started_by) { patch.started_by = op.user; patch.started_at = op.at; }
+      r = await supa.from('inventory_lists').update(patch).eq('id', op.list_id);
+      return obRes(r.error);
+    }
+    if (op.kind === 'inv_complete') {
+      r = await supa.from('inventory_lists').update({ status: 'completed', completed_by: op.user, completed_at: op.at }).eq('id', op.list_id);
+      return obRes(r.error);
+    }
+    return { s: 'fail', msg: 'Neznámý typ záznamu ' + op.kind };
+  } catch(e) {
+    return obIsNet(e) ? { s: 'net' } : { s: 'fail', msg: String(e.message || e) };
+  }
+}
+
+async function obDoFlush() {
+  var results = {};
+  var all = await obAll();
+  if (!all.length) { obBadge(0); return results; }
+  if (!navigator.onLine) { all.forEach(function(o){ results[o.k] = { s: 'queued' }; }); obBadge(all.length); obSchedule(); return results; }
+  for (var i = 0; i < all.length; i++) {
+    var op = all[i], r = await obExec(op);
+    if (r.s === 'net') { for (var j = i; j < all.length; j++) results[all[j].k] = { s: 'queued' }; obSchedule(); break; }
+    await obDel(op.k);
+    results[op.k] = r;
+    if (r.s === 'fail') obLog('fail', (OB_LABEL[op.kind] || op.kind) + ': ' + r.msg);
+    if (r.s === 'conflict') {
+      obLog('conflict', r.msg);
+      if (op.kind === 'inv_found' && typeof invList !== 'undefined') {
+        var it = invList.find(function(x){ return x.id === op.item_id; });
+        if (it) { it.user = r.by || it.user; it.ts = r.at || it.ts; it.tsn = 0; try { renderInvTable(); } catch(e) {} }
+      }
+    }
+  }
+  await obBadgeRefresh();
+  return results;
+}
+function obFlush() { OB.chain = OB.chain.then(obDoFlush, obDoFlush); return OB.chain; }
+// Uloží záznam do fronty a hned zkusí odeslat (ve správném pořadí). Vrací {s:'done'|'conflict'|'fail'|'queued', ...}
+async function obSubmit(op) {
+  var k = await obAdd(op);
+  OB.count++; obBadge(OB.count);
+  var res = await obFlush();
+  return res[k] || { s: 'queued' };
+}
+function obSchedule() { clearTimeout(OB.timer); OB.timer = setTimeout(function(){ obFlush(); }, 20000); }
+async function obBadgeRefresh() { var all = await obAll(); obBadge(all.length); return all.length; }
+function obBadge(n) {
+  OB.count = n;
+  var b = document.getElementById('net-badge'); if (!b) return;
+  var on = navigator.onLine;
+  if (!on) { b.textContent = '🔴 Offline' + (n ? ' · ' + n : ''); b.style.background = 'rgba(192,57,43,0.85)'; }
+  else if (n) { b.textContent = '⏳ ' + n; b.style.background = 'rgba(230,126,34,0.9)'; }
+  else { b.textContent = '🟢'; b.style.background = 'rgba(255,255,255,0.18)'; }
+  if (document.getElementById('modal-net') && document.getElementById('modal-net').style.display === 'flex') renderNetModal();
+}
+async function renderNetModal() {
+  var all = await obAll(), by = {};
+  all.forEach(function(o){ var l = OB_LABEL[o.kind] || o.kind; by[l] = (by[l] || 0) + 1; });
+  var log = obLogGet();
+  var h = '<p>Stav: <b>' + (navigator.onLine ? '🟢 připojeno' : '🔴 bez připojení') + '</b></p>';
+  h += all.length ? ('<p>Čeká na odeslání: <b>' + all.length + '</b> (' + Object.keys(by).map(function(k){ return by[k] + '× ' + k; }).join(', ') + ').<br><span style="color:#7a8090;font-size:12.5px">Záznamy jsou uložené v tomto zařízení a odešlou se samy, jakmile bude signál. Nemaž data prohlížeče.</span></p>')
+                  : '<p>✅ Vše je odesláno.</p>';
+  if (log.length) h += '<p style="margin-top:10px"><b>Hlášení</b></p>' + log.slice(0, 15).map(function(l){ return '<div style="font-size:12.5px;padding:4px 0;border-top:1px solid #eef0f4;color:' + (l.kind === 'fail' ? '#c0392b' : '#b35a00') + '">' + new Date(l.t).toLocaleString('cs-CZ') + ' · ' + escHtml(l.msg) + '</div>'; }).join('');
+  document.getElementById('net-body').innerHTML = h;
+}
+function openNetModal() { document.getElementById('modal-net').style.display = 'flex'; renderNetModal(); }
+function closeNetModal() { document.getElementById('modal-net').style.display = 'none'; }
+async function netFlushNow() { await obFlush(); renderNetModal(); }
+function netClearLog() { try { localStorage.removeItem('prg_outbox_log'); } catch(e) {} renderNetModal(); }
+window.addEventListener('online', function(){ obBadge(OB.count); obFlush(); });
+window.addEventListener('offline', function(){ obBadge(OB.count); });
+document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') obFlush(); });
+setInterval(function(){ if (OB.count) obFlush(); }, 30000);
+window.addEventListener('beforeunload', function(e){ if (OB.count) { e.preventDefault(); e.returnValue = ''; } });
+document.addEventListener('DOMContentLoaded', function(){ obBadgeRefresh().then(function(n){ if (n) obFlush(); }); });
+function obStoredUser() {
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (/^sb-.*-auth-token$/.test(k)) { var v = JSON.parse(localStorage.getItem(k)); var s = v && (v.user ? v : (v.currentSession || v.session)); if (s && s.user) return s.user; }
+    }
+  } catch(e) {}
+  return null;
+}
 var currentUserId = null;
 
 // ── Audio ──────────────────────────────────────────────────
@@ -670,6 +904,7 @@ function beepOk()    { beep(1480,0.08); setTimeout(function(){beep(1760,0.1);},1
 // ── State ──────────────────────────────────────────────────
 var currentUser = '';
 var useLocation = false;
+var eanCount = false;   // Inventory Tool: počítání EAN (s lokací nebo bez)
 var expectingLoc = false;
 var pendingEAN = null;
 var stream = null;
@@ -724,6 +959,7 @@ async function doLogin() {
   }
   var res = await supa.auth.signInWithPassword({ email: email, password: pass });
   if (res.error) { document.getElementById('login-msg').textContent = '❌ '+res.error.message; return; }
+  clearLoginForm();
   await onLoggedIn(res.data.user);
 }
 
@@ -769,22 +1005,51 @@ async function doRegister() {
 }
 
 
-// ── Automatické odhlášení po 2h nečinnosti ──────────────────
-var SESSION_IDLE_MS = 2*60*60*1000;
-var sessionIdleTimer = null;
-function startSessionIdleWatch(){
-  function reset(){
-    clearTimeout(sessionIdleTimer);
-    sessionIdleTimer = setTimeout(async function(){
-      await supa.auth.signOut();
-      alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');
-      window.location.reload();
-    }, SESSION_IDLE_MS);
-  }
-  ['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){
-    document.addEventListener(evt, reset, {passive:true});
+// ── Automatické odhlášení po 60 min nečinnosti ─────────────
+// Čas poslední aktivity se ukládá do zařízení, takže odhlášení platí i po uspání telefonu nebo zavření aplikace.
+var SESSION_IDLE_MS = 60*60*1000;
+var ACT_KEY = 'prg_scn_last_act';
+var sessionWatchOn = false, lastActWrite = 0;
+function markActivity(force) {
+  var n = Date.now();
+  if (force || n - lastActWrite > 15000) { lastActWrite = n; try { localStorage.setItem(ACT_KEY, String(n)); } catch(e) {} }
+}
+function idleExpired() {
+  var t = 0; try { t = +localStorage.getItem(ACT_KEY) || 0; } catch(e) {}
+  return !!t && (Date.now() - t > SESSION_IDLE_MS);
+}
+function clearLoginForm() {
+  var p = document.getElementById('login-password');
+  if (p) { p.value = ''; p.setAttribute('readonly', ''); }
+}
+// Společné odhlášení: bez signálu jen lokálně (neodeslané skeny zůstávají ve frontě zařízení)
+async function logoutCore(msg) {
+  try { await supa.auth.signOut(navigator.onLine ? undefined : { scope: 'local' }); } catch(e) { try { await supa.auth.signOut({ scope: 'local' }); } catch(e2) {} }
+  try { localStorage.removeItem(ACT_KEY); } catch(e) {}
+  currentUser = ''; currentUserId = null; currentDcId = null; dcList = []; try { sessionStorage.removeItem('prg_scanner_dc'); } catch (e) {}
+  document.getElementById('dc-badge').style.display = 'none';
+  document.getElementById('user-display').textContent = '–';
+  ['mode-select-screen','modal-hub-inv','modal-inv-source','modal-wms-menu','modal-inv-server-pick','modal-net'].forEach(function(id){ var el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  clearLoginForm();
+  document.getElementById('login-msg').textContent = msg || 'Přihlas se pro pokračování.';
+  document.getElementById('modal-login').style.display = 'flex';
+  stopCam();
+}
+async function autoLogout() {
+  if (!currentUserId) return;
+  await logoutCore('🔒 Byl jsi odhlášen po 60 minutách nečinnosti. Přihlas se znovu.');
+}
+function startSessionIdleWatch() {
+  markActivity(true);
+  if (sessionWatchOn) return;
+  sessionWatchOn = true;
+  ['click','keydown','touchstart','scroll'].forEach(function(evt){
+    document.addEventListener(evt, function(){ if (currentUserId) markActivity(false); }, { passive: true });
   });
-  reset();
+  setInterval(function(){ if (currentUserId && idleExpired()) autoLogout(); }, 30000);
+  var chk = function(){ if (document.visibilityState === 'visible' && currentUserId && idleExpired()) autoLogout(); };
+  document.addEventListener('visibilitychange', chk);
+  window.addEventListener('pageshow', chk);
 }
 
 // ── DC (distribuční centra) ─────────────────────────────────
@@ -794,9 +1059,17 @@ function dcById(id) { for (var i = 0; i < dcList.length; i++) { if (dcSid(dcList
 async function loadDcs(role) {
   dcList = []; currentDcId = null; currentDcCode = ''; dcDefaultId = null;
   try {
+    var dcKey = 'prg_scn_dcs_' + currentUserId;
     var wr = await supa.from('warehouses').select('id,code,name,is_active').order('code');
-    if (wr.error) throw wr.error;
-    var pr = await supa.from('profiles').select('allowed_dcs,default_dc').eq('id', currentUserId).single();
+    var pr = wr.error ? { error: wr.error } : await supa.from('profiles').select('allowed_dcs,default_dc').eq('id', currentUserId).single();
+    if ((wr.error && obIsNet(wr.error)) || (pr.error && obIsNet(pr.error))) {
+      var dcc = null; try { dcc = JSON.parse(localStorage.getItem(dcKey) || 'null'); } catch(e) {}
+      if (!dcc) throw (wr.error || pr.error);
+      wr = { data: dcc.wr }; pr = { data: dcc.pr };
+    } else {
+      if (wr.error) throw wr.error;
+      try { localStorage.setItem(dcKey, JSON.stringify({ wr: wr.data, pr: pr.data })); } catch(e) {}
+    }
     var allowed = pr.data ? pr.data.allowed_dcs : null;
     dcDefaultId = pr.data ? pr.data.default_dc : null;
     var active = (wr.data || []).filter(function(w){ return w.is_active !== false; });
@@ -876,6 +1149,16 @@ async function onLoggedIn(user) {
   currentUserId = user.id;
   // Get profile name
   var prof = await supa.from('profiles').select('name,username,role,is_active,allowed_apps').eq('id', user.id).single();
+  var profKey = 'prg_scn_prof_' + user.id;
+  if (prof.error && obIsNet(prof.error)) {
+    var cached = null; try { cached = JSON.parse(localStorage.getItem(profKey) || 'null'); } catch(e) {}
+    if (cached) { prof = { data: cached }; setTimeout(function(){ setStatus('📴 Offline režim – skeny se ukládají do zařízení a odešlou se po připojení'); }, 50); }
+    else {
+      setStatus('📴 Bez připojení – přihlášení dokončím, jakmile bude signál');
+      window.addEventListener('online', function h(){ window.removeEventListener('online', h); onLoggedIn(user); });
+      return;
+    }
+  } else if (prof.data) { try { localStorage.setItem(profKey, JSON.stringify(prof.data)); } catch(e) {} }
   if (!prof.data) {
     alert('Tento účet už není platný. Kontaktuj administrátora.');
     await supa.auth.signOut();
@@ -947,6 +1230,9 @@ function openHub() {
   hubOpenedManually = true;
   var hint = document.getElementById('hub-hint');
   var parts = [];
+  if (eanCount && rows.length && !invList.length) {
+    parts.push((useLocation ? '📍 Rozjetá inventura EAN + lokace' : '🔢 Rozjetá inventura EAN') + ': <b>' + rows.length + '</b> řádků');
+  }
   if (invList.length) {
     var f = invList.filter(function(r){ return r.status==='found'; }).length;
     parts.push('📋 Rozjetá inventura: <b>' + escHtml(invListMeta ? invListMeta.name : 'z Excelu v telefonu') + '</b> (' + f + '/' + invList.length + ')');
@@ -967,8 +1253,8 @@ function hubChoose(mode) {
   if (!hubOpenedManually) { selectAppMode(mode); return; }   // první výběr po přihlášení
   hubClose();
   if (mode === 'wms') { if (appMode !== 'wms') switchAppMode('wms'); return; }
-  if (invList.length) {
-    document.getElementById('hub-inv-name').textContent = invListMeta ? invListMeta.name : 'z Excelu v telefonu';
+  if (invList.length || (eanCount && rows.length)) {
+    document.getElementById('hub-inv-name').textContent = invList.length ? (invListMeta ? invListMeta.name : 'z Excelu v telefonu') : (useLocation ? 'EAN + lokace' : 'jen EAN') + ' (' + rows.length + ' řádků)';
     document.getElementById('modal-hub-inv').style.display = 'flex';
     return;
   }
@@ -987,6 +1273,7 @@ function hubInvOther() {
   }
   stopCam();
   invMode = false; invList = []; invExtra = []; invListMeta = null;
+  if (eanCount) { rows = []; eanCount = false; expectingLoc = false; pendingEAN = null; locPill.style.display = 'none'; }
   appMode = 'inventura';
   renderInvTable(); refreshModeUI(); updateScanBtn();
   document.getElementById('modal-inv-source').style.display = 'flex';
@@ -996,9 +1283,10 @@ function selectAppMode(mode) {
   appMode = mode;
   closeModal('mode-select-screen');
   refreshModeUI();
-  if (mode === 'inventura' && !invList.length) {
+  if (mode === 'inventura' && !invList.length && !eanCount) {
     document.getElementById('modal-inv-source').style.display = 'flex';
   }
+  if (mode === 'wms') { renderWmsEmpty(); if (!myDevMode) setStatus('🏭 PRG WMS · klepni na Start a vyber činnost'); }
 }
 
 function refreshModeUI() {
@@ -1009,7 +1297,7 @@ function refreshModeUI() {
   if (sw) sw.style.display = 'flex';
   if (appMode === 'inventura') {
     badge.style.display = 'flex';
-    if (invMode) updateInvSummaryBadge(); else badge.textContent = '📋 Inventura';
+    if (invMode) updateInvSummaryBadge(); else badge.textContent = eanCount ? (useLocation ? '📍 EAN + lokace' : '🔢 Jen EAN') : '📋 Inventura';
     if (btn) btn.textContent = '✅ Dokončit';
     if (swLabel) swLabel.textContent = 'WMS';
   } else {
@@ -1026,7 +1314,11 @@ function switchAppMode(target) {
   stopCam();
   appMode = target;
   if (target === 'inventura') {
-    if (invList.length) {
+    if (eanCount && !invList.length) {
+      invMode = false;
+      renderTableHead(); renderTable();
+      setStatus((useLocation ? '📍 EAN + lokace' : '🔢 Jen EAN') + ' · pokračuj – spusť kameru');
+    } else if (invList.length) {
       invMode = true;
       renderInvTable();
       setStatus('📋 Inventura · pokračuj – spusť kameru');
@@ -1040,34 +1332,43 @@ function switchAppMode(target) {
   } else {
     invMode = false;
     if (myDevMode) { renderMyDevTable(); setStatus('📱 myDevices · spusť kameru'); }
-    else { renderTableHead(); renderTable(); setStatus('🏭 WMS · spusť kameru'); }
+    else { renderWmsEmpty(); setStatus('🏭 PRG WMS · klepni na Start a vyber činnost'); }
   }
   refreshModeUI();
   updateScanBtn();
 }
 
+function renderWmsEmpty() {
+  document.getElementById('main-table').style.display = 'none';
+  var e = document.getElementById('empty-state'); e.style.display = 'block';
+  e.textContent = myDevMode ? 'Žádná naskenovaná data' : '🏭 PRG WMS – klepni na ▶ Start a vyber činnost';
+}
 function bottomModeBtn() {
+  if (appMode === 'inventura' && !invMode && eanCount) { finishEanCount(); return; }
+  if (appMode === 'inventura' && !invMode) { document.getElementById('modal-inv-source').style.display = 'flex'; return; }
   if (appMode === 'inventura') finishInventura();
   else openMyDevices();
 }
 
 async function doLogout() {
-  if (!confirm('Odhlásit se?')) return;
-  await supa.auth.signOut();
-  currentUser=''; currentUserId=null; currentDcId=null; dcList=[]; try { sessionStorage.removeItem('prg_scanner_dc'); } catch (e) {}
-  document.getElementById('dc-badge').style.display='none';
-  document.getElementById('user-display').textContent = '–';
-  document.getElementById('login-msg').textContent = 'Přihlas se pro pokračování.';
-  document.getElementById('modal-login').style.display = 'flex';
-  stopCam();
+  var pend = await obBadgeRefresh();
+  if (!confirm(pend ? ('V zařízení čeká ' + pend + ' neodeslaných záznamů. Zůstanou uložené a odešlou se, až bude signál a někdo se na tomto zařízení přihlásí. Odhlásit se?') : 'Odhlásit se?')) return;
+  await logoutCore();
 }
 
 // Check existing session on load
 supa.auth.getSession().then(function(res) {
+  if (idleExpired()) { logoutCore('🔒 Byl jsi odhlášen po 60 minutách nečinnosti. Přihlas se znovu.'); return; }
   if (res.data && res.data.session) {
     onLoggedIn(res.data.session.user);
+    return;
   }
-});
+  // bez signálu se nemusí podařit obnovit přihlášení – pokračuj s posledním přihlášeným uživatelem v zařízení
+  if (!navigator.onLine || (res.error && obIsNet(res.error))) {
+    var u = obStoredUser();
+    if (u) onLoggedIn(u);
+  }
+}).catch(function(e){ if (idleExpired()) { logoutCore('🔒 Byl jsi odhlášen po 60 minutách nečinnosti. Přihlas se znovu.'); return; } var u = obStoredUser(); if (u && obIsNet(e)) onLoggedIn(u); });
 
 // Odkaz z e-mailu na obnovu hesla otevře tuto stránku se speciální session
 supa.auth.onAuthStateChange(function(event, session) {
@@ -1082,8 +1383,39 @@ supa.auth.onAuthStateChange(function(event, session) {
 // ── Camera ────────────────────────────────────────────────
 function startCam() {
   if (!currentUser) { document.getElementById('modal-login').style.display='flex'; return; }
-  if (invMode || myDevMode) { initCamera(); return; }
-  document.getElementById('modal-loc-choice').style.display = 'flex';
+  if (invMode || myDevMode || (appMode === 'inventura' && eanCount)) { initCamera(); return; }
+  if (appMode === 'inventura') { document.getElementById('modal-inv-source').style.display = 'flex'; return; }
+  document.getElementById('modal-wms-menu').style.display = 'flex';
+}
+
+function wmsSoon(what) {
+  closeModal('modal-wms-menu');
+  setStatus('🏭 ' + what + ' ve scanneru připravujeme (úlohy pro sklad). Zatím je řeš ve webovém PRG WMS.');
+}
+// Inventory Tool: volná inventura EAN (s lokací nebo bez)
+function startEanCount(withLoc) {
+  closeModal('modal-inv-source');
+  stopCam();
+  appMode = 'inventura';
+  invMode = false; myDevMode = false;
+  eanCount = true;
+  useLocation = withLoc;
+  expectingLoc = false; pendingEAN = null;
+  locPill.style.display = 'none';
+  renderTableHead(); renderTable(); refreshModeUI(); updateScanBtn();
+  setStatus((withLoc ? '📍 Inventura EAN + lokace' : '🔢 Inventura – jen EAN') + ' · spouštím kameru');
+  initCamera();
+}
+function finishEanCount() {
+  if (!rows.length) { eanCount = false; stopCam(); refreshModeUI(); document.getElementById('modal-inv-source').style.display = 'flex'; return; }
+  var pcs = rows.reduce(function(a, r){ return a + r.qty; }, 0);
+  if (!confirm('Ukončit inventuru? Naskenováno ' + rows.length + ' řádků, ' + pcs + ' ks. Skeny jsou uložené na serveru (WMS → Skeny)' + (OB.count ? ', ' + OB.count + ' čeká na odeslání.' : '.'))) return;
+  if (confirm('Stáhnout CSV s výsledkem?')) exportCSV();
+  rows = []; expectingLoc = false; pendingEAN = null; eanCount = false;
+  locPill.style.display = 'none';
+  stopCam(); renderTable(); refreshModeUI();
+  setStatus('✅ Inventura ukončena');
+  document.getElementById('modal-inv-source').style.display = 'flex';
 }
 
 function startWithLoc(withLoc) {
@@ -1100,7 +1432,7 @@ var IDLE_TIMEOUT_MS = 10000; // uspat kameru po 10s bez skenování/interakce
 
 function resetIdleTimer() {
   clearTimeout(idleTimer);
-  if (cameraReady && !isAsleep) { idleTimer = setTimeout(enterSleepMode, IDLE_TIMEOUT_MS); }
+  if (cameraReady && !isAsleep && inputMode === 'camera') { idleTimer = setTimeout(enterSleepMode, IDLE_TIMEOUT_MS); }
 }
 
 function enterSleepMode() {
@@ -1165,17 +1497,104 @@ function nextFrame() {
   return new Promise(function(resolve){ requestAnimationFrame(function(){ setTimeout(resolve, 0); }); });
 }
 
+// ── Vestavěná čtečka (Honeywell CN80 a podobné): kód přichází jako „klávesnice“ (wedge) ──
+var inputMode = (function(){
+  try { var v = localStorage.getItem('prg_scn_input'); if (v === 'camera' || v === 'reader') return v; } catch(e) {}
+  return /CN80|CN85|CT30|CT40|CT45|CT47|CT60|CK65|CK67|EDA5\d|EDA6\d|EDA7\d|Honeywell|TC2\d|TC5\d|TC7\d|MC33|MC93|Zebra/i.test(navigator.userAgent) ? 'reader' : 'camera';
+})();
+function anyModalOpen() {
+  var els = document.querySelectorAll('.modal-backdrop, #modal-net');
+  for (var i = 0; i < els.length; i++) { if (els[i].style.display === 'flex') return true; }
+  return false;
+}
+function readerActive() { return inputMode === 'reader' && cameraReady && !!currentUserId; }
+function focusWedge() {
+  if (!readerActive() || anyModalOpen()) return;
+  var a = document.activeElement;
+  if (a && a !== document.body && a.id !== 'wedge-input' && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) return;   // uživatel píše jinde
+  try { document.getElementById('wedge-input').focus({ preventScroll: true }); } catch(e) {}
+}
+function updateInputToggle() {
+  var b = document.getElementById('input-toggle'); if (b) b.textContent = inputMode === 'reader' ? '🔫 Čtečka' : '📷 Kamera';
+}
+function startReader() {
+  document.getElementById('cam-wrap').classList.add('reader');
+  document.getElementById('rp-title').textContent = '🔫 ČTEČKA PŘIPRAVENA';
+  document.getElementById('rp-sub').textContent = 'Stiskni spoušť / boční tlačítko čtečky';
+  cameraReady = true;
+  scanBtn.disabled = false;
+  setCamSt('🔫 Čtečka připravena');
+  setStatus(invMode ? '📋 Inventura – naskenuj kód majetku čtečkou'
+    : (myDevMode ? '📱 myDevices – naskenuj IoT ID čtečkou'
+      : '✅ Čtečka připravena' + (useLocation ? ' · EAN + Lokace' : ' · EAN')));
+  updateScanBtn();
+  setTimeout(focusWedge, 50);
+}
+async function toggleInputMode() {
+  var was = cameraReady;
+  if (was) stopCam();
+  inputMode = inputMode === 'reader' ? 'camera' : 'reader';
+  try { localStorage.setItem('prg_scn_input', inputMode); } catch(e) {}
+  document.getElementById('cam-wrap').classList.toggle('reader', inputMode === 'reader');
+  if (inputMode === 'reader') { document.getElementById('rp-title').textContent = '🔫 ČTEČKA VYPNUTA'; document.getElementById('rp-sub').textContent = 'Stiskni ▶ Start'; }
+  updateInputToggle();
+  setStatus(inputMode === 'reader' ? '🔫 Vstup: vestavěná čtečka' : '📷 Vstup: kamera');
+  if (was) { if (inputMode === 'reader') startReader(); else initCamera(); }
+}
+var wedgeTimer = null, kb = { buf: '', last: 0, timer: null };
+function submitWedge(v) {
+  v = String(v || '').replace(/[\r\n\t]+/g, '').trim();
+  if (v.length < 2 || !readerActive() || anyModalOpen()) return;
+  resetIdleTimer();
+  flashScreen(); beep();
+  handleScannedCode(v);
+}
+(function(){
+  var w = document.getElementById('wedge-input');
+  w.addEventListener('keydown', function(e){
+    if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); clearTimeout(wedgeTimer); var v = w.value; w.value = ''; submitWedge(v); }
+  });
+  // čtečka bez nastaveného Enteru: kód odešli, když přestanou chodit znaky
+  w.addEventListener('input', function(){
+    clearTimeout(wedgeTimer);
+    wedgeTimer = setTimeout(function(){ if (w.value.length >= 3) { var v = w.value; w.value = ''; submitWedge(v); } }, 200);
+  });
+  // znaky ze čtečky, když není nic zaměřené: rychlá dávka kláves = sken (ruční psaní je pomalejší)
+  document.addEventListener('keydown', function(e){
+    if (!readerActive()) return;
+    var t = e.target;
+    if (t && /INPUT|TEXTAREA|SELECT/.test(t.tagName)) return;
+    var now = Date.now();
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      if (kb.buf.length >= 3 && now - kb.last < 300) { e.preventDefault(); clearTimeout(kb.timer); var v = kb.buf; kb.buf = ''; submitWedge(v); }
+      kb.buf = ''; return;
+    }
+    if (!e.key || e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (now - kb.last > 80) kb.buf = '';
+    kb.buf += e.key; kb.last = now;
+    clearTimeout(kb.timer);
+    kb.timer = setTimeout(function(){ if (kb.buf.length >= 4) { var v = kb.buf; kb.buf = ''; submitWedge(v); } kb.buf = ''; }, 200);
+  }, true);
+  setInterval(focusWedge, 1000);
+  document.addEventListener('click', function(){ setTimeout(focusWedge, 30); });
+})();
+
 async function initCamera() {
+  if (inputMode === 'reader') { startReader(); return; }
   if (useZXing) {
-    zxingReader = new ZXingBrowser.BrowserMultiFormatReader();
+    // TRY_HARDER (klíč 3 v DecodeHintType) = důkladnější hledání kódu, hodí se na pomačkané a poškozené štítky
+    zxingReader = new ZXingBrowser.BrowserMultiFormatReader(new Map([[3, true]]));
   } else {
+    // Chrome na Androidu: nativní rozpoznávání (potřebuje Google Play služby). Když nefunguje, použij ZXing.
     try {
       var supported = await BarcodeDetector.getSupportedFormats();
+      if (!supported || !supported.length) throw new Error('BarcodeDetector bez podporovaných formátů');
       detector = new BarcodeDetector({ formats: supported });
     } catch(e) {
-      detector = new BarcodeDetector({ formats: [
-        'qr_code','ean_13','ean_8','code_128','code_39','upc_a','upc_e','data_matrix','pdf417','itf','aztec'
-      ]});
+      console.warn('Nativní BarcodeDetector nedostupný, přepínám na ZXing:', e);
+      useZXing = true;
+      detector = null;
+      zxingReader = new ZXingBrowser.BrowserMultiFormatReader(new Map([[3, true]]));
     }
   }
   try {
@@ -1249,59 +1668,135 @@ function stopCam() {
   devPill.style.display='none';
   document.getElementById('aim').className='';
   setCamSt('Kamera vypnuta');
+  if (inputMode === 'reader') { document.getElementById('rp-title').textContent = '🔫 ČTEČKA VYPNUTA'; document.getElementById('rp-sub').textContent = 'Stiskni ▶ Start'; }
   setStatus('⏹ Zastaveno');
   updateScanBtn();
 }
 
 // ── Main scan trigger ─────────────────────────────────────
+// „Kód nenalezen“ z knihovny ZXing není chyba – minifikovaná knihovna nemá spolehlivý název výjimky, poznáme ji podle textu.
+function isNoCodeError(err) {
+  if (!err) return false;
+  var n = (err.name || '') + ' ' + ((err.constructor && err.constructor.name) || '') + ' ' + (err.message || '');
+  return /NotFound|No MultiFormat Readers|not found|ChecksumException|FormatException/i.test(n);
+}
+// Varianty obrazu pro poškozené nebo svislé kódy
+function enhanceCanvas(src) {
+  var c = document.createElement('canvas'); c.width = src.width; c.height = src.height;
+  var ctx = c.getContext('2d'); ctx.drawImage(src, 0, 0);
+  var img = ctx.getImageData(0, 0, c.width, c.height), d = img.data, min = 255, max = 0, i, g;
+  for (i = 0; i < d.length; i += 4) { g = (d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114) | 0; d[i] = g; if (g < min) min = g; if (g > max) max = g; }
+  var range = Math.max(1, max - min);
+  for (i = 0; i < d.length; i += 4) { g = ((d[i] - min) * 255 / range) | 0; d[i] = d[i+1] = d[i+2] = g; }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+function rotateCanvas(src) {
+  var c = document.createElement('canvas'); c.width = src.height; c.height = src.width;
+  var ctx = c.getContext('2d'); ctx.translate(c.width / 2, c.height / 2); ctx.rotate(Math.PI / 2); ctx.drawImage(src, -src.width / 2, -src.height / 2);
+  return c;
+}
+function grabFullCanvas() {
+  var vw = video.videoWidth, vh = video.videoHeight, sc = Math.min(1, 1800 / Math.max(vw, vh));
+  var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(vw * sc)); c.height = Math.max(1, Math.round(vh * sc));
+  c.getContext('2d').drawImage(video, 0, 0, c.width, c.height);
+  return c;
+}
+async function tryDecode(canvas) {
+  if (useZXing) {
+    try { return zxingReader.decodeFromCanvas(canvas).getText(); }
+    catch (err) { if (isNoCodeError(err)) return null; throw err; }
+  }
+  try {
+    var bc = await detector.detect(canvas);
+    return bc.length ? bc[0].rawValue : null;
+  } catch (err) {
+    // nativní detektor selhal za běhu (např. chybí služby) – přepni natrvalo na ZXing a zkus znovu
+    console.warn('BarcodeDetector selhal, přepínám na ZXing:', err);
+    useZXing = true; detector = null;
+    zxingReader = new ZXingBrowser.BrowserMultiFormatReader(new Map([[3, true]]));
+    return tryDecode(canvas);
+  }
+}
+// Více pokusů na jedno stisknutí: několik snímků, zesílený kontrast, otočení o 90°, nakonec celý záběr
+async function decodeWithRetries() {
+  var deadline = Date.now() + 1600;
+  for (var attempt = 0; attempt < 6; attempt++) {
+    await nextFrame();
+    var base = grabAimCanvas();
+    var variants = [base];
+    if (attempt >= 1) variants.push(enhanceCanvas(base));
+    if (attempt >= 2) variants.push(rotateCanvas(base));
+    if (attempt >= 3) { var full = grabFullCanvas(); variants.push(full, enhanceCanvas(full)); }
+    for (var v = 0; v < variants.length; v++) {
+      var code = await tryDecode(variants[v]);
+      if (code) return code;
+    }
+    if (Date.now() > deadline) break;
+    await new Promise(function(r){ setTimeout(r, 120); });
+  }
+  return null;
+}
+async function handleScannedCode(code) {
+  document.getElementById('manual-btn').style.display = 'none';
+  if (invMode) { await handleInvCode(code); }
+  else if (myDevMode) { await handleMyDevCode(code); }
+  else { await handleCode(code); }
+}
+function manualHint() {
+  return invMode ? 'kód majetku' : (myDevMode ? (devExpectingBox ? 'číslo krabice / místnost' : 'IoT ID') : (expectingLoc ? 'LOKACI' : 'EAN'));
+}
+function manualAllowed() {
+  return invMode || myDevMode || (appMode === 'inventura' && eanCount);
+}
+async function manualEntry() {
+  resetIdleTimer();
+  var f = document.getElementById('manual-code');
+  f.placeholder = '⌨️ Zadej ' + manualHint() + '…';
+  f.focus();
+}
+async function manualSubmit() {
+  resetIdleTimer();
+  var f = document.getElementById('manual-code');
+  var code = (f.value || '').trim();
+  if (!currentUserId) { document.getElementById('modal-login').style.display = 'flex'; return; }
+  if (!code) { f.placeholder = '⌨️ Zadej ' + manualHint() + '…'; f.focus(); return; }
+  if (!manualAllowed()) {
+    setStatus(appMode === 'inventura' ? '📋 Nejdřív vyber druh inventury (▶ Start)' : '🏭 Nejdřív vyber činnost (▶ Start)');
+    return;
+  }
+  f.value = '';
+  beep();
+  await handleScannedCode(code);
+  f.placeholder = '⌨️ Zadej ' + manualHint() + '…';
+  if (inputMode === 'reader') { f.blur(); setTimeout(focusWedge, 50); }
+}
+
 async function triggerScan() {
   if (isAsleep) { wakeUp(); return; }
   if (!cameraReady) return;
+  if (inputMode === 'reader') { focusWedge(); setStatus('🔫 Stiskni spoušť čtečky (boční tlačítko)'); return; }
+  if (useZXing ? !zxingReader : !detector) return;
   resetIdleTimer();
   setCamSt('🔍 Detekuji…');
   scanBtn.disabled = true;
   try {
-    await nextFrame();
-    var canvas = grabAimCanvas();
-    var dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-    if (useZXing) {
-      if (!zxingReader) return;
-      var result;
-      try { result = await zxingReader.decodeFromImageUrl(dataUrl); }
-      catch(err) {
-        var isNotFound = err && (err.name === 'NotFoundException' || (err.constructor && err.constructor.name === 'NotFoundException'));
-        if (!isNotFound) { throw err; }
-        setCamSt('⚠️ Nic nenalezeno – zkus znovu');
-        setStatus('⚠️ Žádný kód – namiř lépe a zkus znovu');
-        return;
-      }
-      var code = result.getText();
-      flashScreen(); beep();
-      if (invMode) { await handleInvCode(code); }
-      else if (myDevMode) { await handleMyDevCode(code); }
-      else { await handleCode(code); }
-      setCamSt('📷 Kamera připravena');
+    var code = await decodeWithRetries();
+    if (!code) {
+      beepError();
+      setCamSt('⚠️ Kód nenalezen');
+      setStatus('⚠️ Kód se nepodařilo přečíst – namiř znovu, přibliž, nebo zadej ručně');
+      document.getElementById('manual-btn').style.display = 'block';
       return;
     }
-    if (!detector) return;
-    var barcodes = await detector.detect(canvas);
-    if (!barcodes.length) {
-      setCamSt('⚠️ Nic nenalezeno – zkus znovu');
-      setStatus('⚠️ Žádný kód – namiř lépe a zkus znovu');
-      return;
-    }
-    var code = barcodes[0].rawValue;
     flashScreen(); beep();
-    if (invMode) {
-      await handleInvCode(code);
-    } else if (myDevMode) {
-      await handleMyDevCode(code);
-    } else {
-      await handleCode(code);
-    }
+    await handleScannedCode(code);
     setCamSt('📷 Kamera připravena');
   } catch(e) {
-    setStatus('❌ Chyba: ' + e.message);
+    setCamSt('📷 Kamera připravena');
+    setStatus('⚠️ Čtení kódu selhalo – zkus znovu nebo zadej ručně');
+    document.getElementById('manual-btn').style.display = 'block';
+    console.warn('Scan error', e);
   } finally {
     scanBtn.disabled = false;
   }
@@ -1323,8 +1818,11 @@ async function sendScan(data) {
       dc_id:          currentDcId
     };
     if (currentDcId == null) delete row.dc_id;
-    await supa.from('scans').insert(row);
-  } catch(e) { console.warn('Supabase sync failed:', e); }
+    row.client_uid = obUid();
+    row.scanned_at = new Date().toISOString();
+    var r = await obSubmit({ kind: 'scan', row: row });
+    if (r.s === 'fail') setStatus('⚠️ Sken se nepodařilo uložit na server: ' + r.msg);
+  } catch(e) { console.warn('Uložení skenu selhalo:', e); }
 }
 
 // ── Standard mode ─────────────────────────────────────────
@@ -1364,7 +1862,7 @@ async function processEAN(ean, loc) {
     }
   }
   rows.push({ ean:ean, loc:loc||'', qty:1, user:currentUser, timestamps:[nowStr()] });
-  sendScan({ ean:ean, location:loc||null, quantity:1 });
+  sendScan({ ean:ean, location:loc||null, quantity:1, placement_mode: eanCount ? (useLocation ? 'inv_ean_loc' : 'inv_ean') : null });
   setStatus('✅ '+ean+(loc?' / '+loc:'')+' · 1 ks  ['+currentUser+']');
   renderTable(rows.length-1);
 }
@@ -1629,6 +2127,32 @@ function loadInvExcelFile(input) {
   reader.readAsArrayBuffer(file);
 }
 
+function saveInvCache() {
+  if (!invListMeta || !invListMeta.id) return;
+  try { localStorage.setItem('prg_inv_cache_' + invListMeta.id, JSON.stringify({ meta: invListMeta, list: invList, extra: invExtra, t: Date.now() })); } catch(e) {}
+}
+function loadInvCache(id) { try { return JSON.parse(localStorage.getItem('prg_inv_cache_' + id) || 'null'); } catch(e) { return null; } }
+function renderCachedInvLists(wrap, err) {
+  var cached = []; try { cached = JSON.parse(localStorage.getItem('prg_inv_lists_cache') || '[]'); } catch(e) {}
+  cached = cached.filter(function(l){ return loadInvCache(l.id); });
+  if (!cached.length) { wrap.innerHTML = '<p style="color:var(--danger);font-size:13px;">📴 Bez připojení a v zařízení není uložená žádná inventura.' + (err ? ' (' + escHtml(String(err.message || err)) + ')' : '') + '</p>'; return; }
+  wrap.innerHTML = '<p style="color:var(--warning);font-size:13px;margin-bottom:8px">📴 Bez připojení – nabízím inventury uložené v tomto zařízení. Skeny se odešlou po připojení.</p>';
+  cached.forEach(function(l){
+    var d = document.createElement('div'); d.className = 'inv-list-item';
+    d.onclick = function(){ openCachedInv(l.id); };
+    d.innerHTML = '<div><b>' + escHtml(l.name) + '</b></div><span>uloženo v zařízení</span>';
+    wrap.appendChild(d);
+  });
+}
+function openCachedInv(id) {
+  var c = loadInvCache(id); if (!c) return;
+  closeModal('modal-inv-server-pick');
+  startInvScanning(c.list, c.meta);
+  invExtra = c.extra || [];
+  renderInvTable(); updateInvSummaryBadge();
+  setStatus('📴 Inventura z paměti zařízení · ' + (c.meta.name || ''));
+}
+
 async function openInvServerPick() {
   document.getElementById('modal-inv-source').style.display = 'none';
   document.getElementById('modal-inv-server-pick').style.display = 'flex';
@@ -1640,6 +2164,7 @@ async function openInvServerPick() {
     var res = await lq;
     if (res.error) throw res.error;
     var lists = res.data || [];
+    try { localStorage.setItem('prg_inv_lists_cache', JSON.stringify(lists.map(function(l){ return { id: l.id, name: l.name }; }))); } catch(e) {}
     if (!lists.length) { wrap.innerHTML = '<p style="color:var(--muted);font-size:14px;">Žádné dostupné seznamy na serveru.</p>'; return; }
     wrap.innerHTML = '';
     lists.forEach(function(l) {
@@ -1651,6 +2176,7 @@ async function openInvServerPick() {
       wrap.appendChild(d);
     });
   } catch(err) {
+    if (obIsNet(err)) { renderCachedInvLists(wrap, err); return; }
     wrap.innerHTML = '<p style="color:var(--danger);font-size:13px;">Chyba načítání: '+err.message+'</p>';
   }
 }
@@ -1658,6 +2184,7 @@ async function openInvServerPick() {
 async function selectInvList(listId, listName) {
   var wrap = document.getElementById('inv-server-list-wrap');
   wrap.innerHTML = '<p style="color:var(--muted);font-size:14px;">Načítám položky…</p>';
+  if (navigator.onLine) { try { await obFlush(); } catch(e) {} }   // nejdřív dorovnej neodeslané skeny
   try {
     var res = await supa.from('inventory_list_items').select('id,code,name,location,new_location,status,found_by,found_at').eq('list_id', listId);
     if (res.error) throw res.error;
@@ -1669,19 +2196,17 @@ async function selectInvList(listId, listName) {
     });
     closeModal('modal-inv-server-pick');
     // Označ seznam jako aktivní (nebo se jen připoj, pokud už aktivní je) — start info nastav jen poprvé
-    try {
-      var cur = await supa.from('inventory_lists').select('started_by,started_at').eq('id', listId).single();
-      var patch = { status: 'active' };
-      if (!cur.data || !cur.data.started_by) { patch.started_by = currentUser; patch.started_at = new Date().toISOString(); }
-      await supa.from('inventory_lists').update(patch).eq('id', listId);
-    } catch(e){}
+    obSubmit({ kind: 'inv_list_active', list_id: listId, user: currentUser, at: new Date().toISOString() });
     startInvScanning(list, { id: listId, name: listName });
+    saveInvCache();
   } catch(err) {
+    if (obIsNet(err) && loadInvCache(listId)) { openCachedInv(listId); return; }
     alert('Chyba načítání položek: '+err.message);
   }
 }
 
 function startInvScanning(list, meta) {
+  eanCount = false;
   invMode = true;
   invList = list;
   invExtra = [];
@@ -1706,6 +2231,7 @@ function fmtTs(t) { if (!t) return ''; var d = new Date(t); return isNaN(d.getTi
 function tsNum(r) { return r.tsn || (r.ts ? (Date.parse(r.ts) || 0) : 0); }
 
 async function pollInvServerState() {
+  if (!navigator.onLine || OB.count) return;   // offline nebo čekají neodeslané změny – nepřepisuj místní stav
   if (!invMode || !invListMeta || !invListMeta.id) { clearInterval(invPollTimer); return; }
   try {
     var res = await supa.from('inventory_list_items').select('id,status,found_by,found_at,new_location').eq('list_id', invListMeta.id);
@@ -1756,7 +2282,7 @@ async function handleInvCode(code) {
   var online = !!(invListMeta && invListMeta.id);
   var ex = null, kind;
   if (item) {
-    if (online && item.id) {
+    if (online && item.id && navigator.onLine) {
       try {
         var r = await supa.from('inventory_list_items').select('status,found_by,found_at,new_location').eq('id', item.id).single();
         if (r.data) {
@@ -1769,7 +2295,7 @@ async function handleInvCode(code) {
     kind = item.status==='found' ? 'dup' : 'ok';
   } else {
     ex = invExtra.find(function(e){ return normalizeCode(e.code)===norm; }) || null;
-    if (!ex && online) {
+    if (!ex && online && navigator.onLine) {
       try {
         var er = await supa.from('inventory_extra_scans').select('code,found_by,found_at,new_location').eq('list_id', invListMeta.id).eq('code', code).limit(1);
         if (er.data && er.data.length) {
@@ -1852,26 +2378,21 @@ async function scanDialogCommit(change) {
       if (online && item.id) {
         var patch = { status: 'found', found_by: currentUser, found_at: new Date().toISOString() };
         if (newLoc !== null) patch.new_location = newLoc;
-        var r = await supa.from('inventory_list_items').update(patch).eq('id', item.id).eq('status', 'pending').select();
-        if (r.error) { msg = '⚠️ Nepodařilo se uložit na server: ' + r.error.message; }
-        else if (!r.data || !r.data.length) {
-          // mezitím to naskenoval někdo jiný
-          var cur = await supa.from('inventory_list_items').select('found_by,found_at').eq('id', item.id).single();
-          if (cur.data) { item.user = cur.data.found_by || ''; item.ts = cur.data.found_at || ''; item.tsn = 0; }
-          if (newLoc !== null) await supa.from('inventory_list_items').update({ new_location: newLoc }).eq('id', item.id);
-          msg = '⚠️ ' + item.code + ' mezitím naskenoval ' + (item.user || 'někdo jiný');
-        }
+        var r = await obSubmit({ kind: 'inv_found', item_id: item.id, patch: patch, code: item.code });
+        if (r.s === 'fail') msg = '⚠️ Nepodařilo se uložit na server: ' + r.msg;
+        else if (r.s === 'conflict') { item.user = r.by || ''; item.ts = r.at || ''; item.tsn = 0; msg = '⚠️ ' + r.msg; }
+        else if (r.s === 'queued') msg += ' · 📴 uloženo v zařízení';
       }
     } else if (p.kind === 'dup') {
       if (change && newLoc !== null) {
         if (item) {
           item.newLoc = newLoc;
-          if (online && item.id) await supa.from('inventory_list_items').update({ new_location: newLoc }).eq('id', item.id);
-          msg = '📍 ' + item.code + ' – nové umístění ' + newLoc;
+          var rq = (online && item.id) ? await obSubmit({ kind: 'inv_newloc_item', item_id: item.id, new_location: newLoc }) : null;
+          msg = '📍 ' + item.code + ' – nové umístění ' + newLoc + (rq && rq.s === 'queued' ? ' · 📴 uloženo v zařízení' : '');
         } else if (ex) {
           ex.newLoc = newLoc;
-          if (online) await supa.from('inventory_extra_scans').update({ new_location: newLoc }).eq('list_id', invListMeta.id).eq('code', ex.code);
-          msg = '📍 ' + ex.code + ' – nové umístění ' + newLoc;
+          var rq2 = online ? await obSubmit({ kind: 'inv_newloc_extra', list_id: invListMeta.id, code: ex.code, new_location: newLoc }) : null;
+          msg = '📍 ' + ex.code + ' – nové umístění ' + newLoc + (rq2 && rq2.s === 'queued' ? ' · 📴 uloženo v zařízení' : '');
         }
       } else {
         msg = '⚠️ ' + (item ? item.code : (ex ? ex.code : p.code)) + ' už byl naskenován';
@@ -1881,15 +2402,15 @@ async function scanDialogCommit(change) {
       invExtra.push(ne);
       msg = '➕ ' + p.code + ' – přebývá' + (newLoc ? ' · místnost ' + newLoc : '');
       if (online) {
-        var ir = await supa.from('inventory_extra_scans').insert({ list_id: invListMeta.id, code: p.code, found_by: currentUser, new_location: newLoc }).select();
-        if (ir.error) {
-          if (ir.error.code === '23505') msg = '⚠️ ' + p.code + ' už mezitím zaznamenal někdo jiný';
-          else msg = '⚠️ Nepodařilo se uložit na server: ' + ir.error.message;
-        }
+        var ir = await obSubmit({ kind: 'inv_extra', row: { list_id: invListMeta.id, code: p.code, found_by: currentUser, new_location: newLoc, found_at: new Date().toISOString() } });
+        if (ir.s === 'conflict') msg = '⚠️ ' + p.code + ' už mezitím zaznamenal někdo jiný';
+        else if (ir.s === 'fail') msg = '⚠️ Nepodařilo se uložit na server: ' + ir.msg;
+        else if (ir.s === 'queued') msg += ' · 📴 uloženo v zařízení';
       }
     }
     closeScanDialog();
     renderInvTable(); updateInvSummaryBadge();
+    saveInvCache();
     setStatus(msg);
   } finally { invBusy = false; }
 }
@@ -1984,14 +2505,10 @@ async function confirmFinishInventura() {
   clearInterval(invPollTimer);
   var saveMsg = '';
   if (invListMeta && invListMeta.id) {
-    try {
-      await supa.from('inventory_lists').update({
-        status: 'completed', completed_by: currentUser, completed_at: new Date().toISOString()
-      }).eq('id', invListMeta.id);
-      saveMsg = '☁️ Inventura uzavřena na serveru';
-    } catch(err) {
-      saveMsg = '⚠️ Server se nepodařilo aktualizovat (' + err.message + ')';
-    }
+    var fr = await obSubmit({ kind: 'inv_complete', list_id: invListMeta.id, user: currentUser, at: new Date().toISOString() });
+    if (fr.s === 'done') saveMsg = '☁️ Inventura uzavřena na serveru';
+    else if (fr.s === 'queued') saveMsg = '📴 Uzavření inventury se odešle po připojení (po všech skenech)';
+    else saveMsg = '⚠️ Server se nepodařilo aktualizovat (' + (fr.msg || '') + ')';
   } else {
     saveMsg = '💾 Inventura uložena lokálně';
   }
@@ -2026,10 +2543,11 @@ function renderTableHead() {
 
 function renderTable(highlightIdx) {
   if (myDevMode) { renderMyDevTable(); return; }
+  if (appMode === 'wms') { renderWmsEmpty(); return; }
   var empty = document.getElementById('empty-state');
   var table = document.getElementById('main-table');
   var tbody = document.getElementById('tableBody');
-  if (!rows.length) { empty.style.display='block'; table.style.display='none'; return; }
+  if (!rows.length) { empty.textContent='Žádná naskenovaná data'; empty.style.display='block'; table.style.display='none'; return; }
   empty.style.display='none'; table.style.display='table';
   tbody.innerHTML='';
   rows.forEach(function(r,i){
@@ -2092,6 +2610,10 @@ function downloadCSV(csv, prefix) {
 }
 
 function resetData() {
+  if (invMode && invListMeta && invListMeta.id && (!navigator.onLine || OB.count)) {
+    alert(!navigator.onLine ? 'Smazání sdílené inventury vyžaduje připojení k internetu.' : 'Nejdřív se musí odeslat neodeslané záznamy (štítek nahoře).');
+    return;
+  }
   if (invMode && invListMeta && invListMeta.id) {
     if (!confirm('Smazat průběh CELÉ sdílené inventury "'+invListMeta.name+'"? Smaže se i to, co naskenovali ostatní.')) return;
   } else {
@@ -2121,6 +2643,14 @@ function resetData() {
 
 // ── Helpers ───────────────────────────────────────────────
 function updateScanBtn() {
+  _updateScanBtn();
+  if (inputMode === 'reader' && cameraReady && !isAsleep) {
+    scanBtn.textContent = '🔫 ' + scanBtn.textContent.replace(/^[^A-Za-zÁ-Žá-ž]+/, '').replace('SKENOVAT', 'ČTEČKA:');
+  }
+  var f = document.getElementById('manual-code');
+  if (f && !f.value) f.placeholder = '⌨️ Zadej ' + manualHint() + ' ručně…';
+}
+function _updateScanBtn() {
   if (isAsleep) { scanBtn.textContent='💤 PROBUDIT'; scanBtn.className='sleep-mode'; scanBtn.disabled=false; return; }
   if (!cameraReady) { scanBtn.textContent='📷 SKENOVAT'; scanBtn.className=''; return; }
   if (invMode) { scanBtn.textContent='📋 SKENOVAT MAJETEK'; scanBtn.className='dev-mode'; return; }
@@ -2153,6 +2683,8 @@ function nowStr() {
 }
 
 renderTable();
+updateInputToggle();
+if (inputMode === 'reader') document.getElementById('cam-wrap').classList.add('reader');
 </script>
 </body>
 </html>
