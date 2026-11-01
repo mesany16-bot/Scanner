@@ -5,6 +5,7 @@
 <title>PRG Systems</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="wms_nav.js"></script>
+<script src="wms_flow.js"></script>
 <script src="wms_dc.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
@@ -428,11 +429,11 @@ async function loadDashboard(){
   // Receipts
   var rt=document.getElementById('t-receipts');
   var rdata=rr.data||[];
-  rt.innerHTML=rdata.length?rdata.map(function(r){var st=r.status==='confirmed'?'<span class="badge badge-green">Potvrzeno</span>':'<span class="badge badge-gray">Koncept</span>';return '<tr><td><a href="wms_receipt.html?id='+r.id+'" style="color:var(--accent);font-weight:600">'+r.receipt_number+'</a></td><td>'+(r.supplier||'–')+'</td><td>'+st+'</td><td style="font-size:11px;color:var(--muted)">'+new Date(r.created_at).toLocaleDateString('cs-CZ')+'</td></tr>';}).join(''):'<tr class="empty-row"><td colspan="4">Žádné příjmy</td></tr>';
+  rt.innerHTML=rdata.length?rdata.map(function(r){var st=window.PRG_FLOW?PRG_FLOW.badge('receipt',r.status)+PRG_FLOW.problemIcon(r):r.status;return '<tr><td><a href="wms_receipt.html?id='+r.id+'" style="color:var(--accent);font-weight:600">'+r.receipt_number+'</a></td><td>'+(r.supplier||'–')+'</td><td>'+st+'</td><td style="font-size:11px;color:var(--muted)">'+new Date(r.created_at).toLocaleDateString('cs-CZ')+'</td></tr>';}).join(''):'<tr class="empty-row"><td colspan="4">Žádné příjmy</td></tr>';
   // Deliveries
   var det=document.getElementById('t-deliveries');
   var ddata=dr.data||[];
-  det.innerHTML=ddata.length?ddata.map(function(d){var st=d.status==='confirmed'?'<span class="badge badge-green">Potvrzeno</span>':'<span class="badge badge-gray">Koncept</span>';var cn=(d.clients&&d.clients.name)||'–';return '<tr><td><a href="wms_delivery.html?id='+d.id+'" style="color:var(--accent);font-weight:600">'+d.delivery_number+'</a></td><td>'+cn+'</td><td>'+st+'</td><td style="font-size:11px;color:var(--muted)">'+new Date(d.created_at).toLocaleDateString('cs-CZ')+'</td></tr>';}).join(''):'<tr class="empty-row"><td colspan="4">Žádné výdeje</td></tr>';
+  det.innerHTML=ddata.length?ddata.map(function(d){var st=window.PRG_FLOW?PRG_FLOW.badge('delivery',d.status)+PRG_FLOW.problemIcon(d):d.status;var cn=(d.clients&&d.clients.name)||'–';return '<tr><td><a href="wms_delivery.html?id='+d.id+'" style="color:var(--accent);font-weight:600">'+d.delivery_number+'</a></td><td>'+cn+'</td><td>'+st+'</td><td style="font-size:11px;color:var(--muted)">'+new Date(d.created_at).toLocaleDateString('cs-CZ')+'</td></tr>';}).join(''):'<tr class="empty-row"><td colspan="4">Žádné výdeje</td></tr>';
   // Recent scans
   var sc=await supa.from('scans').select('ean,iot_id,scanned_at,profiles(name)').order('scanned_at',{ascending:false}).limit(6);
   var st=document.getElementById('t-scans');

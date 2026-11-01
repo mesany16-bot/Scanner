@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="cs"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Prijmovy doklad – PRG WMS</title>
+<title>Příjmový doklad – PRG WMS</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="wms_nav.js"></script>
 <script src="wms_dc.js"></script>
 <script src="wms_print.js"></script>
 <script src="wms_posting.js"></script>
+<script src="wms_flow.js"></script>
+<script src="wms_docedit.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
 :root{--bg:#f0f2f5;--surface:#fff;--border:#e2e6ed;--accent:#0a7c4e;--accent-light:#e8f7f1;--danger:#c0392b;--danger-light:#fdecea;--warning:#e67e22;--warning-light:#fef3e8;--info:#2980b9;--info-light:#eaf4fb;--text:#1a1d27;--muted:#7a8090;--shadow:0 2px 12px rgba(0,0,0,0.07);--sidebar-w:220px;}
@@ -53,206 +55,39 @@ body{overflow-x:hidden;}
     <div id="auth-msg" style="font-size:13px;color:#c0392b;min-height:18px;margin-bottom:8px"></div>
     <input id="login-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
     <input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
-    <button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Prihlasit se</button>
+    <button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Přihlásit se</button>
   </div>
 </div>
 <div id="app" style="display:none">
   <div id="sidebar">
     <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">&#x2715;</button></div>
     <nav id="wms-nav" data-active="receipts"></nav>
-    <div class="sidebar-user"><strong id="sidebar-user-name">-</strong><span id="sidebar-user-role" class="badge badge-gray"></span><button onclick="doLogout()">Odhlasit se</button></div>
+    <div class="sidebar-user"><strong id="sidebar-user-name">-</strong><span id="sidebar-user-role" class="badge badge-gray"></span><button onclick="doLogout()">Odhlásit se</button></div>
   </div>
   <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
   <div id="main">
 <div class="topbar">
   <button class="hamburger-btn" onclick="toggleSidebar()">&#9776;</button>
-  <a href="wms_receipts.html" class="back-btn">&#8592; Zpet</a>
-  <h2 id="page-title">&#128229; Novy prijmovy doklad</h2>
+  <a href="wms_receipts.html" class="back-btn">&#8592; Zpět</a>
+  <h2 id="page-title">📥 Nový příjmový doklad</h2>
   <span id="print-btns" style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-sm" style="background:#fff;color:var(--text);border:1.5px solid var(--border)" onclick="printDoc('receipt_note')">🖨 Příjemka</button></span>
 </div>
-<div class="content" style="max-width:1000px">
-  <div class="card" style="margin-bottom:16px">
-    <div class="card-header"><h3>Hlavicka dokladu</h3></div>
-    <div style="padding:18px">
-      <div class="form-row triple">
-        <div class="form-group"><label>Cislo dokladu</label><input id="f-num" type="text" placeholder="Auto" readonly style="background:#f8f9fb;font-family:'JetBrains Mono',monospace;font-weight:700"></div>
-        <div class="form-group"><label>Dodavatel</label><input id="f-supplier" type="text" placeholder="Nazev dodavatele"></div>
-        <div class="form-group"><label>Sklad</label><select id="f-wh"><option value="">- vyberte -</option></select></div>
-      </div>
-      <div class="form-row"><div class="form-group"><label>Klient (pro atributy)</label><select id="f-client" onchange="onClientChange()"><option value="">- volitelne -</option></select></div>
-      <div class="form-group"><label>Poznamka</label><input id="f-note" type="text"></div></div>
-    </div>
-  </div>
-
-  <div id="client-attrs-section" style="display:none;margin-bottom:16px">
-    <div class="card" style="margin-bottom:0">
-      <div class="card-header"><h3>&#128203; Atributy klienta</h3></div>
-      <div style="padding:18px" id="client-attrs-body"></div>
-    </div>
-  </div>
-
-  <div class="card">
-    <div class="card-header">
-      <h3>Polozky</h3>
-      <button class="btn btn-secondary btn-sm" id="add-row-btn" onclick="addRow()">+ Pridat polozku</button>
-    </div>
-    <div style="overflow-x:auto">
-      <table class="items-table">
-        <thead><tr><th style="min-width:200px">SKU</th><th>EAN</th><th>Mnozstvi</th><th>LOT</th><th>Cena/ks</th><th>Poznamka</th><th></th></tr></thead>
-        <tbody id="items-tbody"></tbody>
-      </table>
-    </div>
-    <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-      <span style="font-size:13px;color:var(--muted)">Polozek: <strong id="row-count">0</strong></span>
-      <div style="display:flex;gap:8px;flex-wrap:wrap" id="save-btns">
-        <button class="btn btn-secondary" onclick="saveDraft()">&#128190; Ulozit</button>
-        <button class="btn btn-primary" onclick="confirmDoc()">&#9989; Potvrdit prijem</button>
-      </div>
-    </div>
-  </div>
-</div>
+<div class="content" id="doc-root" style="max-width:1280px"><div style="padding:40px;text-align:center;color:var(--muted)">Načítám…</div></div>
 </div>
 </div>
 <div id="toast"></div>
 <script src="wms_auth.js"></script>
 <script>
-
-var whs=[],clients=[],stockItems=[],clientAttrs=[],attrValues={};
-var docId=null,isConfirmed=false,rowIndex=0;
-
-
 function printDoc(type){
-  if(!docId){toast('Nejdřív doklad ulož');return;}
+  var st=window.PRG_DOCEDIT&&PRG_DOCEDIT._state();var d=st&&st.doc;
+  if(!d){toast('Nejdřív doklad ulož');return;}
   if(!window.PRG_PRINT){toast('Modul tisku se nenačetl');return;}
-  PRG_PRINT.printDocument(supa,type,docId,{user:(currentProfile&&currentProfile.name)||'',userId:currentUser&&currentUser.id});
+  PRG_PRINT.printDocument(supa,type,d.id,{user:(currentProfile&&currentProfile.name)||'',userId:currentUser&&currentUser.id});
 }
+var __deInit=false;
 async function afterLogin(){
-  var params=new URLSearchParams(window.location.search);
-  docId=parseInt(params.get('id'))||null;
-  var r1=await supa.from('warehouses').select('id,name').order('name');
-  var r2=await supa.from('clients').select('id,name').order('name');
-  var r3=await supa.from('stock_items').select('id,sku,ean,price').order('sku');
-  whs=(!docId&&window.PRG_DC&&PRG_DC.list().length)?PRG_DC.list():(r1.data||[]);clients=r2.data||[];stockItems=r3.data||[];
-  var sw=document.getElementById('f-wh');
-  whs.forEach(function(w){sw.innerHTML+='<option value="'+w.id+'">'+w.name+'</option>';});
-  var sc=document.getElementById('f-client');
-  clients.forEach(function(c){sc.innerHTML+='<option value="'+c.id+'">'+c.name+'</option>';});
-  if(docId)loadDoc(); else{addRow();addRow();if(window.PRG_DC&&PRG_DC.currentId()!=null)sw.value=PRG_DC.currentId();}
+  if(__deInit)return;__deInit=true;
+  PRG_DOCEDIT.init({kind:'receipt',supa:supa,user:function(){return currentUser;},profile:function(){return currentProfile;}});
 }
-
-async function onClientChange(){
-  var cid=parseInt(document.getElementById('f-client').value);
-  if(!cid){document.getElementById('client-attrs-section').style.display='none';clientAttrs=[];return;}
-  var res=await supa.from('client_attributes').select('*').eq('client_id',cid).order('sort_order');
-  clientAttrs=(res.data||[]).filter(function(a){return a.doc_type==='receipt'||a.doc_type==='both';});
-  renderClientAttrs();
-}
-
-function renderClientAttrs(){
-  if(!clientAttrs.length){document.getElementById('client-attrs-section').style.display='none';return;}
-  document.getElementById('client-attrs-section').style.display='block';
-  var html='<div class="form-row" style="grid-template-columns:repeat(auto-fill,minmax(200px,1fr))">';
-  clientAttrs.forEach(function(a){
-    var req=a.is_required?'<span class="required-mark">*</span>':'';
-    var val=attrValues[a.id]||'';
-    html+='<div class="form-group"><label>'+a.name+req+'</label>'
-      +'<input type="text" id="attr-'+a.id+'" value="'+val+'" placeholder="'+a.name+'"'+(a.is_required?' data-required="1"':'')+'></div>';
-  });
-  html+='</div>';
-  document.getElementById('client-attrs-body').innerHTML=html;
-}
-
-async function loadDoc(){
-  var dr=await supa.from('receipts').select('*').eq('id',docId).single();
-  var ir=await supa.from('receipt_items').select('*').eq('receipt_id',docId);
-  var av=await supa.from('document_attribute_values').select('*').eq('doc_type','receipt').eq('doc_id',docId);
-  var d=dr.data;if(!d)return;
-  isConfirmed=d.status==='confirmed';
-  document.getElementById('page-title').textContent='Prijem '+d.receipt_number;
-  document.getElementById('f-num').value=d.receipt_number;
-  document.getElementById('f-supplier').value=d.supplier||'';
-  document.getElementById('f-wh').value=d.warehouse_id||'';
-  document.getElementById('f-client').value=d.client_id||'';
-  document.getElementById('f-note').value=d.note||'';
-  (av.data||[]).forEach(function(v){attrValues[v.attribute_id]=v.value;});
-  await onClientChange();
-  (av.data||[]).forEach(function(v){var el=document.getElementById('attr-'+v.attribute_id);if(el)el.value=v.value||'';});
-  var items=ir.data||[];items.forEach(function(i){addRow(i);});
-  if(!items.length)addRow();
-  if(isConfirmed){
-    document.getElementById('add-row-btn').style.display='none';
-    document.getElementById('save-btns').innerHTML='<span class="badge badge-green" style="font-size:13px;padding:8px 16px">Potvrzeno</span>';
-    document.querySelectorAll('.items-table input,.items-table select,#f-supplier,#f-wh,#f-client,#f-note,#client-attrs-body input').forEach(function(el){el.disabled=true;});
-  }
-}
-
-function addRow(item){
-  var tbody=document.getElementById('items-tbody');
-  var idx=rowIndex++;
-  var opts=stockItems.map(function(s){return '<option value="'+s.id+'"'+(item&&item.stock_item_id===s.id?' selected':'')+'>'+s.sku+'</option>';}).join('');
-  var tr=document.createElement('tr');tr.id='row-'+idx;if(item){var ex={};['sku','pallets','pallet_type'].forEach(function(f){if(item[f]!==undefined)ex[f]=item[f];});tr.dataset.extra=JSON.stringify(ex);}
-  tr.innerHTML='<td><select onchange="fillFromStock('+idx+',this)" style="padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;width:100%;background:#fff"><option value="">- vyberte -</option>'+opts+'</select></td>'
-    +'<td><input id="ean-'+idx+'" type="text" value="'+(item&&item.ean||'')+'" placeholder="EAN"></td>'
-    +'<td><input id="qty-'+idx+'" type="number" min="1" value="'+(item?item.quantity:1)+'" style="width:70px"></td>'
-    +'<td><input id="lot-'+idx+'" type="text" value="'+(item&&item.lot||'')+'"></td>'
-    +'<td><input id="price-'+idx+'" type="number" step="0.01" value="'+(item&&item.price||'')+'" style="width:80px"></td>'
-    +'<td><input id="note2-'+idx+'" type="text" value="'+(item&&item.note||'')+'"></td>'
-    +'<td><button onclick="removeRow('+idx+')" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:18px;line-height:1">&#215;</button></td>';
-  tbody.appendChild(tr);updateCount();
-}
-function fillFromStock(idx,sel){var s=stockItems.find(function(x){return x.id===parseInt(sel.value);});if(s){document.getElementById('ean-'+idx).value=s.ean||'';document.getElementById('price-'+idx).value=s.price||'';}}
-function removeRow(idx){var r=document.getElementById('row-'+idx);if(r)r.remove();updateCount();}
-function updateCount(){document.getElementById('row-count').textContent=document.getElementById('items-tbody').querySelectorAll('tr').length;}
-
-function validateAttrs(){
-  var ok=true;
-  clientAttrs.forEach(function(a){
-    if(!a.is_required)return;
-    var el=document.getElementById('attr-'+a.id);
-    if(el&&!el.value.trim()){el.style.borderColor='var(--danger)';ok=false;}
-    else if(el)el.style.borderColor='';
-  });
-  return ok;
-}
-function collectRows(){
-  var rows=[];
-  document.getElementById('items-tbody').querySelectorAll('tr').forEach(function(tr){
-    var idx=tr.id.replace('row-','');
-    var sel=tr.querySelector('select');
-    var itemId=sel?parseInt(sel.value)||null:null;
-    var qty=parseInt(document.getElementById('qty-'+idx).value)||0;
-    var extra={};try{extra=JSON.parse(tr.dataset.extra||'{}');}catch(e){}
-    if(itemId){var _si=stockItems.find(function(x){return x.id===itemId;});if(_si)extra.sku=_si.sku;}
-    if(qty>0)rows.push(Object.assign({},extra,{stock_item_id:itemId,ean:document.getElementById('ean-'+idx).value.trim()||null,quantity:qty,lot:document.getElementById('lot-'+idx).value.trim()||null,price:parseFloat(document.getElementById('price-'+idx).value)||null,note:document.getElementById('note2-'+idx).value.trim()||null}));
-  });
-  return rows;
-}
-async function saveAttrValues(docId){
-  await supa.from('document_attribute_values').delete().eq('doc_type','receipt').eq('doc_id',docId);
-  var inserts=[];
-  clientAttrs.forEach(function(a){var el=document.getElementById('attr-'+a.id);if(el&&el.value.trim())inserts.push({doc_type:'receipt',doc_id:docId,attribute_id:a.id,value:el.value.trim()});});
-  if(inserts.length)await supa.from('document_attribute_values').insert(inserts);
-}
-async function saveDraft(){
-  if(!validateAttrs()){toast('Vyplnte povinna pole');return;}
-  var rows=collectRows();if(!rows.length){toast('Pridej polozky');return;}
-  var num=docId?document.getElementById('f-num').value:'PRI-'+Date.now();
-  var payload={receipt_number:num,supplier:document.getElementById('f-supplier').value.trim()||null,warehouse_id:parseInt(document.getElementById('f-wh').value)||null,client_id:parseInt(document.getElementById('f-client').value)||null,note:document.getElementById('f-note').value.trim()||null,status:'draft',created_by:currentUser.id};
-  var res=docId?await supa.from('receipts').update(payload).eq('id',docId).select().single():await supa.from('receipts').insert(payload).select().single();
-  if(res.error){toast('Chyba: '+res.error.message);return;}
-  docId=res.data.id;
-  await supa.from('receipt_items').delete().eq('receipt_id',docId);
-  await supa.from('receipt_items').insert(rows.map(function(r){return Object.assign({receipt_id:docId},r);}));
-  await saveAttrValues(docId);
-  document.getElementById('f-num').value=num;
-  window.history.replaceState(null,'','wms_receipt.html?id='+docId);
-  toast('Ulozeno');
-}
-async function confirmDoc(){
-  if(!validateAttrs()){toast('Vyplnte povinna pole');return;}
-  await saveDraft();if(!docId)return;
-  if(!window.PRG_POST){toast('Modul zaúčtování se nenačetl');return;}
-  PRG_POST.receipt({supa:supa,docId:docId,userId:currentUser&&currentUser.id,onDone:function(){toast('Příjem zaskladněn a potvrzen');setTimeout(function(){window.location.href='wms_receipts.html';},1200);}});
-}
-
+if(typeof currentProfile!=='undefined'&&currentProfile&&window.PRG_DC&&PRG_DC.list().length)afterLogin();
 </script></body></html>

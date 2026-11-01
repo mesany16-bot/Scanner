@@ -42,6 +42,7 @@ body{overflow-x:hidden;}
 .stat-grid>*,.two-col>*{min-width:0;}
 .form-row{grid-template-columns:1fr !important;}
 }
+@media(max-width:900px){.client-grid{grid-template-columns:minmax(0,1fr) !important;gap:12px !important;}.tabs{overflow-x:auto;}}
 </style></head><body>
 <div id="auth-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
   <div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
@@ -61,11 +62,11 @@ body{overflow-x:hidden;}
   </div>
   <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
   <div id="main">
-<div id="loading" style="padding:60px;text-align:center;color:var(--muted)">Nacitam...</div>
+<div id="loading" style="padding:60px;text-align:center;color:var(--muted)">Načítám…</div>
 <div id="client-content" style="display:none">
   <div class="topbar">
     <button class="hamburger-btn" onclick="toggleSidebar()">&#9776;</button>
-    <a href="wms_clients.html" class="back-btn">&#8592; Zpet</a>
+    <a href="wms_clients.html" class="back-btn">&#8592; Zpět</a>
     <h2 id="client-title">Klient</h2>
     <div class="topbar-actions">
       <button class="btn btn-secondary btn-sm" onclick="switchTab('edit')">&#9998; Upravit</button>
@@ -73,11 +74,11 @@ body{overflow-x:hidden;}
     </div>
   </div>
   <div class="content">
-    <div style="display:grid;grid-template-columns:300px 1fr;gap:20px;align-items:start">
+    <div class="client-grid" style="display:grid;grid-template-columns:300px minmax(0,1fr);gap:20px;align-items:start">
       <div>
         <div class="card">
           <div class="card-body" style="padding:20px;text-align:center">
-            <div style="width:70px;height:70px;background:var(--accent-light);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px">&#127962;</div>
+            <div style="width:70px;height:70px;background:var(--accent-light);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 12px">🏢</div>
             <div style="font-family:'Barlow Condensed',sans-serif;font-size:24px;font-weight:700;margin-bottom:4px" id="c-name">-</div>
             <div style="font-size:13px;color:var(--muted);margin-bottom:16px" id="c-meta">-</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
@@ -97,7 +98,7 @@ body{overflow-x:hidden;}
           <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
             <div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:3px">E-mail</div><div id="c-email" style="font-size:14px">-</div></div>
             <div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Telefon</div><div id="c-phone" style="font-size:14px">-</div></div>
-            <div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:3px">IC / DIC</div><div id="c-ico" style="font-size:14px;font-family:'JetBrains Mono',monospace">-</div></div>
+            <div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:3px">IČ / DIČ</div><div id="c-ico" style="font-size:14px;font-family:'JetBrains Mono',monospace">-</div></div>
             <div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:3px">Adresa</div><div id="c-addr" style="font-size:14px">-</div></div>
           </div>
         </div>
@@ -113,38 +114,40 @@ body{overflow-x:hidden;}
           <div id="tab-stock">
             <div style="overflow-x:auto;">
             <table><thead><tr><th>SKU</th><th>EAN</th><th>Popis</th><th>Ks / paleta</th><th></th></tr></thead>
-            <tbody id="stock-tbody"><tr class="empty-row"><td colspan="5">Nacitam...</td></tr></tbody></table>
+            <tbody id="stock-tbody"><tr class="empty-row"><td colspan="5">Načítám…</td></tr></tbody></table>
             </div>
           </div>
 
           <div id="tab-attrs" style="display:none">
             <div style="padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-              <span style="font-size:13px;color:var(--muted)">Definujte povinna pole pro Prijmy a Vydeje tohoto klienta</span>
-              <button class="btn btn-primary btn-sm" onclick="openAttrModal()">+ Pridat atribut</button>
+              <span style="font-size:13px;color:var(--muted)">Definujte povinná pole pro Příjmy a Výdeje tohoto klienta</span>
+              <button class="btn btn-primary btn-sm" onclick="openAttrModal()">+ Přidat atribut</button>
             </div>
             <div style="padding:16px 20px">
-              <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Prijmy (Receipt)</div>
+              <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Příjmy (Receipt)</div>
               <div id="attrs-receipt" style="margin-bottom:20px"></div>
-              <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Vydeje (Delivery)</div>
+              <div style="font-family:'Barlow Condensed',sans-serif;font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Výdeje (Delivery)</div>
               <div id="attrs-delivery"></div>
             </div>
           </div>
 
           <div id="tab-edit" style="display:none;padding:20px">
-            <div class="form-row single"><div class="form-group"><label>Nazev *</label><input id="e-name" type="text"></div></div>
+            <div class="form-row single"><div class="form-group"><label>Název *</label><input id="e-name" type="text"></div></div>
             <div class="form-row"><div class="form-group"><label>E-mail</label><input id="e-email" type="email"></div><div class="form-group"><label>Telefon</label><input id="e-phone" type="tel"></div></div>
-            <div class="form-row"><div class="form-group"><label>IC</label><input id="e-ico" type="text"></div><div class="form-group"><label>DIC</label><input id="e-dic" type="text"></div></div>
+            <div class="form-row"><div class="form-group"><label>IČ</label><input id="e-ico" type="text"></div><div class="form-group"><label>DIČ</label><input id="e-dic" type="text"></div></div>
             <div class="form-row single"><div class="form-group"><label>Adresa</label><input id="e-address" type="text"></div></div>
-            <div class="form-row"><div class="form-group"><label>Mesto</label><input id="e-city" type="text"></div><div class="form-group"><label>Stat</label><input id="e-country" type="text" value="CZ"></div></div>
-            <div class="form-row single"><div class="form-group"><label>Poznamka</label><textarea id="e-notes"></textarea></div></div>
+            <div class="form-row"><div class="form-group"><label>Město</label><input id="e-city" type="text"></div><div class="form-group"><label>Stát</label><input id="e-country" type="text" value="CZ"></div></div>
+            <div class="form-row single"><div class="form-group"><label>Poznámka</label><textarea id="e-notes"></textarea></div></div>
             <div style="border:1.5px solid var(--border);border-radius:9px;padding:12px 14px;margin-bottom:12px">
               <div style="font-weight:700;font-size:13px;margin-bottom:8px">Pravidla skladu pro klienta</div>
               <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-bottom:8px;cursor:pointer"><input type="checkbox" id="e-lotreq" style="margin-top:3px"> <span><b>Povinný LOT při příjmu</b> – příjem bez LOTu nepůjde potvrdit (u jednotlivých SKU lze udělit výjimku v SKU Setup).</span></label>
               <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer"><input type="checkbox" id="e-fullpal" style="margin-top:3px"> <span><b>Výdej po celých paletách</b> – při vyskladnění se množství zaokrouhlí nahoru na celé palety (FIFO), palety se nerozbalují.</span></label>
+              <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-top:8px;cursor:pointer"><input type="checkbox" id="e-autorel" style="margin-top:3px"> <span><b>Výdej rovnou do skladu</b> – po uložení se výdej sám alokuje a uvolní do fronty scanneru.</span></label>
+              <div style="margin-top:10px;font-size:13px"><b>Postup příjmu</b><select id="e-rflow" style="display:block;width:100%;margin-top:4px;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"><option value="two_step">2 kroky – přijmout na UNASSIGNED, pak zaskladnit na lokaci</option><option value="one_step">1 krok – skladník skenuje lokaci rovnou při příjmu</option></select></div>
             </div>
             <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
-              <button class="btn btn-secondary" onclick="switchTab('stock')">Zrusit</button>
-              <button class="btn btn-primary" onclick="saveEdit()">&#128190; Ulozit zmeny</button>
+              <button class="btn btn-secondary" onclick="switchTab('stock')">Zrušit</button>
+              <button class="btn btn-primary" onclick="saveEdit()">&#128190; Uložit změny</button>
             </div>
           </div>
         </div>
@@ -155,25 +158,25 @@ body{overflow-x:hidden;}
 
 <div class="modal-backdrop" id="modal-attr" style="display:none">
   <div class="modal-box">
-    <div class="modal-header"><h3 id="attr-modal-title">Novy atribut</h3><button class="modal-close" onclick="closeModal('modal-attr')">&#x2715;</button></div>
+    <div class="modal-header"><h3 id="attr-modal-title">Nový atribut</h3><button class="modal-close" onclick="closeModal('modal-attr')">&#x2715;</button></div>
     <div class="modal-body">
-      <div class="form-row single"><div class="form-group"><label>Nazev atributu *</label><input id="a-name" type="text" placeholder="napr. Receipt PO"></div></div>
+      <div class="form-row single"><div class="form-group"><label>Název atributu *</label><input id="a-name" type="text" placeholder="např. Receipt PO"></div></div>
       <div class="form-row"><div class="form-group"><label>Typ dokladu *</label>
         <select id="a-doctype">
-          <option value="receipt">Prijem (Receipt)</option>
-          <option value="delivery">Vydej (Delivery)</option>
+          <option value="receipt">Příjem (Receipt)</option>
+          <option value="delivery">Výdej (Delivery)</option>
           <option value="both">Oba</option>
         </select>
       </div>
       <div class="form-group"><label>Povinnost</label>
         <select id="a-required">
-          <option value="true">Povinny</option>
-          <option value="false">Volitelny</option>
+          <option value="true">Povinný</option>
+          <option value="false">Volitelný</option>
         </select>
       </div></div>
-      <div class="form-row single"><div class="form-group"><label>Poradi</label><input id="a-order" type="number" value="0" min="0"></div></div>
+      <div class="form-row single"><div class="form-group"><label>Pořadí</label><input id="a-order" type="number" value="0" min="0"></div></div>
     </div>
-    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-attr')">Zrusit</button><button class="btn btn-primary" onclick="saveAttr()">Ulozit</button></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-attr')">Zrušit</button><button class="btn btn-primary" onclick="saveAttr()">Uložit</button></div>
   </div>
 </div>
 </div>
@@ -197,7 +200,7 @@ async function loadClient(){
   var res=await supa.from('clients').select('*').eq('id',clientId).single();
   clientData=res.data;if(!clientData)return;
   document.title=clientData.name+' - PRG WMS';
-  document.getElementById('client-title').textContent='&#127962; '+clientData.name;
+  document.getElementById('client-title').textContent='🏢 '+clientData.name;
   document.getElementById('c-name').textContent=clientData.name;
   document.getElementById('c-meta').textContent=[clientData.city,clientData.country].filter(Boolean).join(', ')||'-';
   document.getElementById('c-email').textContent=clientData.email||'-';
@@ -205,7 +208,7 @@ async function loadClient(){
   document.getElementById('c-ico').textContent=[clientData.ico,clientData.dic].filter(Boolean).join(' / ')||'-';
   document.getElementById('c-addr').textContent=[clientData.address,clientData.city].filter(Boolean).join(', ')||'-';
   ['name','email','phone','ico','dic','address','city','notes'].forEach(function(k){var el=document.getElementById('e-'+k);if(el)el.value=clientData[k]||'';});
-  document.getElementById('e-lotreq').checked=!!clientData.lot_required;document.getElementById('e-fullpal').checked=!!clientData.round_full_pallets;
+  document.getElementById('e-lotreq').checked=!!clientData.lot_required;document.getElementById('e-fullpal').checked=!!clientData.round_full_pallets;document.getElementById('e-autorel').checked=!!clientData.auto_release;document.getElementById('e-rflow').value=clientData.receipt_flow||'two_step';
   document.getElementById('e-country').value=clientData.country||'CZ';
   loadStock();
   loadAttrs();
@@ -216,7 +219,7 @@ async function loadStock(){
   var data=res.data||[];
   document.getElementById('c-stock-cnt').textContent=data.length;
   var tb=document.getElementById('stock-tbody');
-  if(!data.length){tb.innerHTML='<tr class="empty-row"><td colspan="5">Zadne SKU karty</td></tr>';return;}
+  if(!data.length){tb.innerHTML='<tr class="empty-row"><td colspan="5">Žádné SKU karty</td></tr>';return;}
   tb.innerHTML=data.map(function(i){
     return '<tr><td><a href="wms_item.html?id='+i.id+'" style="font-weight:700;color:var(--accent);text-decoration:none">'+i.sku+'</a></td>'
       +'<td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+(i.ean||'-')+'</td>'
@@ -236,9 +239,9 @@ function renderAttrs(){
   var recItems=attrsData.filter(function(a){return a.doc_type==='receipt'||a.doc_type==='both';});
   var delItems=attrsData.filter(function(a){return a.doc_type==='delivery'||a.doc_type==='both';});
   function renderList(items,el){
-    if(!items.length){el.innerHTML='<p style="font-size:13px;color:var(--muted);font-style:italic">Zadne atributy</p>';return;}
+    if(!items.length){el.innerHTML='<p style="font-size:13px;color:var(--muted);font-style:italic">Žádné atributy</p>';return;}
     el.innerHTML='<div style="display:flex;flex-direction:column;gap:8px">'+items.map(function(a){
-      var reqBadge=a.is_required?'<span class="badge badge-red" style="font-size:10px">Povinny</span>':'<span class="badge badge-gray" style="font-size:10px">Volitelny</span>';
+      var reqBadge=a.is_required?'<span class="badge badge-red" style="font-size:10px">Povinný</span>':'<span class="badge badge-gray" style="font-size:10px">Volitelný</span>';
       var docBadge=a.doc_type==='both'?'<span class="badge badge-blue" style="font-size:10px">Oba</span>':'';
       return '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--bg);border-radius:8px;border:1px solid var(--border)">'
         +'<div style="display:flex;align-items:center;gap:8px">'
@@ -257,7 +260,7 @@ function renderAttrs(){
 
 function openAttrModal(attr){
   editAttrId=attr?attr.id:null;
-  document.getElementById('attr-modal-title').textContent=attr?'Upravit atribut':'Novy atribut';
+  document.getElementById('attr-modal-title').textContent=attr?'Upravit atribut':'Nový atribut';
   document.getElementById('a-name').value=attr?attr.name:'';
   document.getElementById('a-doctype').value=attr?attr.doc_type:'receipt';
   document.getElementById('a-required').value=attr?(attr.is_required?'true':'false'):'true';
@@ -269,12 +272,12 @@ function editAttr(id){openAttrModal(attrsData.find(function(a){return a.id===id;
 
 async function saveAttr(){
   var name=document.getElementById('a-name').value.trim();
-  if(!name){toast('Zadej nazev atributu');return;}
+  if(!name){toast('Zadej název atributu');return;}
   var key=name.toLowerCase().replace(/[^a-z0-9]/g,'_');
   var payload={client_id:clientId,name:name,field_key:key,doc_type:document.getElementById('a-doctype').value,is_required:document.getElementById('a-required').value==='true',sort_order:parseInt(document.getElementById('a-order').value)||0};
   var res=editAttrId?await supa.from('client_attributes').update(payload).eq('id',editAttrId):await supa.from('client_attributes').insert(payload);
   if(res.error){toast('Chyba: '+res.error.message);return;}
-  toast(editAttrId?'Atribut ulozen':'Atribut pridan');
+  toast(editAttrId?'Atribut uložen':'Atribut přidán');
   closeModal('modal-attr');
   loadAttrs();
 }
@@ -282,18 +285,18 @@ async function saveAttr(){
 async function deleteAttr(id){
   if(!confirm('Smazat atribut?'))return;
   await supa.from('client_attributes').delete().eq('id',id);
-  toast('Smazano');loadAttrs();
+  toast('Smazáno');loadAttrs();
 }
 
 async function saveEdit(){
   var name=document.getElementById('e-name').value.trim();
-  if(!name){toast('Zadej nazev');return;}
+  if(!name){toast('Zadej název');return;}
   var payload={name,email:document.getElementById('e-email').value.trim()||null,phone:document.getElementById('e-phone').value.trim()||null,ico:document.getElementById('e-ico').value.trim()||null,dic:document.getElementById('e-dic').value.trim()||null,address:document.getElementById('e-address').value.trim()||null,city:document.getElementById('e-city').value.trim()||null,country:document.getElementById('e-country').value.trim()||'CZ',notes:document.getElementById('e-notes').value.trim()||null};
   var res=await supa.from('clients').update(payload).eq('id',clientId);
-  if(!res.error){var rr=await supa.from('clients').update({lot_required:document.getElementById('e-lotreq').checked,round_full_pallets:document.getElementById('e-fullpal').checked}).eq('id',clientId);if(rr.error)toast('Pravidla se neuložila – spusť batch_exp_setup.sql');}
+  if(!res.error){var rr=await supa.from('clients').update({lot_required:document.getElementById('e-lotreq').checked,round_full_pallets:document.getElementById('e-fullpal').checked,auto_release:document.getElementById('e-autorel').checked,receipt_flow:document.getElementById('e-rflow').value}).eq('id',clientId);if(rr.error)toast('Pravidla se neuložila – spusť flow_setup-01.sql');}
   if(res.error){toast('Chyba: '+res.error.message);return;}
   Object.assign(clientData,payload);
-  toast('Klient ulozen');switchTab('stock');loadClient();
+  toast('Klient uložen');switchTab('stock');loadClient();
 }
 
 async function deleteClient(){

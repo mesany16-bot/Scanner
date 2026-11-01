@@ -56,6 +56,88 @@
      Jen na přehledových stránkách. Neobnovuje, když uživatel píše, má otevřené okno, označené řádky
      nebo s myší/klávesnicí pracoval před chvílí. Během obnovení nenechá tabulky bliknout na „Načítám…"
      a vrátí stránkování i pozici posunu. Vypnutí: localStorage prg_autorefresh = '0'. */
+  /* ── Mobilní zobrazení (telefon do 640 px), společné pro všechny stránky ──
+     Horní lišta se zalomí (nadpis nahoře, tlačítka pod ním), tabulky se přehledů změní na karty
+     (každý řádek = karta, u hodnoty je název sloupce). Tabulky se vstupními poli zůstanou jako tabulka s posunem do strany.
+     Tabulku lze vyřadit třídou no-stack. */
+  (function mobileCss(){
+    var css='@media(max-width:640px){'
+      +'.topbar{flex-wrap:wrap;row-gap:8px;}'
+      +'.topbar h2{flex:1 1 0;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:20px;}'
+      +'.topbar-actions{flex:1 1 100%;flex-wrap:wrap;gap:6px;}'
+      +'.topbar-actions .btn,.topbar-actions button{padding:6px 10px;font-size:13px;}'
+      +'.topbar-actions select{max-width:100%;min-width:0;}'
+      +'.card-header{flex-wrap:wrap;gap:8px;padding:12px 14px;}'
+      +'.content{padding:10px !important;}'
+      +'table.m-stack,table.m-stack tbody{display:block;width:100%;}'
+      +'table.m-stack thead{display:none;}'
+      +'table.m-stack tr{display:block;border-bottom:1px solid var(--border,#e2e6ed);padding:8px 12px;}'
+      +'table.m-stack tbody tr:last-child{border-bottom:none;}'
+      +'table.m-stack td{display:block;border:none !important;padding:4px 0 !important;text-align:right !important;min-height:26px;white-space:normal !important;overflow:hidden;}'
+      +'table.m-stack td::before{content:attr(data-label);float:left;max-width:45%;margin-right:10px;padding-top:3px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--muted,#7a8090);}'
+      +'table.m-stack td[data-label=""]::before{display:none;}'
+      +'table.m-stack td .btn,table.m-stack td button{margin:2px 0 2px 4px;}'
+      +'table.m-stack td:first-child{font-size:15px;text-align:left !important;padding-bottom:6px !important;}'
+      +'table.m-stack td:first-child::before{display:none;}'
+      +'table.m-stack tr.empty-row td,table.m-stack td[colspan]{display:block;text-align:center !important;padding:18px 0 !important;}'
+      +'table.m-stack tr.empty-row td::before,table.m-stack td[colspan]::before{display:none;}'
+      +'}';
+    var st=document.createElement('style');st.id='prg-mobile-css';st.textContent=css;
+    (document.head||document.documentElement).appendChild(st);
+  })();
+  function labelTables(root){
+    var ts=(root||document).querySelectorAll?(root||document).querySelectorAll('table'):[];
+    for(var i=0;i<ts.length;i++){
+      var t=ts[i];if(t.classList.contains('no-stack'))continue;
+      var ths=t.querySelectorAll('thead th');if(!ths.length)continue;
+      if(t.querySelector('tbody input:not([type=checkbox]),tbody select,tbody textarea')){t.classList.remove('m-stack');continue;}
+      if(t.querySelector('tbody input[type=checkbox]'))continue;   // výběr řádků – nechat jako tabulku
+      var labels=[].map.call(ths,function(h){return (h.textContent||'').replace(/\s+/g,' ').trim();});
+      t.classList.add('m-stack');
+      var rows=t.querySelectorAll('tbody tr');
+      for(var r=0;r<rows.length;r++){var c=0,cells=rows[r].children;for(var k=0;k<cells.length;k++){var td=cells[k];var lab=labels[c]||'';if(td.getAttribute('data-label')!==lab)td.setAttribute('data-label',lab);c+=td.colSpan||1;}}
+    }
+  }
+  var ltTimer=null;
+  function scheduleLabel(){clearTimeout(ltTimer);ltTimer=setTimeout(function(){labelTables(document);},30);}
+  function startLabeler(){labelTables(document);try{new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var n=ms[i].target;if(n.closest&&n.closest('table')||n.tagName==='TABLE'||n.tagName==='TBODY'){scheduleLabel();return;}if(ms[i].addedNodes.length){scheduleLabel();return;}}}).observe(document.body,{childList:true,subtree:true});}catch(e){}}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',startLabeler);else startLabeler();
+  window.PRG_LABEL_TABLES=labelTables;
+
+  /* ── Odhlášení po 60 min nečinnosti (stejně jako scanner) ──
+     Čas poslední aktivity je v localStorage, takže platí napříč stránkami a záložkami
+     a funguje i po uspání PC nebo zavření prohlížeče. Automatické obnovení dat se jako aktivita nepočítá. */
+  var IDLE_MS=60*60*1000,ACT_KEY='prg_web_last_act',actWritten=0,loggingOut=false;
+  function lastAct0(){var v=parseInt(lsGet(ACT_KEY)||'0',10);return isNaN(v)?0:v;}
+  function markAct(){var n=Date.now();if(n-actWritten<10000)return;actWritten=n;lsSet(ACT_KEY,String(n));}
+  function hasSession(){try{for(var i=0;i<localStorage.length;i++){var k=localStorage.key(i);if(/^sb-.*-auth-token$/.test(k))return true;}}catch(e){}return false;}
+  async function idleLogout(){
+    if(loggingOut)return;loggingOut=true;
+    try{sessionStorage.clear();}catch(e){}
+    try{if(window.supa&&supa.auth)await Promise.race([supa.auth.signOut(),new Promise(function(r){setTimeout(r,3000);})]);}catch(e){}
+    try{Object.keys(localStorage).forEach(function(k){if(/^sb-.*-auth-token$/.test(k))localStorage.removeItem(k);});}catch(e){}
+    try{localStorage.removeItem(ACT_KEY);}catch(e){}
+    alert('Byl jsi odhlášen po 60 minutách nečinnosti. Přihlas se znovu.');
+    window.location.href='wms_dashboard.html';
+  }
+  function idleCheck(){
+    var l=lastAct0();
+    if(l&&Date.now()-l>IDLE_MS&&hasSession()){idleLogout();return true;}
+    return false;
+  }
+  window.PRG_IDLE={check:idleCheck,ms:IDLE_MS,key:ACT_KEY};
+  if(!idleCheck()){
+    if(!lastAct0()||!hasSession())lsSet(ACT_KEY,String(Date.now()));
+    else markAct();   // otevření stránky = aktivita
+  }
+  ['mousedown','keydown','touchstart','wheel','scroll','mousemove'].forEach(function(ev){document.addEventListener(ev,function(){if(!loggingOut&&!idleCheck())markAct();},{passive:true,capture:true});});
+  setInterval(idleCheck,30000);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)idleCheck();});
+  window.addEventListener('pageshow',idleCheck);
+  // po odhlášení nenechávat heslo vyplněné
+  function clearPass(){var p=document.getElementById('login-pass');if(p){p.value='';p.setAttribute('autocomplete','new-password');}}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',clearPass);else clearPass();
+
   var EVERY=15000;
   function hasFn(n){return typeof window[n]==='function';}
   function hVal(id){var e=document.getElementById(id);return e?String(e.value||'').trim():'';}
@@ -66,7 +148,9 @@
     'wms_stock.html':'load','wms_users.html':'load',
     'wms_adjustments.html':'loadHistory',
     'wms_history.html':function(){return hVal('h-q')&&hasFn('runSearch')&&runSearch();},
-    'wms_inventura.html':function(){return hasFn('loadInvPage')&&loadInvPage(true);}
+    'wms_inventura.html':function(){return hasFn('loadInvPage')&&loadInvPage(true);},
+    'wms_receipt.html':function(){return window.PRG_DOCEDIT&&PRG_DOCEDIT.refreshLive();},
+    'wms_delivery.html':function(){return window.PRG_DOCEDIT&&PRG_DOCEDIT.refreshLive();}
   };
   var file=(location.pathname.split('/').pop()||'wms_dashboard.html').toLowerCase();
   var job=PAGES[file];

@@ -4,6 +4,7 @@
 <title>Vydeje – PRG WMS</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="wms_nav.js"></script>
+<script src="wms_flow.js"></script>
 <script src="wms_dc.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="wms_docimport.js"></script>
@@ -53,42 +54,31 @@ body{overflow-x:hidden;}
     <div id="auth-msg" style="font-size:13px;color:#c0392b;min-height:18px;margin-bottom:8px"></div>
     <input id="login-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
     <input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
-    <button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Prihlasit se</button>
+    <button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Přihlásit se</button>
   </div>
 </div>
 <div id="app" style="display:none">
   <div id="sidebar">
     <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">&#x2715;</button></div>
     <nav id="wms-nav" data-active="deliveries"></nav>
-    <div class="sidebar-user"><strong id="sidebar-user-name">-</strong><span id="sidebar-user-role" class="badge badge-gray"></span><button onclick="doLogout()">Odhlasit se</button></div>
+    <div class="sidebar-user"><strong id="sidebar-user-name">-</strong><span id="sidebar-user-role" class="badge badge-gray"></span><button onclick="doLogout()">Odhlásit se</button></div>
   </div>
   <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
   <div id="main">
-<div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">&#9776;</button><h2>&#128228; Vydejove doklady</h2>
-<div class="topbar-actions"><a href="wms_delivery.html" class="btn btn-primary btn-sm">+ Novy doklad</a></div></div>
+<div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">&#9776;</button><h2>📤 Výdejové doklady</h2>
+<div class="topbar-actions"><a href="wms_delivery.html" class="btn btn-primary btn-sm">+ Nový doklad</a></div></div>
 <div class="content">
   <div class="card">
-    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">
-      <input id="search" type="text" placeholder="Hledat cislo..." oninput="filterDocs()" style="flex:1;min-width:130px;padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none">
-      <select id="f-status" onchange="filterDocs()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none">
-        <option value="">Vsechny stavy</option>
-        <option value="new">Novy</option>
-        <option value="allocated">Alokovano</option>
-        <option value="picking">Vyskladnovani</option>
-        <option value="ready">Pripraveno</option>
-        <option value="loaded">Nalozeno</option>
-      </select>
-      <select id="f-special" onchange="filterDocs()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none">
-        <option value="">Bez filtru</option>
-        <option value="preorder">Predobjednavka</option>
-        <option value="hold">Hold</option>
-      </select>
+    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="search" type="text" placeholder="Hledat číslo, klienta…" oninput="filterDocs()" style="flex:1;min-width:150px;padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none">
+      <select id="f-status" onchange="filterDocs()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"></select>
+      <select id="f-client" onchange="filterDocs()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"><option value="">Všichni klienti</option></select>
+      <select id="f-special" onchange="filterDocs()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"><option value="">Bez příznaku i s ním</option><option value="preorder">Předobjednávka</option><option value="hold">Hold</option></select>
+      <span id="f-info" style="font-size:12px;color:var(--muted)"></span>
     </div>
-    <div style="overflow-x:auto">
     <div style="overflow-x:auto;">
-    <table><thead><tr><th>Cislo</th><th>Klient</th><th>Sklad</th><th>Status</th><th>Priznak</th><th>Vytvoril</th><th>Datum</th><th>Akce</th></tr></thead>
-    <tbody id="tbody"><tr class="empty-row"><td colspan="8">Nacitam...</td></tr></tbody></table>
-    </div>
+    <table><thead><tr><th>Číslo</th><th>Klient</th><th>Příznak</th><th>DC</th><th>Stav</th><th>Průběh</th><th>Odjezd</th><th>Vytvořil</th><th>Akce</th></tr></thead>
+    <tbody id="tbody"><tr class="empty-row"><td colspan="9">Načítám…</td></tr></tbody></table>
     </div>
   </div>
 </div>
@@ -98,58 +88,69 @@ body{overflow-x:hidden;}
 <script src="wms_auth.js"></script>
 <script>
 
-var data=[];
-function statusBadge(s){
-  var m={'new':'<span class="badge badge-blue">Novy</span>','allocated':'<span class="badge badge-blue">Alokovano</span>','picking':'<span class="badge badge-orange">Vyskladnovani</span>','ready':'<span class="badge badge-green">Pripraveno</span>','loaded':'<span class="badge badge-gray">Nalozeno</span>','draft':'<span class="badge badge-gray">Koncept</span>','confirmed':'<span class="badge badge-green">Potvrzeno</span>'};
-  return m[s]||'<span class="badge badge-gray">'+s+'</span>';
+var data=[],prog={},KIND='delivery',firstLoad=true;
+function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+async function afterLogin(){
+  document.getElementById('f-status').innerHTML=PRG_FLOW.statusOptions(KIND,true);
+  try{var fs=localStorage.getItem('prg_list_status_'+KIND);document.getElementById('f-status').value=fs!=null?fs:'open';}catch(e){document.getElementById('f-status').value='open';}
+  var cr=await supa.from('clients').select('id,name').order('name');
+  var fc=document.getElementById('f-client');(cr.data||[]).forEach(function(c){fc.innerHTML+='<option value="'+c.id+'">'+esc(c.name)+'</option>';});
+  load();
+  if(window.PRG_DOCIMPORT)PRG_DOCIMPORT.attach({kind:KIND,supa:supa,user:function(){return currentUser;},reload:load});
 }
-function specialBadge(s){
-  if(!s)return '';
-  if(s==='preorder')return '<span class="badge badge-orange">Predobjednavka</span>';
-  if(s==='hold')return '<span class="badge badge-red">Hold</span>';
-  return '';
-}
-async function afterLogin(){load();if(window.PRG_DOCIMPORT)PRG_DOCIMPORT.attach({kind:'delivery',supa:supa,user:function(){return currentUser;},reload:load});}
 async function load(){
-  var dq=supa.from('deliveries').select('*,warehouses(name),profiles(name),clients(name)').order('created_at',{ascending:false});if(window.PRG_DC)dq=PRG_DC.apply(dq,'warehouse_id');var res=await dq;
-  data=res.data||[];renderDocs(data);
+  var q=supa.from('deliveries').select('*,warehouses(name,code),profiles(name),clients(name)').order('created_at',{ascending:false}).limit(2000);
+  if(window.PRG_DC)q=PRG_DC.apply(q,'warehouse_id');
+  var res=await q;
+  if(res.error){document.getElementById('tbody').innerHTML='<tr class="empty-row"><td colspan="9">Chyba: '+esc(res.error.message)+'</td></tr>';return;}
+  data=res.data||[];
+  var open=data.filter(function(r){return PRG_FLOW.isOpen(KIND,r.status);}).map(function(r){return r.id;});
+  prog=await PRG_FLOW.fetchProgress(supa,KIND,open.length?open:data.slice(0,200).map(function(r){return r.id;}));
+  filterDocs();
 }
+function when(v){if(!v)return '–';var d=new Date(v);return d.toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});}
 function renderDocs(d){
   var tb=document.getElementById('tbody');
-  if(!d.length){tb.innerHTML='<tr class="empty-row"><td colspan="8">Zadne doklady</td></tr>';return;}
+  if(!d.length){tb.innerHTML='<tr class="empty-row"><td colspan="9">Žádné doklady</td></tr>';return;}
   tb.innerHTML=d.map(function(r){
-    var wn=(r.warehouses&&r.warehouses.name)||'-';
-    var cn=(r.clients&&r.clients.name)||'-';
-    var un=(r.profiles&&r.profiles.name)||'-';
-    return '<tr>'
-      +'<td><a href="wms_delivery.html?id='+r.id+'" style="font-weight:700;color:var(--accent);text-decoration:none;font-family:\'JetBrains Mono\',monospace">'+r.delivery_number+'</a></td>'
-      +'<td>'+cn+'</td><td>'+wn+'</td>'
-      +'<td>'+statusBadge(r.status)+'</td>'
-      +'<td>'+specialBadge(r.special_status)+'</td>'
-      +'<td>'+un+'</td>'
-      +'<td style="font-size:11px;color:var(--muted)">'+new Date(r.created_at).toLocaleDateString('cs-CZ')+'</td>'
-      +'<td><div style="display:flex;gap:4px">'
-        +'<a href="wms_delivery.html?id='+r.id+'" class="btn btn-secondary btn-sm">Detail</a>'
-        +(r.status!=='loaded'&&r.status!=='confirmed'?'<button class="btn btn-danger btn-sm" onclick="del('+r.id+')">&#128465;</button>':'')
+    var wn=(r.warehouses&&(r.warehouses.code||r.warehouses.name))||'–',cn=(r.clients&&r.clients.name)||'–',un=(r.profiles&&r.profiles.name)||'–';
+    var st=PRG_FLOW.norm(KIND,r.status);
+    return '<tr><td><a href="wms_delivery.html?id='+r.id+'" style="font-weight:700;color:var(--accent);text-decoration:none;font-family:\'JetBrains Mono\',monospace">'+esc(r.delivery_number)+'</a>'+PRG_FLOW.problemIcon(r)+'</td>'
+      +'<td>'+esc(cn)+'</td>'+'<td>'+(r.special_status==='hold'?'<span class="badge badge-red">Hold</span>':r.special_status==='preorder'?'<span class="badge badge-orange">Předobjednávka</span>':'')+'</td>'+'<td>'+esc(wn)+'</td>'
+      +'<td>'+PRG_FLOW.badge(KIND,st)+'</td>'
+      +'<td style="font-size:12px;color:var(--muted);white-space:nowrap">'+esc(PRG_FLOW.progress(KIND,r,prog[r.id]))+'</td>'
+      +'<td style="font-size:12px;white-space:nowrap">'+when(r.planned_at)+(r.priority==='high'?' <span class="badge badge-red">Vysoká</span>':'')+'</td>'
+      +'<td>'+esc(un)+'</td>'
+      +'<td><div style="display:flex;gap:4px"><a href="wms_delivery.html?id='+r.id+'" class="btn btn-secondary btn-sm">Detail</a>'
+      +(st==='new'?'<button class="btn btn-danger btn-sm" title="Smazat" onclick="del('+r.id+')">&#128465;</button>':'')
       +'</div></td></tr>';
   }).join('');
 }
 function filterDocs(){
-  var q=document.getElementById('search').value.toLowerCase();
-  var s=document.getElementById('f-status').value;
-  var sp=document.getElementById('f-special').value;
-  renderDocs(data.filter(function(r){
-    return (!q||r.delivery_number.toLowerCase().includes(q))
-      &&(!s||r.status===s)
-      &&(!sp||r.special_status===sp);
-  }));
+  var q=document.getElementById('search').value.toLowerCase().trim(),s=document.getElementById('f-status').value,c=document.getElementById('f-client').value;
+  var sp=document.getElementById('f-special');sp=sp?sp.value:'';
+  try{localStorage.setItem('prg_list_status_'+KIND,s);}catch(e){}
+  var out=data.filter(function(r){
+    var st=PRG_FLOW.norm(KIND,r.status);
+    if(s==='open'&&!PRG_FLOW.isOpen(KIND,st))return false;
+    if(s==='problem'&&!r.problem)return false;
+    if(s&&s!=='open'&&s!=='problem'&&st!==s)return false;
+    if(c&&String(r.client_id)!==c)return false;
+    if(sp&&r.special_status!==sp)return false;
+    if(q){var hay=((r.delivery_number||'')+' '+((r.clients&&r.clients.name)||'')+' '+(r.supplier||'')+' '+(r.note||'')).toLowerCase();if(hay.indexOf(q)<0)return false;}
+    return true;
+  });
+  document.getElementById('f-info').textContent=out.length+' z '+data.length;
+  renderDocs(out);
 }
 async function del(id){
-  if(!confirm('Smazat doklad?'))return;
+  var r=data.find(function(x){return x.id===id;});
+  if(!r||PRG_FLOW.norm(KIND,r.status)!=='new'){toast('Smazat jde jen doklad ve stavu Nový');return;}
+  if(!confirm('Smazat doklad '+r.delivery_number+'?'))return;
   await supa.from('delivery_items').delete().eq('delivery_id',id);
-  await supa.from('document_attribute_values').delete().eq('doc_type','delivery').eq('doc_id',id);
-  await supa.from('deliveries').delete().eq('id',id);
-  toast('Smazano');load();
+  await supa.from('document_attribute_values').delete().eq('doc_type',KIND).eq('doc_id',id);
+  var d=await supa.from('deliveries').delete().eq('id',id).eq('status','new');
+  if(d.error){toast('❌ '+PRG_FLOW.errMsg(d.error));}else toast('Smazáno');
+  load();
 }
-
 </script></body></html>
