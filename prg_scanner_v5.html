@@ -759,7 +759,7 @@ function obIsNet(err) {
 function obRes(err) { if (!err) return { s: 'done' }; if (obIsNet(err)) return { s: 'net' }; return { s: 'fail', msg: err.message || String(err) }; }
 function obLogGet() { try { return JSON.parse(localStorage.getItem('prg_outbox_log') || '[]'); } catch(e) { return []; } }
 function obLog(kind, msg) { var l = obLogGet(); l.unshift({ t: new Date().toISOString(), kind: kind, msg: msg }); try { localStorage.setItem('prg_outbox_log', JSON.stringify(l.slice(0, 50))); } catch(e) {} }
-var OB_LABEL = { scan: 'sken', inv_found: 'inventura – nalezeno', inv_newloc_item: 'inventura – nové umístění', inv_newloc_extra: 'inventura – nové umístění', inv_extra: 'inventura – přebývá', inv_list_active: 'inventura – zahájení', inv_complete: 'inventura – uzavření' };
+var OB_LABEL = { scan: 'sken', inv_found: 'inventura – nalezeno', inv_newloc_item: 'inventura – nové umístění', inv_newloc_extra: 'inventura – nové umístění', inv_extra: 'inventura – přebývá', inv_list_active: 'inventura – zahájení', inv_complete: 'inventura – uzavření', inv_ean_start: 'inventura EAN – zahájení', inv_ean_finish: 'inventura EAN – uzavření' };
 
 async function obExec(op) {
   try {
@@ -803,6 +803,15 @@ async function obExec(op) {
     }
     if (op.kind === 'inv_complete') {
       r = await supa.from('inventory_lists').update({ status: 'completed', completed_by: op.user, completed_at: op.at }).eq('id', op.list_id);
+      return obRes(r.error);
+    }
+    if (op.kind === 'inv_ean_start') {
+      r = await supa.from('inventory_lists').upsert(op.row, { onConflict: 'session_uid', ignoreDuplicates: true });
+      return obRes(r.error);
+    }
+    if (op.kind === 'inv_ean_finish') {
+      if (op.drop) r = await supa.from('inventory_lists').delete().eq('session_uid', op.session_uid).neq('status', 'completed');
+      else r = await supa.from('inventory_lists').update({ status: 'completed', completed_by: op.user, completed_at: op.at }).eq('session_uid', op.session_uid).neq('status', 'completed');
       return obRes(r.error);
     }
     return { s: 'fail', msg: 'Neznámý typ záznamu ' + op.kind };
@@ -905,6 +914,7 @@ function beepOk()    { beep(1480,0.08); setTimeout(function(){beep(1760,0.1);},1
 var currentUser = '';
 var useLocation = false;
 var eanCount = false;   // Inventory Tool: počítání EAN (s lokací nebo bez)
+var eanSession = null;  // session_uid volné inventury EAN – na serveru jako řádek inventory_lists (kind ean / ean_loc)
 var expectingLoc = false;
 var pendingEAN = null;
 var stream = null;
@@ -1273,7 +1283,7 @@ function hubInvOther() {
   }
   stopCam();
   invMode = false; invList = []; invExtra = []; invListMeta = null;
-  if (eanCount) { rows = []; eanCount = false; expectingLoc = false; pendingEAN = null; locPill.style.display = 'none'; }
+  if (eanCount) { eanSessionEnd(!rows.length); rows = []; eanCount = false; expectingLoc = false; pendingEAN = null; locPill.style.display = 'none'; }
   appMode = 'inventura';
   renderInvTable(); refreshModeUI(); updateScanBtn();
   document.getElementById('modal-inv-source').style.display = 'flex';
@@ -1402,15 +1412,33 @@ function startEanCount(withLoc) {
   useLocation = withLoc;
   expectingLoc = false; pendingEAN = null;
   locPill.style.display = 'none';
+  eanSessionStart(withLoc);
   renderTableHead(); renderTable(); refreshModeUI(); updateScanBtn();
   setStatus((withLoc ? '📍 Inventura EAN + lokace' : '🔢 Inventura – jen EAN') + ' · spouštím kameru');
   initCamera();
 }
+function eanSessionStart(withLoc) {
+  eanSession = obUid();
+  var d = new Date();
+  var row = { session_uid: eanSession, kind: withLoc ? 'ean_loc' : 'ean', status: 'active',
+    name: (withLoc ? 'EAN + lokace' : 'Jen EAN') + ' · ' + currentUser + ' · ' + d.toLocaleString('cs-CZ', { day:'numeric', month:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+    started_by: currentUser, started_at: d.toISOString() };
+  if (currentDcId != null) row.dc_id = currentDcId;
+  obSubmit({ kind: 'inv_ean_start', row: row }).catch(function(){});
+}
+function eanSessionEnd(empty) {
+  if (!eanSession) return;
+  var op = { kind: 'inv_ean_finish', session_uid: eanSession, user: currentUser, at: new Date().toISOString() };
+  if (empty) op.drop = true;
+  eanSession = null;
+  obSubmit(op).catch(function(){});
+}
 function finishEanCount() {
-  if (!rows.length) { eanCount = false; stopCam(); refreshModeUI(); document.getElementById('modal-inv-source').style.display = 'flex'; return; }
+  if (!rows.length) { eanSessionEnd(true); eanCount = false; stopCam(); refreshModeUI(); document.getElementById('modal-inv-source').style.display = 'flex'; return; }
   var pcs = rows.reduce(function(a, r){ return a + r.qty; }, 0);
   if (!confirm('Ukončit inventuru? Naskenováno ' + rows.length + ' řádků, ' + pcs + ' ks. Skeny jsou uložené na serveru (WMS → Skeny)' + (OB.count ? ', ' + OB.count + ' čeká na odeslání.' : '.'))) return;
   if (confirm('Stáhnout CSV s výsledkem?')) exportCSV();
+  eanSessionEnd(false);
   rows = []; expectingLoc = false; pendingEAN = null; eanCount = false;
   locPill.style.display = 'none';
   stopCam(); renderTable(); refreshModeUI();
@@ -1817,6 +1845,7 @@ async function sendScan(data) {
       quantity:       data.quantity || 1,
       dc_id:          currentDcId
     };
+    if (data.inv_session) row.inv_session = data.inv_session;
     if (currentDcId == null) delete row.dc_id;
     row.client_uid = obUid();
     row.scanned_at = new Date().toISOString();
@@ -1857,12 +1886,13 @@ async function processEAN(ean, loc) {
       var idx = rows.indexOf(target);
       rows[idx].qty++;
       rows[idx].timestamps.push(nowStr());
+      sendScan({ ean:ean, location:target.loc||null, quantity:1, placement_mode: eanCount ? (useLocation ? 'inv_ean_loc' : 'inv_ean') : null, inv_session: eanCount ? eanSession : null });
       setStatus('➕ '+ean+(loc?'/'+loc:'')+' → '+rows[idx].qty+' ks');
       renderTable(idx); return;
     }
   }
   rows.push({ ean:ean, loc:loc||'', qty:1, user:currentUser, timestamps:[nowStr()] });
-  sendScan({ ean:ean, location:loc||null, quantity:1, placement_mode: eanCount ? (useLocation ? 'inv_ean_loc' : 'inv_ean') : null });
+  sendScan({ ean:ean, location:loc||null, quantity:1, placement_mode: eanCount ? (useLocation ? 'inv_ean_loc' : 'inv_ean') : null, inv_session: eanCount ? eanSession : null });
   setStatus('✅ '+ean+(loc?' / '+loc:'')+' · 1 ks  ['+currentUser+']');
   renderTable(rows.length-1);
 }
@@ -2159,7 +2189,7 @@ async function openInvServerPick() {
   var wrap = document.getElementById('inv-server-list-wrap');
   wrap.innerHTML = '<p style="color:var(--muted);font-size:14px;">Načítám…</p>';
   try {
-    var lq = supa.from('inventory_lists').select('id,name,created_at,status,started_by').in('status', ['uploaded','active']).order('created_at', {ascending:false}).limit(30);
+    var lq = supa.from('inventory_lists').select('id,name,created_at,status,started_by').in('status', ['uploaded','active']).or('kind.is.null,kind.eq.list').order('created_at', {ascending:false}).limit(30);
     if (currentDcId != null) lq = lq.eq('dc_id', currentDcId);
     var res = await lq;
     if (res.error) throw res.error;
@@ -2206,6 +2236,7 @@ async function selectInvList(listId, listName) {
 }
 
 function startInvScanning(list, meta) {
+  if (eanCount) eanSessionEnd(!rows.length);
   eanCount = false;
   invMode = true;
   invList = list;

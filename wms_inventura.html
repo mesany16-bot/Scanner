@@ -268,6 +268,7 @@ async function onLoggedIn(user){
   document.getElementById('app').style.display='block';
   try{if(window.PRG_DC)await PRG_DC.init(supa,currentProfile);}catch(e){console.warn('DC',e);}
   loadInvPage();
+  setInterval(function(){ if(!document.hidden) loadInvPage(true); },30000);   // průběh ze scannerů se obnovuje sám
   startSessionIdleWatch();
 }
 
@@ -279,15 +280,17 @@ var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m
 // ── Seznamy ──────────────────────────────────────────────
 function esc(s){ return (s||'').replace(/'/g,"\\'"); }
 
-async function loadInvPage(){
+async function loadInvPage(quiet){
   var ut=document.getElementById('t-uploaded');
   var at=document.getElementById('t-active');
   var ct=document.getElementById('t-completed');
+  if(!quiet){
   ut.innerHTML='<tr class="empty-row"><td colspan="4">Načítám…</td></tr>';
   at.innerHTML='<tr class="empty-row"><td colspan="7">Načítám…</td></tr>';
   ct.innerHTML='<tr class="empty-row"><td colspan="8">Načítám…</td></tr>';
+  }
 
-  var lq=supa.from('inventory_lists').select('id,name,created_at,status,started_by,started_at,completed_by,completed_at,dc_id').order('created_at',{ascending:false});if(window.PRG_DC)lq=PRG_DC.apply(lq,'dc_id');var lr=await lq;
+  var lq=supa.from('inventory_lists').select('id,name,created_at,status,started_by,started_at,completed_by,completed_at,dc_id,kind,session_uid').order('created_at',{ascending:false});if(window.PRG_DC)lq=PRG_DC.apply(lq,'dc_id');var lr=await lq;
   if(lr.error){
     ut.innerHTML='<tr class="empty-row"><td colspan="4">Chyba: '+lr.error.message+'</td></tr>';
     at.innerHTML='<tr class="empty-row"><td colspan="7">Chyba: '+lr.error.message+'</td></tr>';
@@ -295,6 +298,13 @@ async function loadInvPage(){
     return;
   }
   var all=lr.data||[];
+  INV_BY_ID={}; all.forEach(function(l){INV_BY_ID[l.id]=l;});
+  var sess=all.filter(isEanInv).map(function(l){return l.session_uid;}).filter(Boolean);
+  var scanCnt={}, scanPcs={};
+  if(sess.length){
+    var sr=await supa.from('scans').select('inv_session,quantity').in('inv_session',sess);
+    (sr.data||[]).forEach(function(r){scanCnt[r.inv_session]=(scanCnt[r.inv_session]||0)+1;scanPcs[r.inv_session]=(scanPcs[r.inv_session]||0)+(Number(r.quantity)||1);});
+  }
   var uploaded=all.filter(function(l){return l.status==='uploaded'||!l.status;});
   var active=all.filter(function(l){return l.status==='active';});
   var completed=all.filter(function(l){return l.status==='completed';});
@@ -316,6 +326,19 @@ async function loadInvPage(){
   }).join(''):'<tr class="empty-row"><td colspan="4">Žádné inventury čekající na spuštění</td></tr>';
 
   at.innerHTML=active.length?active.map(function(l){
+    if(isEanInv(l)){
+      return '<tr><td>'+invKindBadge(l)+'<b>'+l.name+'</b></td><td>'+(l.started_by||'–')+'</td>'+
+        '<td>'+(scanPcs[l.session_uid]||0)+' ks <span style="font-size:12px;color:var(--muted)">('+(scanCnt[l.session_uid]||0)+' skenů)</span></td>'+
+        '<td><span class="badge badge-gray">–</span></td>'+
+        '<td style="font-size:12px;color:var(--muted)">'+(l.started_at?new Date(l.started_at).toLocaleString('cs-CZ'):'–')+'</td>'+
+        '<td style="text-align:right;white-space:nowrap">'+
+          '<button class="btn btn-primary btn-sm" onclick="finishInvFromDashboard('+l.id+',\''+esc(l.name)+'\')">✅ Dokončit</button>'+
+        '</td>'+
+        '<td style="text-align:right;white-space:nowrap">'+
+          '<button class="btn btn-secondary btn-sm" onclick="downloadInvCsv('+l.id+',\''+esc(l.name)+'\')">📥 CSV</button> '+
+          '<button class="btn btn-secondary btn-sm" onclick="downloadInvXlsx('+l.id+',\''+esc(l.name)+'\')">📊 XLSX</button>'+
+        '</td></tr>';
+    }
     var total=totalCounts[l.id]||0, found=foundCounts[l.id]||0, extra=extraCounts[l.id]||0;
     return '<tr><td><b>'+l.name+'</b></td><td>'+(l.started_by||'–')+'</td>'+
       '<td>'+found+' / '+total+'</td>'+
@@ -332,6 +355,17 @@ async function loadInvPage(){
   }).join(''):'<tr class="empty-row"><td colspan="7">Právě nikdo neskenuje</td></tr>';
 
   ct.innerHTML=completed.length?completed.map(function(l){
+    if(isEanInv(l)){
+      return '<tr><td>'+invKindBadge(l)+'<b>'+l.name+'</b></td><td>'+(l.completed_by||'–')+'</td>'+
+        '<td><span class="badge badge-green">'+(scanPcs[l.session_uid]||0)+' ks</span></td>'+
+        '<td><span class="badge badge-gray">–</span></td><td><span class="badge badge-gray">–</span></td>'+
+        '<td style="font-size:12px;color:var(--muted)">'+(l.completed_at?new Date(l.completed_at).toLocaleString('cs-CZ'):'–')+'</td>'+
+        '<td style="text-align:right;white-space:nowrap"><button class="btn btn-danger btn-sm" onclick="deleteInvList('+l.id+',\''+esc(l.name)+'\')">🗑 Smazat</button></td>'+
+        '<td style="text-align:right;white-space:nowrap">'+
+          '<button class="btn btn-secondary btn-sm" onclick="downloadInvCsv('+l.id+',\''+esc(l.name)+'\')">📥 CSV</button> '+
+          '<button class="btn btn-secondary btn-sm" onclick="downloadInvXlsx('+l.id+',\''+esc(l.name)+'\')">📊 XLSX</button>'+
+        '</td></tr>';
+    }
     var total=totalCounts[l.id]||0, found=foundCounts[l.id]||0, missing=total-found, extra=extraCounts[l.id]||0;
     return '<tr><td><b>'+l.name+'</b></td><td>'+(l.completed_by||'–')+'</td>'+
       '<td><span class="badge badge-green">'+found+'</span></td>'+
@@ -346,6 +380,21 @@ async function loadInvPage(){
   }).join(''):'<tr class="empty-row"><td colspan="8">Zatím žádné dokončené inventury</td></tr>';
 }
 
+var INV_BY_ID={};
+function isEanInv(l){ return !!l && (l.kind==='ean'||l.kind==='ean_loc'); }
+function invKindBadge(l){ return l.kind==='ean_loc'?'<span class="badge badge-gray" style="margin-right:6px">📍 EAN + lokace</span>':(l.kind==='ean'?'<span class="badge badge-gray" style="margin-right:6px">🔢 Jen EAN</span>':''); }
+var EAN_COLS=['EAN','Lokace','Množství','Skenů','Uživatelé','První sken','Poslední sken'];
+async function fetchEanExportRows(l){
+  var r=await supa.from('scans').select('ean,location,quantity,scanned_at,profiles(name)').eq('inv_session',l.session_uid).order('scanned_at',{ascending:true});
+  var g={}, order=[];
+  (r.data||[]).forEach(function(x){
+    var k=(x.ean||'')+'|'+(l.kind==='ean_loc'?(x.location||''):'');
+    if(!g[k]){g[k]={'EAN':x.ean||'','Lokace':l.kind==='ean_loc'?(x.location||''):'','Množství':0,'Skenů':0,_u:{},'První sken':fmtTsDash(x.scanned_at),'Poslední sken':''};order.push(k);}
+    var o=g[k]; o['Množství']+=Number(x.quantity)||1; o['Skenů']++; o['Poslední sken']=fmtTsDash(x.scanned_at);
+    var u=(x.profiles&&x.profiles.name)||''; if(u)o._u[u]=1;
+  });
+  return order.map(function(k){var o=g[k];o['Uživatelé']=Object.keys(o._u).join(', ');delete o._u;return o;});
+}
 function fmtTsDash(t){ if(!t) return ''; var d=new Date(t); return isNaN(d.getTime())?String(t):d.toLocaleString('cs-CZ'); }
 
 async function fetchInvExportRows(listId){
@@ -364,8 +413,9 @@ async function fetchInvExportRows(listId){
 }
 
 async function downloadInvCsv(listId, listName){
-  var rows=await fetchInvExportRows(listId);
-  var cols=['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];
+  var L=INV_BY_ID[listId], ean=isEanInv(L);
+  var rows=ean?await fetchEanExportRows(L):await fetchInvExportRows(listId);
+  var cols=ean?EAN_COLS:['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];
   var q=function(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; };
   var csv=cols.join(',')+'\n';
   rows.forEach(function(r){ csv+=cols.map(function(k){return q(r[k]);}).join(',')+'\n'; });
@@ -378,10 +428,11 @@ async function downloadInvCsv(listId, listName){
 }
 
 async function downloadInvXlsx(listId, listName){
-  var rows=await fetchInvExportRows(listId);
-  var cols=['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];
+  var L=INV_BY_ID[listId], ean=isEanInv(L);
+  var rows=ean?await fetchEanExportRows(L):await fetchInvExportRows(listId);
+  var cols=ean?EAN_COLS:['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];
   var ws=XLSX.utils.json_to_sheet(rows,{header:cols});
-  ws['!cols']=[{wch:16},{wch:30},{wch:14},{wch:16},{wch:12},{wch:20},{wch:16}];
+  ws['!cols']=ean?[{wch:16},{wch:14},{wch:10},{wch:8},{wch:24},{wch:20},{wch:20}]:[{wch:16},{wch:30},{wch:14},{wch:16},{wch:12},{wch:20},{wch:16}];
   var wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Inventura');
   XLSX.writeFile(wb, 'inventura_'+listName.replace(/[^a-z0-9_-]/gi,'_')+'.xlsx');
