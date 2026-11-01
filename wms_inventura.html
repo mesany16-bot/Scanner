@@ -5,6 +5,7 @@
 <title>Inventura – PRG WMS</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="wms_dc.js"></script>
+<script src="wms_nav.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
@@ -268,7 +269,6 @@ async function onLoggedIn(user){
   document.getElementById('app').style.display='block';
   try{if(window.PRG_DC)await PRG_DC.init(supa,currentProfile);}catch(e){console.warn('DC',e);}
   loadInvPage();
-  setInterval(function(){ if(!document.hidden) loadInvPage(true); },30000);   // průběh ze scannerů se obnovuje sám
   startSessionIdleWatch();
 }
 
