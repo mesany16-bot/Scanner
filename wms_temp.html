@@ -48,13 +48,16 @@ body{overflow-x:hidden;}
 <div id="app" style="display:none">
   <div id="sidebar"><div class="sidebar-logo">PRG Monitoring<span>Teploty a reporting</span><button onclick="toggleSidebar()" id="sidebar-close-btn">&#x2715;</button></div>
   <nav id="temp-nav">
-    <a class="nav-item" href="wms_dashboard.html" style="text-decoration:none"><span class="nav-icon">&larr;</span> Zpět na Hub</a>
-    <div style="height:1px;background:rgba(255,255,255,0.15);margin:8px 18px"></div>
+    <div class="nav-item" onclick="location.href='wms_dashboard.html'"><span class="nav-icon">📊</span> Hub</div>
     <div class="nav-item tn-item active" data-t="live" onclick="tabNav('live')"><span class="nav-icon">📡</span> Přehled</div>
     <div class="nav-item tn-item" data-t="chart" onclick="tabNav('chart')"><span class="nav-icon">📈</span> Grafy</div>
     <div class="nav-item tn-item" data-t="alarms" onclick="tabNav('alarms')"><span class="nav-icon">🚨</span> Alarmy&nbsp;<span id="alarm-cnt-nav"></span></div>
     <div class="nav-item tn-item" data-t="report" onclick="tabNav('report')"><span class="nav-icon">📄</span> Reporty</div>
     <div class="nav-item tn-item admin-only" data-t="setup" onclick="tabNav('setup')" style="display:none"><span class="nav-icon">⚙️</span> Nastavení</div>
+    <div style="height:1px;background:rgba(255,255,255,0.15);margin:8px 18px"></div>
+    <div class="nav-item" onclick="location.href='wms_dashboard.html?app=wms'"><span class="nav-icon">🏭</span> PRG WMS</div>
+    <div class="nav-item" onclick="location.href='wms_inventura.html'"><span class="nav-icon">📋</span> Inventory Tool</div>
+    <div class="nav-item admin-only" onclick="location.href='wms_users.html'" style="display:none"><span class="nav-icon">👥</span> Uživatelé</div>
   </nav>
   <div class="sidebar-user"><strong id="sidebar-user-name">-</strong><span id="sidebar-user-role" class="badge badge-gray"></span><button onclick="doLogout()">Odhlásit se</button></div></div>
   <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
