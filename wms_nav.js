@@ -25,7 +25,6 @@
     ]},
     {sep:true},
     {k:'inventura',i:'📋', t:'Inventory Tool', u:'wms_inventura.html'},
-    {k:'temp',     i:'🌡️', t:'Monitoring teplot', u:'wms_temp.html'},
     {k:'users',    i:'👥', t:'Uživatelé',  u:'wms_users.html', admin:true}
   ];
   var KEY='prg_nav_open_';
