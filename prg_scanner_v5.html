@@ -2561,6 +2561,19 @@ function cancelListInventura() {
   document.getElementById('modal-inv-source').style.display = 'flex';
 }
 
+function freeIntl() { return eanCount && eanIntl && !intlV; }
+function showLocCol() { return useLocation || freeIntl(); }
+var freeLocSet = {};
+async function loadFreeLocs() {
+  freeLocSet = {};
+  try {
+    var q = supa.from('locations').select('code');
+    if (currentDcId != null) q = q.eq('dc_id', currentDcId);
+    var r = await q.limit(5000);
+    (r.data || []).forEach(function(x){ if (x.code) freeLocSet[String(x.code).trim().toUpperCase()] = 1; });
+  } catch(e) {}
+}
+function looksLikeLoc(c) { c = String(c || '').trim().toUpperCase(); return c && c.indexOf('+') < 0 && (freeLocSet[c] || c.length <= 6); }
 function eanLabel() { if (intlV) return intlLabel(); return eanIntl ? '🌍 Mezinárodka' : (useLocation ? '📍 EAN + lokace' : '🔢 Jen EAN'); }
 // Mezinárodka: 43M0007578+0001 -> 43M0007578. Kód začínající „+“ se nemění.
 function intlCode(code) {
@@ -2579,9 +2592,10 @@ function startEanCount(withLoc, intl) {
   eanIntl = !!intl; intlSeen = {}; intlFull = null;
   expectingLoc = false; pendingEAN = null;
   locPill.style.display = 'none';
-  eanSessionStart(withLoc);
+  eanSessionStart(withLoc || !!intl);
+  if (intl) { setRoom(''); loadFreeLocs(); }
   renderTableHead(); renderTable(); refreshModeUI(); updateScanBtn();
-  setStatus((eanIntl ? '🌍 Inventura Mezinárodka' : (withLoc ? '📍 Inventura EAN + lokace' : '🔢 Inventura – jen EAN')) + ' · spouštím kameru');
+  setStatus((eanIntl ? '🌍 Mezinárodka · naskenuj LOKACI, pak jen zásilky' : (withLoc ? '📍 Inventura EAN + lokace' : '🔢 Inventura – jen EAN')) + ' · spouštím kameru');
   initCamera();
 }
 function eanSessionStart(withLoc) {
@@ -2810,7 +2824,7 @@ async function initCamera() {
       ? '📋 Inventura – skenuj čárový kód majetku'
       : (myDevMode
         ? '📱 myDevices – skenuj IoT ID zařízení'
-        : '✅ Kamera spuštěna' + (eanIntl && eanCount ? ' · Mezinárodka' : (useLocation ? ' · EAN + Lokace' : ' · pouze EAN'))));
+        : '✅ Kamera spuštěna' + (eanIntl && eanCount ? ' · Mezinárodka' + (freeIntl() ? (invRoom ? ' · 📍 ' + invRoom : ' · naskenuj LOKACI') : '') : (useLocation ? ' · EAN + Lokace' : ' · pouze EAN'))));
     updateScanBtn();
   } catch(err) {
     setStatus('❌ Kamera: ' + err.message);
@@ -2933,7 +2947,14 @@ async function decodeWithRetries() {
 }
 async function handleScannedCode(code) {
   if (intlV && appMode === 'inventura' && !myDevMode) { document.getElementById('manual-btn').style.display = 'none'; await handleIntlVerify(code); return; }
-  if (appMode === 'inventura' && eanCount && eanIntl && !invMode && !myDevMode && !(task && appMode === 'wms')) { intlFull = String(code).trim(); code = intlCode(code); } else intlFull = null;
+  if (appMode === 'inventura' && eanCount && eanIntl && !invMode && !myDevMode && !(task && appMode === 'wms')) {
+    var raw = String(code).trim();
+    if (looksLikeLoc(raw)) { setRoom(raw.toUpperCase()); beepOk(); setStatus('📍 Lokace: ' + raw.toUpperCase() + ' · skenuj zásilky'); return; }
+    if (!invRoom) { beepError(); setStatus('📍 Nejdřív naskenuj LOKACI (nebo klepni na 📍 nad kamerou)'); return; }
+    intlFull = raw; code = intlCode(code);
+    await processEAN(code, invRoom.toUpperCase());
+    return;
+  } else intlFull = null;
   document.getElementById('manual-btn').style.display = 'none';
   if (task && appMode === 'wms' && !myDevMode) { await taskCode(code); return; }
   if (invMode) { await handleInvCode(code); }
@@ -3047,9 +3068,16 @@ async function processEAN(ean, loc) {
   var intlNext = eanIntl && eanCount && intlFull && intlFull !== ean && !intlSeen[intlFull];
   if (eanIntl && eanCount && intlFull) intlSeen[intlFull] = 1;
   if (existing.length > 0 && intlNext) {
-    var tI = existing.find(function(r){ return r.loc===(loc||''); }) || existing[0], iI = rows.indexOf(tI);
+    var tI = existing.find(function(r){ return r.loc===(loc||''); });
+    if (!tI) {
+      rows.push({ ean:ean, loc:loc||'', qty:1, user:currentUser, timestamps:[nowStr()] });
+      sendScan({ ean:ean, location:loc||null, quantity:1, placement_mode: 'inv_ean_loc', inv_session: eanSession });
+      setStatus('✅ '+ean+' · '+(loc||'')+' · 1 ks (další lokace)');
+      renderTable(rows.length-1); return;
+    }
+    var iI = rows.indexOf(tI);
     rows[iI].qty++; rows[iI].timestamps.push(nowStr());
-    sendScan({ ean:ean, location:tI.loc||null, quantity:1, placement_mode: useLocation ? 'inv_ean_loc' : 'inv_ean', inv_session: eanSession });
+    sendScan({ ean:ean, location:tI.loc||null, quantity:1, placement_mode: showLocCol() ? 'inv_ean_loc' : 'inv_ean', inv_session: eanSession });
     setStatus('➕ '+ean+' ('+intlFull.slice(ean.length)+') → '+rows[iI].qty+' ks');
     renderTable(iI); return;
   }
@@ -3066,13 +3094,13 @@ async function processEAN(ean, loc) {
       var idx = rows.indexOf(target);
       rows[idx].qty++;
       rows[idx].timestamps.push(nowStr());
-      sendScan({ ean:ean, location:target.loc||null, quantity:1, placement_mode: eanCount ? (useLocation ? 'inv_ean_loc' : 'inv_ean') : null, inv_session: eanCount ? eanSession : null });
+      sendScan({ ean:ean, location:target.loc||null, quantity:1, placement_mode: eanCount ? (showLocCol() ? 'inv_ean_loc' : 'inv_ean') : null, inv_session: eanCount ? eanSession : null });
       setStatus('➕ '+ean+(loc?'/'+loc:'')+' → '+rows[idx].qty+' ks');
       renderTable(idx); return;
     }
   }
   rows.push({ ean:ean, loc:loc||'', qty:1, user:currentUser, timestamps:[nowStr()] });
-  sendScan({ ean:ean, location:loc||null, quantity:1, placement_mode: eanCount ? (useLocation ? 'inv_ean_loc' : 'inv_ean') : null, inv_session: eanCount ? eanSession : null });
+  sendScan({ ean:ean, location:loc||null, quantity:1, placement_mode: eanCount ? (showLocCol() ? 'inv_ean_loc' : 'inv_ean') : null, inv_session: eanCount ? eanSession : null });
   setStatus('✅ '+ean+(loc?' / '+loc:'')+' · 1 ks  ['+currentUser+']');
   renderTable(rows.length-1);
 }
@@ -3631,8 +3659,8 @@ async function scanDialogCommit(change) {
 // ── Místnost ─────────────────────────────────────────────
 function updateRoomPill() {
   var pill = document.getElementById('room-pill'); if (!pill) return;
-  pill.style.display = (appMode === 'inventura' && (invMode || intlV)) ? 'block' : 'none';
-  pill.textContent = (intlV ? '📍 Lokace: ' : '📍 Místnost: ') + (invRoom || 'nenastavena');
+  pill.style.display = (appMode === 'inventura' && (invMode || intlV || freeIntl())) ? 'block' : 'none';
+  pill.textContent = ((intlV || freeIntl()) ? '📍 Lokace: ' : '📍 Místnost: ') + (invRoom || 'nenastavena');
 }
 function setRoom(v) {
   invRoom = v || '';
@@ -3640,6 +3668,7 @@ function setRoom(v) {
   updateRoomPill();
   if (invPending) showScanDialog();
   if (intlV) renderTable();
+  if (freeIntl() && v) setStatus('📍 Lokace: ' + v + ' · skenuj zásilky');
 }
 function openRoomModal(cb) {
   roomCallback = (typeof cb === 'function') ? cb : null;
@@ -3647,6 +3676,7 @@ function openRoomModal(cb) {
   var locs = {};
   invList.forEach(function(r){ if (r.loc) locs[r.loc] = 1; if (r.newLoc) locs[r.newLoc] = 1; });
   if (intlV) intlV.items.forEach(function(i){ i.locs.forEach(function(l){ locs[l] = 1; }); });
+  if (freeIntl()) rows.forEach(function(r){ if (r.loc) locs[r.loc] = 1; });
   if (invRoom) locs[invRoom] = 1;
   var wrap = document.getElementById('inv-room-chips');
   wrap.innerHTML = '';
@@ -3752,7 +3782,7 @@ function exportInvCSV() {
 function renderTableHead() {
   var tr = document.getElementById('table-head-row');
   if (intlV) return;
-  tr.innerHTML = useLocation
+  tr.innerHTML = showLocCol()
     ? '<th>EAN</th><th>Lokace</th><th style="text-align:center">Ks</th><th style="text-align:right">±</th>'
     : '<th>EAN</th><th style="text-align:center">Ks</th><th style="text-align:right">±</th>';
 }
@@ -3770,7 +3800,7 @@ function renderTable(highlightIdx) {
   rows.forEach(function(r,i){
     var tr = document.createElement('tr');
     if (i===highlightIdx) { tr.className='highlight'; setTimeout(function(){tr.classList.remove('highlight');},900); }
-    var locCell = useLocation ? '<td class="loc-cell">'+(r.loc||'–')+'</td>' : '';
+    var locCell = showLocCol() ? '<td class="loc-cell">'+(r.loc||'–')+'</td>' : '';
     tr.innerHTML =
       '<td class="ean-cell">'+r.ean+'</td>'+
       locCell+
