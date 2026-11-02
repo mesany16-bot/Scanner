@@ -2,7 +2,7 @@
 <html lang="cs">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <link rel="manifest" href="prg_scanner.webmanifest">
   <meta name="theme-color" content="#0a7c4e">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -36,7 +36,9 @@
 
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
+    html { overflow: hidden; overscroll-behavior: none; height: 100%; }
     body {
+      width: 100%; max-width: 100vw; overscroll-behavior: none; touch-action: manipulation;
       font-family: 'Barlow Condensed', sans-serif;
       background: var(--bg);
       color: var(--text);
@@ -141,7 +143,19 @@
       padding: 10px 14px;
       display: flex; align-items: center; justify-content: space-between;
       flex-shrink: 0; box-shadow: var(--shadow); z-index: 10;
+      max-width: 100vw; overflow: hidden; gap: 8px;
     }
+    header h1 { flex-shrink: 0; }
+    header > div { min-width: 0; overflow-x: auto; scrollbar-width: none; flex-wrap: nowrap; }
+    header > div::-webkit-scrollbar { display: none; }
+    header > div > div { flex-shrink: 0; white-space: nowrap; }
+    @media (max-width: 480px) {
+      header { padding: 8px 10px; }
+      header h1 { font-size: 16px; letter-spacing: .5px; }
+      #user-badge, #mode-badge, #dc-badge, #switch-badge { padding: 4px 8px !important; font-size: 11px !important; }
+    }
+    #table-area { overflow-x: hidden; }
+    body.reader-on #scan-btn { display: none !important; }
     header h1 { font-size: 19px; font-weight: 700; letter-spacing: 1.5px; color: var(--accent); }
     #user-badge {
       display: flex; align-items: center; gap: 5px;
@@ -180,10 +194,13 @@
 
     #cam-section { flex-shrink: 0; background: #000; position: relative; }
     #cam-wrap { position: relative; width: 100%; aspect-ratio: 4/3; overflow: hidden; }
-    #cam-wrap.reader { aspect-ratio: auto; height: 132px; background: #1d2b24; }
+    #cam-wrap.reader { aspect-ratio: auto; height: 44px; background: #1d2b24; }
+    #cam-wrap.reader.haspill #cam-status { display: none; }
+    #cam-wrap.reader #cam-status { top: 0; bottom: 0; display: flex; align-items: center; justify-content: center; }
+    #cam-wrap.reader #room-pill { top: 7px; left: 8px; right: auto; font-size: 15px; padding: 5px 14px; }
     #cam-wrap.reader video, #cam-wrap.reader #aim, #cam-wrap.reader #focus-ring { display: none; }
     #reader-panel { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; flex-direction: column; color: #fff; text-align: center; padding: 10px; }
-    #cam-wrap.reader #reader-panel { display: flex; }
+    #cam-wrap.reader #reader-panel { display: none; }
     #reader-panel .rp-t { font-family: 'Barlow Condensed', sans-serif; font-size: 24px; font-weight: 700; letter-spacing: .5px; }
     #reader-panel .rp-s { font-size: 13px; opacity: .8; margin-top: 2px; }
     #manual-row { display: flex; gap: 6px; padding: 8px 12px 2px; align-items: center; }
@@ -621,6 +638,17 @@
   </div>
 </div>
 
+<!-- Modal: Mezinárodka – zásilka na jiné lokaci -->
+<div class="modal-backdrop" id="modal-intl-move" style="display:none">
+  <div class="modal">
+    <h2 style="color:var(--danger)">⚠️ Jiná lokace</h2>
+    <p id="intl-move-text" style="font-size:15px;line-height:1.5"></p>
+    <button class="modal-btn" style="background:var(--warning)" id="intl-move-here" onclick="intlMoveResolve('here')">📦 Přeskladnit kus sem</button>
+    <div id="intl-move-locs"></div>
+    <button class="modal-btn secondary" onclick="intlMoveResolve('cancel')">✖ Nepočítat</button>
+  </div>
+</div>
+
 <!-- Modal: konec volné inventury / Mezinárodky -->
 <div class="modal-backdrop" id="modal-inv-end" style="display:none">
   <div class="modal">
@@ -661,7 +689,7 @@
   <div class="modal">
     <h2 class="info">📍 Místnost</h2>
     <p>Kde právě skenuješ? Použije se jako <b>Nové umístění</b>.</p>
-    <input id="inv-room-input" type="text" placeholder="např. 4IMPORT" maxlength="40" autocomplete="off">
+    <input id="inv-room-input" type="text" placeholder="naskenuj nebo napiš lokaci" maxlength="40" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();saveInvRoom();}">
     <div class="room-chips" id="inv-room-chips"></div>
     <button class="modal-btn info" onclick="saveInvRoom()">✅ Uložit místnost</button>
     <button class="modal-btn secondary" onclick="clearInvRoom()">Bez místnosti</button>
@@ -719,7 +747,8 @@
   <div id="manual-row">
     <input id="manual-code" type="text" placeholder="⌨️ Zadat kód ručně…" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" onkeydown="if(event.key==='Enter'){event.preventDefault();manualSubmit();}">
     <button id="manual-ok" onclick="manualSubmit()">OK</button>
-    <button id="input-toggle" onclick="toggleInputMode()" title="Kamera nebo vestavěná čtečka (Honeywell, Zebra…)">📷</button>
+    <button id="input-toggle" onclick="inputToggleClick()" title="Klepnutí: spustit. Podržení: přepnout kamera / čtečka">📷</button>
+    <button id="sound-btn" onclick="toggleSound()" title="Zvuky zap/vyp">🔊</button>
   </div>
   <input id="wedge-input" type="text" inputmode="none" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="-1" aria-hidden="true" style="position:fixed;left:-2000px;top:0;width:10px;height:10px;opacity:0">
   <button id="manual-btn" onclick="manualEntry()" style="display:none;margin:6px 16px 0;padding:9px 14px;border:1.5px solid #e2e6ed;border-radius:9px;background:#fff;font-size:14px;font-weight:600;cursor:pointer">⌨️ Kód nejde přečíst – zadat ručně</button>
@@ -961,15 +990,43 @@ let audioCtx = null;
 function beep(freq, dur) {
   freq = freq||1480; dur = dur||0.12;
   try {
+    if (!soundOn()) return;
     if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
     var o=audioCtx.createOscillator(), g=audioCtx.createGain();
     o.connect(g); g.connect(audioCtx.destination);
     o.type='square'; o.frequency.setValueAtTime(freq,audioCtx.currentTime);
-    g.gain.setValueAtTime(0.18,audioCtx.currentTime);
+    g.gain.setValueAtTime(0.35,audioCtx.currentTime);
     g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+dur);
     o.start(); o.stop(audioCtx.currentTime+dur);
   } catch(e){}
 }
+function soundOn() { try { return localStorage.getItem('prg_sound') !== 'off'; } catch(e) { return true; } }
+function toggleSound() {
+  var on = !soundOn();
+  try { localStorage.setItem('prg_sound', on ? 'on' : 'off'); } catch(e) {}
+  updateSoundBtn(); if (on) beepOk();
+  setStatus(on ? '🔊 Zvuky zapnuty' : '🔇 Zvuky vypnuty');
+}
+function updateSoundBtn() { var b = document.getElementById('sound-btn'); if (b) b.textContent = soundOn() ? '🔊' : '🔇'; }
+// bzučák při chybě (špatná lokace, duplicita, kód mimo seznam…)
+function buzz() {
+  try { if (navigator.vibrate) navigator.vibrate([250, 120, 250]); } catch(e) {}
+  if (!soundOn()) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    [0, 0.32].forEach(function(t0){
+      var o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = audioCtx.currentTime + t0;
+      o.type = 'sawtooth'; o.frequency.setValueAtTime(160, t);
+      g.gain.setValueAtTime(0.6, t); g.gain.setValueAtTime(0.6, t + 0.24); g.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
+      o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + 0.3);
+    });
+  } catch(e) {}
+}
+['pointerdown','keydown','touchstart'].forEach(function(ev){
+  document.addEventListener(ev, function(){ try { if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch(e) {} }, { capture: true, passive: true });
+});
 function beepWarn()  { beep(600,0.18); }
 function beepError() { beep(300,0.25); setTimeout(function(){beep(300,0.25);},320); }
 function beepOk()    { beep(1480,0.08); setTimeout(function(){beep(1760,0.1);},110); }
@@ -2343,7 +2400,8 @@ async function selectIntlList(listId, listName) {
     setRoom('');
     intlSyncRows();
     renderTableHead(); renderTable(); refreshModeUI(); updateScanBtn();
-    setStatus('🌍 ' + listName + ' · ' + items.length + ' HB · klepni na 📍 a nastav lokaci (nebo naskenuj štítek lokace)');
+    setStatus('🌍 ' + listName + ' · ' + items.length + ' HB · nejdřív naskenuj LOKACI');
+    setTimeout(function(){ openRoomModal(); }, 300);
     clearInterval(intlPollTimer); intlPollTimer = setInterval(intlPoll, 10000);
     initCamera();
   } catch(err) {
@@ -2366,15 +2424,44 @@ async function handleIntlVerify(code) {
   // štítek lokace (kód z PUT lokací seznamu, který není HB)
   if (!hasSfx && !it) {
     var isLoc = intlV.items.some(function(i){ return i.locs.indexOf(full) >= 0; });
-    if (isLoc) { setRoom(full); beepOk(); setStatus('📍 Lokace nastavena: ' + full); return; }
+    if (isLoc) { closeModal('modal-inv-room'); setRoom(full); beepOk(); setStatus('📍 Lokace nastavena: ' + full); return; }
   }
   if (hasSfx && intlV.seen[full]) {
-    beepError();
+    buzz();
     setStatus('⚠️ Štítek ' + full + ' už byl naskenován – nepočítá se znovu');
     return;
   }
-  if (hasSfx) intlV.seen[full] = 1;
   var loc = intlKey(invRoom) || null;
+  if (!loc) { buzz(); setStatus('📍 Nejdřív naskenuj LOKACI'); openRoomModal(); return; }
+  if (it && it.locs.length && it.locs.indexOf(loc) < 0) {   // zásilka patří jinam -> zeptej se
+    buzz();
+    intlAskMove({ full: full, base: base, item: it, loc: loc, hasSfx: hasSfx });
+    return;
+  }
+  intlCommit(full, base, it, loc, hasSfx);
+}
+function intlAskMove(p) {
+  intlMovePending = p;
+  document.getElementById('intl-move-text').innerHTML = '<b>' + escHtml(p.full) + '</b><br>V exportu je na lokaci <b>' + escHtml(p.item.locTxt) + '</b>, ty jsi na <b>' + escHtml(p.loc) + '</b>.';
+  document.getElementById('intl-move-here').textContent = '📦 Přeskladnit kus na ' + p.loc;
+  var w = document.getElementById('intl-move-locs'); w.innerHTML = '';
+  p.item.locs.forEach(function(l){
+    var b = document.createElement('button'); b.className = 'modal-btn info'; b.textContent = '📍 Změnit lokaci na ' + l;
+    b.onclick = function(){ intlMoveResolve('loc', l); }; w.appendChild(b);
+  });
+  document.getElementById('modal-intl-move').style.display = 'flex';
+}
+var intlMovePending = null;
+function intlMoveResolve(action, newLoc) {
+  closeModal('modal-intl-move');
+  var p = intlMovePending; intlMovePending = null;
+  if (!p || !intlV) return;
+  if (action === 'here') { intlCommit(p.full, p.base, p.item, p.loc, p.hasSfx); return; }
+  if (action === 'loc') { setRoom(newLoc); intlCommit(p.full, p.base, p.item, newLoc, p.hasSfx); return; }
+  setStatus('✖ ' + p.full + ' nezapočteno');
+}
+function intlCommit(full, base, it, loc, hasSfx) {
+  if (hasSfx) intlV.seen[full] = 1;
   var uid = obUid();
   var entry = { full: full, base: base, item: it, loc: loc, uid: uid };
   intlV.log.push(entry);
@@ -2388,7 +2475,7 @@ async function handleIntlVerify(code) {
       if (!r || intlV !== myV) return;
       if (r.s === 'done' && r.data && r.data.result === 'dup') {
         intlRevert(entry);
-        beepError();
+        buzz();
         setStatus('⚠️ Štítek ' + full + ' už naskenoval ' + (r.data.by || 'někdo jiný') + ' – nepočítá se znovu');
       } else if (r.s === 'fail') {
         setStatus('⚠️ Server sken nepřijal: ' + (r.msg || ''));
@@ -2397,10 +2484,10 @@ async function handleIntlVerify(code) {
 }
 function intlFeedback(e) {
   var it = e.item;
-  if (!it) { beepError(); setStatus('➕ ' + e.base + ' NENÍ v exportu – zapsáno jako přebývající'); return; }
+  if (!it) { buzz(); setStatus('➕ ' + e.base + ' NENÍ v exportu – zapsáno jako přebývající'); return; }
   var tail = ' · ' + it.found + '/' + it.exp + ' ks';
   var locBad = e.loc && it.locs.length && it.locs.indexOf(e.loc) < 0;
-  if (it.found > it.exp) { beepError(); setStatus('⚠️ ' + it.code + tail + ' – KUS NAVÍC'); }
+  if (it.found > it.exp) { buzz(); setStatus('⚠️ ' + it.code + tail + ' – KUS NAVÍC'); }
   else if (locBad) { beepWarn(); setStatus('⚠️ ' + it.code + tail + ' · JINÁ LOKACE: v exportu ' + it.locTxt + ', jsi na ' + e.loc); }
   else if (it.found === it.exp) { beepOk(); setStatus('✅ ' + it.code + tail + ' · KOMPLETNÍ'); }
   else setStatus('✅ ' + it.code + tail + (it.locTxt ? ' · ' + it.locTxt : ''));
@@ -2443,6 +2530,39 @@ async function intlPoll() {
   } catch(e) {}
 }
 
+function intlEditQty(code) {
+  var it = intlFind(code); if (!it) return;
+  var v = prompt('Počet kusů pro ' + it.code + ' (v exportu ' + it.exp + ' ks):', String(it.found));
+  if (v == null) return;
+  var n = parseInt(String(v).trim(), 10);
+  if (isNaN(n) || n < 0 || n > 9999) { setStatus('⚠️ Neplatný počet'); return; }
+  intlSetQty(code, n, false);
+}
+function intlSetQty(code, n, relative) {
+  var it = intlFind(code); if (!it || !intlV) return;
+  var target = relative ? Math.max(0, it.found + n) : n;
+  if (target === it.found) return;
+  var loc = intlKey(invRoom) || (it.locs[0] || null);
+  if (target > it.found && !invRoom) { buzz(); setStatus('📍 Nejdřív naskenuj LOKACI'); openRoomModal(); return; }
+  it.found = target; it.t = Date.now();
+  if (target > 0 && loc) it.foundLocs[loc] = 1;
+  if (target === 0) it.foundLocs = {};
+  intlV.log = intlV.log.filter(function(x){ return x.item !== it; });
+  intlSyncRows(); renderTable(); refreshModeUI();
+  setStatus('✏️ ' + it.code + ' · ručně ' + target + '/' + it.exp + ' ks');
+  var myV = intlV;
+  obSubmit({ kind: 'rpc', fn: 'wms_inv_set_qty', args: { p_list: intlV.id, p_code: it.code, p_qty: target, p_loc: loc, p_user: currentUser }, label: 'Ruční počet ' + it.code })
+    .then(function(r){ if (r && r.s === 'done' && intlV === myV) intlReloadSeen(); if (r && r.s === 'fail') setStatus('⚠️ Server ruční počet nepřijal: ' + (r.msg || '')); }).catch(function(){});
+}
+async function intlReloadSeen() {
+  if (!intlV) return;
+  try {
+    var ps = await supa.from('inventory_piece_scans').select('code').eq('list_id', intlV.id);
+    if (ps.error) return;
+    var seen = {}; (ps.data || []).forEach(function(p){ if (p.code && p.code.indexOf('+') > 0) seen[intlKey(p.code)] = 1; });
+    intlV.seen = seen;
+  } catch(e) {}
+}
 function renderIntlTable() {
   var empty = document.getElementById('empty-state');
   var table = document.getElementById('main-table');
@@ -2467,7 +2587,8 @@ function renderIntlTable() {
     var ic = i.found === 0 ? '⬜' : (i.found > i.exp ? '🔴' : (i.found === i.exp ? (bad ? '🟠' : '✅') : '🟡'));
     html += '<tr' + (bg ? ' style="background:' + bg + '"' : '') + '><td class="ean-cell">' + ic + ' ' + escHtml(i.code) + '</td>' +
       '<td class="loc-cell">' + escHtml(i.locTxt || '–') + (bad ? '<br><small style="color:var(--warning)">nalezeno: ' + escHtml(fl.join(', ')) + '</small>' : '') + '</td>' +
-      '<td class="qty-cell">' + i.found + '/' + i.exp + '</td><td></td></tr>';
+      '<td class="qty-cell" onclick="intlEditQty(\'' + escHtml(i.code).replace(/'/g, '') + '\')" style="cursor:pointer;text-decoration:underline dotted">' + i.found + '/' + i.exp + '</td>' +
+      '<td class="acts-cell"><button class="qty-btn" onclick="intlSetQty(\'' + escHtml(i.code).replace(/'/g, '') + '\',1,true)">+</button><button class="qty-btn minus" onclick="intlSetQty(\'' + escHtml(i.code).replace(/'/g, '') + '\',-1,true)">−</button></td></tr>';
   });
   tbody.innerHTML = html;
   document.getElementById('table-area').scrollTop = 0;
@@ -2593,7 +2714,7 @@ function startEanCount(withLoc, intl) {
   expectingLoc = false; pendingEAN = null;
   locPill.style.display = 'none';
   eanSessionStart(withLoc || !!intl);
-  if (intl) { setRoom(''); loadFreeLocs(); }
+  if (intl) { setRoom(''); loadFreeLocs(); setTimeout(function(){ openRoomModal(); }, 300); }
   renderTableHead(); renderTable(); refreshModeUI(); updateScanBtn();
   setStatus((eanIntl ? '🌍 Mezinárodka · naskenuj LOKACI, pak jen zásilky' : (withLoc ? '📍 Inventura EAN + lokace' : '🔢 Inventura – jen EAN')) + ' · spouštím kameru');
   initCamera();
@@ -2717,14 +2838,32 @@ function anyModalOpen() {
   return false;
 }
 function readerActive() { return inputMode === 'reader' && cameraReady && !!currentUserId; }
+function roomModalOpen() { return document.getElementById('modal-inv-room').style.display === 'flex'; }
 function focusWedge() {
-  if (!readerActive() || anyModalOpen()) return;
+  if (!readerActive() || (anyModalOpen() && !roomModalOpen())) return;
   var a = document.activeElement;
   if (a && a !== document.body && a.id !== 'wedge-input' && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) return;   // uživatel píše jinde
   try { document.getElementById('wedge-input').focus({ preventScroll: true }); } catch(e) {}
 }
+var itPress = null, itLong = false;
+(function(){
+  var b = document.getElementById('input-toggle'); if (!b) return;
+  function down(){ itLong = false; clearTimeout(itPress); itPress = setTimeout(function(){ itLong = true; toggleInputMode(); }, 700); }
+  function up(){ clearTimeout(itPress); }
+  b.addEventListener('pointerdown', down); b.addEventListener('pointerup', up); b.addEventListener('pointerleave', up); b.addEventListener('pointercancel', up);
+})();
+function inputToggleClick() {
+  if (itLong) { itLong = false; return; }      // dlouhé podržení už přepnulo režim
+  if (inputMode === 'reader') {
+    if (!cameraReady) { initCamera(); } else { focusWedge(); setStatus('🔫 Čtečka připravena – stiskni spoušť'); }
+    return;
+  }
+  toggleInputMode();
+}
 function updateInputToggle() {
   var b = document.getElementById('input-toggle'); if (b) b.textContent = inputMode === 'reader' ? '🔫 Čtečka' : '📷 Kamera';
+  document.body.classList.toggle('reader-on', inputMode === 'reader' && cameraReady && !isAsleep);
+  updateSoundBtn();
 }
 function startReader() {
   document.getElementById('cam-wrap').classList.add('reader');
@@ -2753,7 +2892,10 @@ async function toggleInputMode() {
 var wedgeTimer = null, kb = { buf: '', last: 0, timer: null };
 function submitWedge(v) {
   v = String(v || '').replace(/[\r\n\t]+/g, '').trim();
-  if (v.length < 2 || !readerActive() || anyModalOpen()) return;
+  if (v.length < 2 || !readerActive()) return;
+  if (roomModalOpen()) { var other = Array.prototype.some.call(document.querySelectorAll('.modal-backdrop'), function(m){ return m.id !== 'modal-inv-room' && m.style.display === 'flex'; });
+    if (!other) { document.getElementById('inv-room-input').value = v.toUpperCase(); beepOk(); saveInvRoom(); return; } }
+  if (anyModalOpen()) return;
   resetIdleTimer();
   flashScreen(); beep();
   handleScannedCode(v);
@@ -2945,12 +3087,14 @@ async function decodeWithRetries() {
   }
   return null;
 }
+function isDestCode(c) { return /^D[A-Z]{3}\+\d*\+?$/i.test(String(c || '').trim()); }
 async function handleScannedCode(code) {
+  if (appMode === 'inventura' && eanCount && eanIntl && isDestCode(code)) { buzz(); setStatus('↷ ' + String(code).trim() + ' je kód DESTINACE (spodní část štítku) – naskenuj horní kód zásilky'); return; }
   if (intlV && appMode === 'inventura' && !myDevMode) { document.getElementById('manual-btn').style.display = 'none'; await handleIntlVerify(code); return; }
   if (appMode === 'inventura' && eanCount && eanIntl && !invMode && !myDevMode && !(task && appMode === 'wms')) {
     var raw = String(code).trim();
-    if (looksLikeLoc(raw)) { setRoom(raw.toUpperCase()); beepOk(); setStatus('📍 Lokace: ' + raw.toUpperCase() + ' · skenuj zásilky'); return; }
-    if (!invRoom) { beepError(); setStatus('📍 Nejdřív naskenuj LOKACI (nebo klepni na 📍 nad kamerou)'); return; }
+    if (looksLikeLoc(raw)) { closeModal('modal-inv-room'); setRoom(raw.toUpperCase()); beepOk(); setStatus('📍 Lokace: ' + raw.toUpperCase() + ' · skenuj zásilky'); return; }
+    if (!invRoom) { buzz(); setStatus('📍 Nejdřív naskenuj LOKACI'); openRoomModal(); return; }
     intlFull = raw; code = intlCode(code);
     await processEAN(code, invRoom.toUpperCase());
     return;
@@ -3660,6 +3804,7 @@ async function scanDialogCommit(change) {
 function updateRoomPill() {
   var pill = document.getElementById('room-pill'); if (!pill) return;
   pill.style.display = (appMode === 'inventura' && (invMode || intlV || freeIntl())) ? 'block' : 'none';
+  document.getElementById('cam-wrap').classList.toggle('haspill', pill.style.display === 'block');
   pill.textContent = ((intlV || freeIntl()) ? '📍 Lokace: ' : '📍 Místnost: ') + (invRoom || 'nenastavena');
 }
 function setRoom(v) {
@@ -3672,6 +3817,9 @@ function setRoom(v) {
 }
 function openRoomModal(cb) {
   roomCallback = (typeof cb === 'function') ? cb : null;
+  var lm = (intlV || freeIntl());
+  document.querySelector('#modal-inv-room h2').textContent = lm ? '📍 Lokace' : '📍 Místnost';
+  document.querySelector('#modal-inv-room p').innerHTML = lm ? 'Naskenuj štítek <b>lokace</b> (nebo vyber / napiš). Pak skenuj jen zásilky.' : 'Kde právě skenuješ? Použije se jako <b>Nové umístění</b>.';
   document.getElementById('inv-room-input').value = invRoom;
   var locs = {};
   invList.forEach(function(r){ if (r.loc) locs[r.loc] = 1; if (r.newLoc) locs[r.newLoc] = 1; });
@@ -3797,7 +3945,11 @@ function renderTable(highlightIdx) {
   if (!rows.length) { empty.textContent='Žádná naskenovaná data'; empty.style.display='block'; table.style.display='none'; return; }
   empty.style.display='none'; table.style.display='table';
   tbody.innerHTML='';
-  rows.forEach(function(r,i){
+  if (highlightIdx != null && rows[highlightIdx]) rows[highlightIdx]._t = Date.now();
+  var order = rows.map(function(r,i){ return i; });
+  if (eanCount) order.sort(function(a,b){ return (rows[b]._t||0) - (rows[a]._t||0) || b - a; });   // nejnovější nahoře
+  order.forEach(function(i){
+    var r = rows[i];
     var tr = document.createElement('tr');
     if (i===highlightIdx) { tr.className='highlight'; setTimeout(function(){tr.classList.remove('highlight');},900); }
     var locCell = showLocCol() ? '<td class="loc-cell">'+(r.loc||'–')+'</td>' : '';
@@ -3812,15 +3964,16 @@ function renderTable(highlightIdx) {
     tbody.appendChild(tr);
   });
   var area = document.getElementById('table-area');
-  area.scrollTop = area.scrollHeight;
+  area.scrollTop = eanCount ? 0 : area.scrollHeight;
 }
 
 function changeQty(idx, delta) {
+  if (freeIntl() && delta > 0 && !invRoom && !rows[idx].loc) { openRoomModal(); return; }
   rows[idx].qty += delta;
+  if (eanCount && eanSession) sendScan({ ean: rows[idx].ean, location: rows[idx].loc || null, quantity: delta, placement_mode: showLocCol() ? 'inv_ean_loc' : 'inv_ean', inv_session: eanSession });
   if (delta>0) rows[idx].timestamps.push(nowStr());
-  if (rows[idx].qty<=0) { rows.splice(idx,1); setStatus('🗑 Řádek odstraněn'); }
-  else setStatus('✏️ '+rows[idx].ean+' → '+rows[idx].qty+' ks');
-  renderTable();
+  if (rows[idx].qty<=0) { rows.splice(idx,1); setStatus('🗑 Řádek odstraněn'); renderTable(); }
+  else { setStatus('✏️ '+rows[idx].ean+' → '+rows[idx].qty+' ks'); renderTable(idx); }
 }
 
 // ── Export ────────────────────────────────────────────────
@@ -3893,6 +4046,7 @@ function resetData() {
 // ── Helpers ───────────────────────────────────────────────
 function updateScanBtn() {
   _updateScanBtn();
+  document.body.classList.toggle('reader-on', inputMode === 'reader' && cameraReady && !isAsleep);
   if (inputMode === 'reader' && cameraReady && !isAsleep) {
     scanBtn.textContent = '🔫 ' + scanBtn.textContent.replace(/^[^A-Za-zÁ-Žá-ž]+/, '').replace('SKENOVAT', 'ČTEČKA:');
   }
