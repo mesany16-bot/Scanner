@@ -650,6 +650,16 @@
   </div>
 </div>
 
+<!-- Modal: Mezinárodka – neznámý formát kódu -->
+<div class="modal-backdrop" id="modal-intl-fmt" style="display:none">
+  <div class="modal">
+    <h2 style="color:var(--danger)">⚠️ Neznámý kód</h2>
+    <p style="font-size:15px;line-height:1.5"><b id="intl-fmt-code"></b><br>nevypadá jako HB, File Number ani On-hand (např. 43M0017885, H16581140, 4711975059, F3M0677760). Není to jiný štítek na krabici?</p>
+    <button class="modal-btn" style="background:var(--warning)" onclick="intlFmtAnswer(true)">➕ Přesto započítat</button>
+    <button class="modal-btn secondary" onclick="intlFmtAnswer(false)">✖ Nepočítat</button>
+  </div>
+</div>
+
 <!-- Modal: konec volné inventury / Mezinárodky -->
 <div class="modal-backdrop" id="modal-inv-end" style="display:none">
   <div class="modal">
@@ -837,7 +847,11 @@ function obIsNet(err) {
   var m = String((err && (err.message || err.details)) || err || '');
   return /fetch|network|abort|timeout|load failed|connection|ERR_/i.test(m);
 }
-function obRes(err) { if (!err) return { s: 'done' }; if (obIsNet(err)) return { s: 'net' }; return { s: 'fail', msg: err.message || String(err) }; }
+function obIsAuth(err) {
+  var m = String((err && (err.message || err.details || err.code)) || err || '') + ' ' + String((err && err.code) || '');
+  return /row-level security|JWT|jwt|PGRST301|PGRST302|42501|not authenticated|permission denied|Invalid Refresh Token/i.test(m);
+}
+function obRes(err) { if (!err) return { s: 'done' }; if (obIsNet(err)) return { s: 'net' }; if (obIsAuth(err)) return { s: 'auth', msg: err.message || String(err) }; return { s: 'fail', msg: err.message || String(err) }; }
 function obLogGet() { try { return JSON.parse(localStorage.getItem('prg_outbox_log') || '[]'); } catch(e) { return []; } }
 function obLog(kind, msg) { var l = obLogGet(); l.unshift({ t: new Date().toISOString(), kind: kind, msg: msg }); try { localStorage.setItem('prg_outbox_log', JSON.stringify(l.slice(0, 50))); } catch(e) {} }
 var OB_LABEL = { scan: 'sken', inv_found: 'inventura – nalezeno', inv_newloc_item: 'inventura – nové umístění', inv_newloc_extra: 'inventura – nové umístění', inv_extra: 'inventura – přebývá', inv_list_active: 'inventura – zahájení', inv_complete: 'inventura – uzavření', inv_ean_start: 'inventura EAN – zahájení', inv_ean_finish: 'inventura EAN – uzavření', rpc: 'WMS úloha' };
@@ -921,6 +935,22 @@ async function obDoFlush() {
   if (!navigator.onLine) { all.forEach(function(o){ results[o.k] = { s: 'queued' }; }); obBadge(all.length); obSchedule(); return results; }
   for (var i = 0; i < all.length; i++) {
     var op = all[i], r = await obExec(op);
+    if (r.s === 'fail' && obIsAuth(r.msg)) r = { s: 'auth', msg: r.msg };
+    if (r.s === 'auth') {
+      // přihlášení vypršelo (typicky po delší době offline) – zkus obnovit, jinak nech ve frontě a vyžádej přihlášení
+      var ref = null; try { ref = await supa.auth.refreshSession(); } catch(e) {}
+      if (ref && ref.data && ref.data.session) { r = await obExec(op); if (r.s === 'auth') r = { s: 'fail', msg: r.msg + ' (oprávnění v databázi – kontaktuj admina)' }; }
+    }
+    if (r.s === 'auth') {
+      for (var j2 = i; j2 < all.length; j2++) results[all[j2].k] = { s: 'queued' };
+      OB.authLost = true; obSchedule();
+      try {
+        setStatus('🔒 Přihlášení vypršelo – přihlas se znovu, neodeslané záznamy (' + all.length + ') se pak odešlou. Nic se neztratilo.');
+        if (document.getElementById('modal-login').style.display !== 'flex') { buzz(); document.getElementById('modal-login').style.display = 'flex'; }
+      } catch(e) {}
+      break;
+    }
+    OB.authLost = false;
     if (r.s === 'net') { for (var j = i; j < all.length; j++) results[all[j].k] = { s: 'queued' }; obSchedule(); break; }
     await obDel(op.k);
     results[op.k] = r;
@@ -958,6 +988,7 @@ function obBadge(n) {
   var b = document.getElementById('net-badge'); if (!b) return;
   var on = navigator.onLine;
   if (!on) { b.textContent = '🔴 Offline' + (n ? ' · ' + n : ''); b.style.background = 'rgba(192,57,43,0.85)'; }
+  else if (n && OB.authLost) { b.textContent = '🔒 ' + n; b.style.background = 'rgba(192,57,43,0.85)'; }
   else if (n) { b.textContent = '⏳ ' + n; b.style.background = 'rgba(230,126,34,0.9)'; }
   else { b.textContent = '🟢'; b.style.background = 'rgba(255,255,255,0.18)'; }
   if (document.getElementById('modal-net') && document.getElementById('modal-net').style.display === 'flex') renderNetModal();
@@ -1524,6 +1555,7 @@ supa.auth.getSession().then(function(res) {
 
 // Odkaz z e-mailu na obnovu hesla otevře tuto stránku se speciální session
 supa.auth.onAuthStateChange(function(event, session) {
+  if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session) { OB.authLost = false; setTimeout(function(){ obFlush(); }, 300); }
   if (event === 'PASSWORD_RECOVERY') {
     document.getElementById('modal-login').style.display = 'none';
     document.getElementById('modal-forgot').style.display = 'none';
@@ -2451,6 +2483,9 @@ async function handleIntlVerify(code) {
   }
   var loc = intlKey(invRoom) || null;
   if (!loc) { buzz(); setStatus('📍 Nejdřív naskenuj LOKACI'); openRoomModal(); return; }
+  if (!it && !shipFormat(base)) {
+    if (!(await askShipFormat(full))) { if (hasSfx) delete intlV.seen[full]; setStatus('✖ ' + full + ' nezapočteno'); return; }
+  }
   if (it && it.locs.length && it.locs.indexOf(loc) < 0) {   // zásilka patří jinam -> zeptej se
     buzz();
     intlAskMove({ full: full, base: base, item: it, loc: loc, hasSfx: hasSfx });
@@ -2735,7 +2770,7 @@ function startEanCount(withLoc, intl) {
   expectingLoc = false; pendingEAN = null;
   locPill.style.display = 'none';
   eanSessionStart(withLoc || !!intl);
-  if (intl) { setRoom(''); loadFreeLocs(); setTimeout(function(){ openRoomModal(); }, 300); }
+  if (intl) { setRoom(''); loadFreeLocs(); loadFreeExport(); setTimeout(function(){ openRoomModal(); }, 300); }
   renderTableHead(); renderTable(); refreshModeUI(); updateScanBtn();
   setStatus((eanIntl ? '🌍 Mezinárodka · naskenuj LOKACI, pak jen zásilky' : (withLoc ? '📍 Inventura EAN + lokace' : '🔢 Inventura – jen EAN')) + ' · spouštím kameru');
   initCamera();
@@ -2933,7 +2968,7 @@ function submitWedge(v) {
   // čtečka bez nastaveného Enteru: kód odešli, když přestanou chodit znaky
   w.addEventListener('input', function(){
     clearTimeout(wedgeTimer);
-    wedgeTimer = setTimeout(function(){ if (w.value.length >= 3) { var v = w.value; w.value = ''; submitWedge(v); } }, 200);
+    wedgeTimer = setTimeout(function(){ if (w.value.length >= 2) { var v = w.value; w.value = ''; submitWedge(v); } }, 200);
   });
   // znaky ze čtečky, když není nic zaměřené: rychlá dávka kláves = sken (ruční psaní je pomalejší)
   document.addEventListener('keydown', function(e){
@@ -2942,14 +2977,14 @@ function submitWedge(v) {
     if (t && /INPUT|TEXTAREA|SELECT/.test(t.tagName)) return;
     var now = Date.now();
     if (e.key === 'Enter' || e.key === 'Tab') {
-      if (kb.buf.length >= 3 && now - kb.last < 300) { e.preventDefault(); clearTimeout(kb.timer); var v = kb.buf; kb.buf = ''; submitWedge(v); }
+      if (kb.buf.length >= 2 && now - kb.last < 300) { e.preventDefault(); clearTimeout(kb.timer); var v = kb.buf; kb.buf = ''; submitWedge(v); }
       kb.buf = ''; return;
     }
     if (!e.key || e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
     if (now - kb.last > 80) kb.buf = '';
     kb.buf += e.key; kb.last = now;
     clearTimeout(kb.timer);
-    kb.timer = setTimeout(function(){ if (kb.buf.length >= 4) { var v = kb.buf; kb.buf = ''; submitWedge(v); } kb.buf = ''; }, 200);
+    kb.timer = setTimeout(function(){ if (kb.buf.length >= 2) { var v = kb.buf; kb.buf = ''; submitWedge(v); } kb.buf = ''; }, 200);
   }, true);
   setInterval(focusWedge, 1000);
   document.addEventListener('click', function(){ setTimeout(focusWedge, 30); });
@@ -3112,7 +3147,44 @@ async function decodeWithRetries() {
   }
   return null;
 }
-function isDestCode(c) { return /^D[A-Z]{3}\+\d*\+?$/i.test(String(c || '').trim()); }
+function isDestCode(c) { return /^D[A-Z]{3}(\+.*)?$/i.test(String(c || '').trim()); }   // DPRG, DFRA, DDUS+05+ = spodní kód destinace
+// Formáty zásilek (HB / On-hand) – co neodpovídá, scanner nejdřív ověří u skladníka
+var SHIP_FORMATS = [
+  { re: /^\d{2}[A-Z]\d{7}$/, t: 'HB / File Number' },   // 43M0017885, 43V0031247, 61N0964426, 83M0028939
+  { re: /^[A-Z]\d{8,9}$/, t: 'HB' },                     // H16581140, J16561214, H481003845
+  { re: /^[A-Z]\d[A-Z]\d{7}$/, t: 'On-hand / HB' },      // F3M0677760, H1R0008962
+  { re: /^\d{9,10}$/, t: 'HB (číselné)' },               // 616557148, 4711975059
+  { re: /^[A-Z]{6}\d{5}$/, t: 'HB' }                      // MIQLAX04902
+];
+function shipFormat(code) { code = String(code || '').trim().toUpperCase(); for (var i = 0; i < SHIP_FORMATS.length; i++) if (SHIP_FORMATS[i].re.test(code)) return SHIP_FORMATS[i].t; return null; }
+var fmtResolve = null;
+function askShipFormat(raw) {
+  buzz();
+  document.getElementById('intl-fmt-code').textContent = raw;
+  document.getElementById('modal-intl-fmt').style.display = 'flex';
+  return new Promise(function(res){ fmtResolve = res; });
+}
+function intlFmtAnswer(yes) { closeModal('modal-intl-fmt'); var f = fmtResolve; fmtResolve = null; if (f) f(!!yes); }
+// Volná Mezinárodka: ověření proti poslednímu nahranému exportu (na pozadí)
+var freeExp = null;   // { name, set }
+async function loadFreeExport() {
+  freeExp = null;
+  try {
+    // všechny nahrané/rozjeté Mezinárodky v DC (import i export); když žádná není, poslední nahraná
+    var q = supa.from('inventory_lists').select('id,name,status,created_at').eq('kind', 'intl').neq('status', 'cancelled').order('created_at', { ascending: false }).limit(20);
+    if (currentDcId != null) q = q.eq('dc_id', currentDcId);
+    var l = await q; if (l.error || !l.data || !l.data.length) return;
+    var lists = l.data.filter(function(x){ return x.status === 'uploaded' || x.status === 'active'; });
+    if (!lists.length) lists = [l.data[0]];
+    var set = {};
+    for (var i = 0; i < lists.length; i++) {
+      var it = await supa.from('inventory_list_items').select('code,ref').eq('list_id', lists[i].id);
+      if (it.error) continue;
+      (it.data || []).forEach(function(r){ set[intlKey(r.code)] = 1; intlSplitLocs(r.ref).forEach(function(x){ set[x] = 1; }); });
+    }
+    freeExp = { name: lists.map(function(x){ return x.name; }).join(' + '), set: set };
+  } catch(e) {}
+}
 async function handleScannedCode(code) {
   if (appMode === 'inventura' && eanCount && eanIntl && isDestCode(code)) { buzz(); setStatus('↷ ' + String(code).trim() + ' je kód DESTINACE (spodní část štítku) – naskenuj horní kód zásilky'); return; }
   if (intlV && appMode === 'inventura' && !myDevMode) { document.getElementById('manual-btn').style.display = 'none'; await handleIntlVerify(code); return; }
@@ -3121,7 +3193,9 @@ async function handleScannedCode(code) {
     if (looksLikeLoc(raw)) { closeModal('modal-inv-room'); setRoom(raw.toUpperCase()); beepOk(); setStatus('📍 Lokace: ' + raw.toUpperCase() + ' · skenuj zásilky'); return; }
     if (!invRoom) { buzz(); setStatus('📍 Nejdřív naskenuj LOKACI'); openRoomModal(); return; }
     intlFull = raw; code = intlCode(code);
+    if (!shipFormat(code) && !(await askShipFormat(raw))) { setStatus('✖ ' + raw + ' nezapočteno'); return; }
     await processEAN(code, invRoom.toUpperCase());
+    if (freeExp && !freeExp.set[intlKey(code)]) { beepWarn(); setStatus('⚠️ ' + code + ' · ' + invRoom + ' – započteno, ale NENÍ v exportu „' + freeExp.name + '“'); }
     return;
   } else intlFull = null;
   document.getElementById('manual-btn').style.display = 'none';
@@ -3864,6 +3938,8 @@ function openRoomModal(cb) {
     wrap.appendChild(b);
   });
   document.getElementById('modal-inv-room').style.display = 'flex';
+  try { document.activeElement && document.activeElement.blur && document.activeElement.id !== 'wedge-input' && document.activeElement.blur(); } catch(e) {}
+  setTimeout(focusWedge, 0); setTimeout(focusWedge, 150);   // čtečka hned zapisuje lokaci, bez druhého skenu
 }
 function saveInvRoom() {
   var v = document.getElementById('inv-room-input').value.trim();

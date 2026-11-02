@@ -122,7 +122,7 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
           <div class="field">
             <label>Excel / CSV soubor</label>
             <input type="file" id="new-list-file" accept=".xlsx,.xls,.csv">
-            <div style="font-size:12px;color:var(--muted);margin-top:6px">Sloupce: <b>Kód</b> (nebo Evidenční číslo / Inventární číslo), volitelně <b>Název</b> a <b>Umístění</b>.<br>🌍 <b>Mezinárodka:</b> nahraj rovnou export <i>PRG Warehouse Export Workflow</i> – pozná se sám (OH, HB, Pcs, PUT Remarks). Ověřuje se HB, počet kusů a lokace.</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:6px">Sloupce: <b>Kód</b> (nebo Evidenční číslo / Inventární číslo), volitelně <b>Název</b> a <b>Umístění</b>.<br>🌍 <b>Mezinárodka:</b> nahraj rovnou <i>PRG Warehouse Export Workflow</i> nebo <i>Import Workflow</i> – pozná se sám (OH / File Number, HB, Pcs / Qty, PUT Remarks). Ověřuje se HB, počet kusů a lokace.</div>
             <button class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="downloadTemplate()">📥 Stáhnout šablonu (Excel)</button>
           </div>
           <div id="upload-msg" style="font-size:13px;min-height:18px;margin-bottom:8px"></div>
@@ -543,12 +543,15 @@ function parseIntlExport(aoa){
   var h=-1, col={};
   for(var i=0;i<Math.min(aoa.length,200);i++){
     var r=aoa[i].map(intlHdr);
-    if(r.indexOf('HB')>=0&&r.indexOf('PCS')>=0&&r.indexOf('OH')>=0){h=i;r.forEach(function(v,j){if(v&&col[v]==null)col[v]=j;});break;}
+    if(r.indexOf('HB')>=0&&(r.indexOf('PCS')>=0||r.indexOf('QTY')>=0)&&(r.indexOf('OH')>=0||r.indexOf('FILE NUMBER')>=0)){h=i;r.forEach(function(v,j){if(v&&col[v]==null)col[v]=j;});break;}
   }
   if(h<0) return null;
   var g={}, order=[], rowsN=0;
+  if(col['OH']==null&&col['FILE NUMBER']!=null)col['OH']=col['FILE NUMBER'];   // import: File Number místo OH
+  if(col['PCS']==null&&col['QTY']!=null)col['PCS']=col['QTY'];
+  var kindTxt=col['FILE NUMBER']!=null?'import':'export';
   function cell(r,k){ var j=col[k]; return j==null?'':r[j]; }
-  function txt(v){ return String(v==null?'':v).trim(); }
+  function txt(v){ if(typeof v==='number'&&isFinite(v)&&Math.floor(v)===v)return String(v); return String(v==null?'':v).trim(); }
   for(var k=h+1;k<aoa.length;k++){
     var r=aoa[k], oh=txt(cell(r,'OH')).toUpperCase(), hb=txt(cell(r,'HB')).toUpperCase();
     if(!oh&&!hb) continue;
@@ -558,11 +561,12 @@ function parseIntlExport(aoa){
     if(!g[key]){g[key]={code:key,oh:[],locs:[],pcs:0,putPcs:0,remarks:[],dest:txt(cell(r,'DEST')),consignee:txt(cell(r,'CONSIGNEE')),shipper:txt(cell(r,'SHIPPER')),mode:txt(cell(r,'MODE')),weight:0};order.push(key);}
     var o=g[key]; rowsN++;
     if(oh&&o.oh.indexOf(oh)<0&&oh!==key)o.oh.push(oh);
+    var xf=txt(cell(r,'XF')).toUpperCase(); if(xf&&o.oh.indexOf(xf)<0&&xf!==key)o.oh.push(xf);
     o.pcs+=pcs; o.weight+=Number(cell(r,'WEIGHT'))||0;
     if(rem)o.remarks.push(rem);
     if(m){var L=m[1].toUpperCase(); if(o.locs.indexOf(L)<0)o.locs.push(L); if(m[2])o.putPcs+=Number(m[2]);}
   }
-  return {rows:rowsN, items:order.map(function(k){return g[k];})};
+  return {rows:rowsN, kind:kindTxt, items:order.map(function(k){return g[k];})};
 }
 async function uploadIntl(intl,listName,msg,nameEl,fileEl){
   if(!intl.items.length){msg.style.color='var(--danger)';msg.textContent='❌ V exportu nejsou žádné řádky pod hlavičkou OH / HB / Pcs.';return;}
@@ -576,11 +580,11 @@ async function uploadIntl(intl,listName,msg,nameEl,fileEl){
     return {list_id:listId,code:it.code,ref:it.oh.join(', ')||null,
       name:[it.dest,it.consignee].filter(Boolean).join(' · ').slice(0,120),
       location:it.locs.join(', '),qty_expected:it.pcs||1,
-      meta:{oh:it.oh,dest:it.dest,consignee:it.consignee,shipper:it.shipper,mode:it.mode,weight:it.weight,put_remarks:it.remarks,put_pcs:it.putPcs}};
+      meta:{type:intl.kind,oh:it.oh,dest:it.dest,consignee:it.consignee,shipper:it.shipper,mode:it.mode,weight:it.weight,put_remarks:it.remarks,put_pcs:it.putPcs}};
   });
   for(var i=0;i<rows.length;i+=500){var ins=await supa.from('inventory_list_items').insert(rows.slice(i,i+500));if(ins.error)throw ins.error;}
   var pcs=rows.reduce(function(a,r){return a+r.qty_expected;},0);
-  msg.style.color='var(--accent)';msg.textContent='✅ Mezinárodka "'+listName+'" vytvořena: '+rows.length+' HB, '+pcs+' ks (z '+intl.rows+' řádků exportu)';
+  msg.style.color='var(--accent)';msg.textContent='✅ Mezinárodka ('+(intl.kind==='import'?'import':'export')+') "'+listName+'" vytvořena: '+rows.length+' HB, '+pcs+' ks (z '+intl.rows+' řádků exportu)';
   nameEl.value='';fileEl.value='';toast('✅ Mezinárodka nahrána');loadInvPage();
 }
 
