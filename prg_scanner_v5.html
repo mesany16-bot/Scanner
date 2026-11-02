@@ -592,6 +592,7 @@
     <button class="modal-btn" style="background:var(--accent)" onclick="openInvServerPick()">☁️ Inventura ze serveru (seznam)</button>
     <button class="modal-btn info" onclick="startEanCount(true)">📍 EAN + lokace</button>
     <button class="modal-btn info" onclick="startEanCount(false)">🔢 Jen EAN</button>
+    <button class="modal-btn info" onclick="startEanCount(false, true)">🌍 Mezinárodka <span style="font-weight:400;font-size:12px;opacity:.85">(43M0007578+0001 → 43M0007578)</span></button>
     <button class="modal-btn secondary" onclick="document.getElementById('inv-excel-input').click()">📂 Seznam z Excelu/CSV v zařízení</button>
     <button class="modal-btn secondary" onclick="closeModal('modal-inv-source')">Zrušit</button>
   </div>
@@ -956,6 +957,8 @@ function beepOk()    { beep(1480,0.08); setTimeout(function(){beep(1760,0.1);},1
 // ── State ──────────────────────────────────────────────────
 var currentUser = '';
 var useLocation = false;
+var eanIntl = false;
+var intlSeen = {}, intlFull = null; // Mezinárodka: už naskenované celé štítky (s +pořadím)    // Mezinárodka: z kódu se bere jen část před „+“ (číslo zásilky bez pořadí kusu)
 var eanCount = false;   // Inventory Tool: počítání EAN (s lokací nebo bez)
 var eanSession = null;  // session_uid volné inventury EAN – na serveru jako řádek inventory_lists (kind ean / ean_loc)
 var expectingLoc = false;
@@ -1285,7 +1288,7 @@ function openHub() {
   var hint = document.getElementById('hub-hint');
   var parts = [];
   if (eanCount && rows.length && !invList.length) {
-    parts.push((useLocation ? '📍 Rozjetá inventura EAN + lokace' : '🔢 Rozjetá inventura EAN') + ': <b>' + rows.length + '</b> řádků');
+    parts.push((eanIntl ? '🌍 Rozjetá inventura Mezinárodka' : (useLocation ? '📍 Rozjetá inventura EAN + lokace' : '🔢 Rozjetá inventura EAN')) + ': <b>' + rows.length + '</b> řádků');
   }
   if (invList.length) {
     var f = invList.filter(function(r){ return r.status==='found'; }).length;
@@ -1308,7 +1311,7 @@ function hubChoose(mode) {
   hubClose();
   if (mode === 'wms') { if (appMode !== 'wms') switchAppMode('wms'); return; }
   if (invList.length || (eanCount && rows.length)) {
-    document.getElementById('hub-inv-name').textContent = invList.length ? (invListMeta ? invListMeta.name : 'z Excelu v telefonu') : (useLocation ? 'EAN + lokace' : 'jen EAN') + ' (' + rows.length + ' řádků)';
+    document.getElementById('hub-inv-name').textContent = invList.length ? (invListMeta ? invListMeta.name : 'z Excelu v telefonu') : (eanIntl ? 'Mezinárodka' : (useLocation ? 'EAN + lokace' : 'jen EAN')) + ' (' + rows.length + ' řádků)';
     document.getElementById('modal-hub-inv').style.display = 'flex';
     return;
   }
@@ -1351,7 +1354,7 @@ function refreshModeUI() {
   if (sw) sw.style.display = 'flex';
   if (appMode === 'inventura') {
     badge.style.display = 'flex';
-    if (invMode) updateInvSummaryBadge(); else badge.textContent = eanCount ? (useLocation ? '📍 EAN + lokace' : '🔢 Jen EAN') : '📋 Inventura';
+    if (invMode) updateInvSummaryBadge(); else badge.textContent = eanCount ? eanLabel() : '📋 Inventura';
     if (btn) btn.textContent = '✅ Dokončit';
     if (swLabel) swLabel.textContent = 'WMS';
   } else {
@@ -1372,7 +1375,7 @@ function switchAppMode(target) {
     if (eanCount && !invList.length) {
       invMode = false;
       renderTableHead(); renderTable();
-      setStatus((useLocation ? '📍 EAN + lokace' : '🔢 Jen EAN') + ' · pokračuj – spusť kameru');
+      setStatus(eanLabel() + ' · pokračuj – spusť kameru');
     } else if (invList.length) {
       invMode = true;
       renderInvTable();
@@ -2267,25 +2270,33 @@ function wmsSoon(what) {
   setStatus('🏭 ' + what + ' ve scanneru připravujeme (úlohy pro sklad). Zatím je řeš ve webovém PRG WMS.');
 }
 // Inventory Tool: volná inventura EAN (s lokací nebo bez)
-function startEanCount(withLoc) {
+function eanLabel() { return eanIntl ? '🌍 Mezinárodka' : (useLocation ? '📍 EAN + lokace' : '🔢 Jen EAN'); }
+// Mezinárodka: 43M0007578+0001 -> 43M0007578. Kód začínající „+“ se nemění.
+function intlCode(code) {
+  code = String(code == null ? '' : code).trim();
+  var i = code.indexOf('+');
+  return i > 0 ? code.slice(0, i).trim() : code;
+}
+function startEanCount(withLoc, intl) {
   closeModal('modal-inv-source');
   stopCam();
   appMode = 'inventura';
   invMode = false; myDevMode = false;
   eanCount = true;
   useLocation = withLoc;
+  eanIntl = !!intl; intlSeen = {}; intlFull = null;
   expectingLoc = false; pendingEAN = null;
   locPill.style.display = 'none';
   eanSessionStart(withLoc);
   renderTableHead(); renderTable(); refreshModeUI(); updateScanBtn();
-  setStatus((withLoc ? '📍 Inventura EAN + lokace' : '🔢 Inventura – jen EAN') + ' · spouštím kameru');
+  setStatus((eanIntl ? '🌍 Inventura Mezinárodka' : (withLoc ? '📍 Inventura EAN + lokace' : '🔢 Inventura – jen EAN')) + ' · spouštím kameru');
   initCamera();
 }
 function eanSessionStart(withLoc) {
   eanSession = obUid();
   var d = new Date();
   var row = { session_uid: eanSession, kind: withLoc ? 'ean_loc' : 'ean', status: 'active',
-    name: (withLoc ? 'EAN + lokace' : 'Jen EAN') + ' · ' + currentUser + ' · ' + d.toLocaleString('cs-CZ', { day:'numeric', month:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+    name: (eanIntl ? 'Mezinárodka' : (withLoc ? 'EAN + lokace' : 'Jen EAN')) + ' · ' + currentUser + ' · ' + d.toLocaleString('cs-CZ', { day:'numeric', month:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
     started_by: currentUser, started_at: d.toISOString() };
   if (currentDcId != null) row.dc_id = currentDcId;
   obSubmit({ kind: 'inv_ean_start', row: row }).catch(function(){});
@@ -2303,7 +2314,7 @@ function finishEanCount() {
   if (!confirm('Ukončit inventuru? Naskenováno ' + rows.length + ' řádků, ' + pcs + ' ks. Skeny jsou uložené na serveru (WMS → Skeny)' + (OB.count ? ', ' + OB.count + ' čeká na odeslání.' : '.'))) return;
   if (confirm('Stáhnout CSV s výsledkem?')) exportCSV();
   eanSessionEnd(false);
-  rows = []; expectingLoc = false; pendingEAN = null; eanCount = false;
+  rows = []; expectingLoc = false; pendingEAN = null; eanCount = false; eanIntl = false;
   locPill.style.display = 'none';
   stopCam(); renderTable(); refreshModeUI();
   setStatus('✅ Inventura ukončena');
@@ -2418,7 +2429,7 @@ function startReader() {
   setCamSt('🔫 Čtečka připravena');
   setStatus(invMode ? '📋 Inventura – naskenuj kód majetku čtečkou'
     : (myDevMode ? '📱 myDevices – naskenuj IoT ID čtečkou'
-      : '✅ Čtečka připravena' + (useLocation ? ' · EAN + Lokace' : ' · EAN')));
+      : '✅ Čtečka připravena' + (eanIntl && eanCount ? ' · Mezinárodka' : (useLocation ? ' · EAN + Lokace' : ' · EAN'))));
   updateScanBtn();
   setTimeout(focusWedge, 50);
 }
@@ -2507,7 +2518,7 @@ async function initCamera() {
       ? '📋 Inventura – skenuj čárový kód majetku'
       : (myDevMode
         ? '📱 myDevices – skenuj IoT ID zařízení'
-        : '✅ Kamera spuštěna' + (useLocation ? ' · EAN + Lokace' : ' · pouze EAN')));
+        : '✅ Kamera spuštěna' + (eanIntl && eanCount ? ' · Mezinárodka' : (useLocation ? ' · EAN + Lokace' : ' · pouze EAN'))));
     updateScanBtn();
   } catch(err) {
     setStatus('❌ Kamera: ' + err.message);
@@ -2629,6 +2640,7 @@ async function decodeWithRetries() {
   return null;
 }
 async function handleScannedCode(code) {
+  if (appMode === 'inventura' && eanCount && eanIntl && !invMode && !myDevMode && !(task && appMode === 'wms')) { intlFull = String(code).trim(); code = intlCode(code); } else intlFull = null;
   document.getElementById('manual-btn').style.display = 'none';
   if (task && appMode === 'wms' && !myDevMode) { await taskCode(code); return; }
   if (invMode) { await handleInvCode(code); }
@@ -2738,6 +2750,16 @@ async function handleCode(code) {
 
 async function processEAN(ean, loc) {
   var existing = rows.filter(function(r){ return r.ean===ean; });
+  // Mezinárodka: další kus téže zásilky (jiné +pořadí) se přičte bez dotazu; stejný štítek podruhé = dotaz na duplicitu
+  var intlNext = eanIntl && eanCount && intlFull && intlFull !== ean && !intlSeen[intlFull];
+  if (eanIntl && eanCount && intlFull) intlSeen[intlFull] = 1;
+  if (existing.length > 0 && intlNext) {
+    var tI = existing.find(function(r){ return r.loc===(loc||''); }) || existing[0], iI = rows.indexOf(tI);
+    rows[iI].qty++; rows[iI].timestamps.push(nowStr());
+    sendScan({ ean:ean, location:tI.loc||null, quantity:1, placement_mode: useLocation ? 'inv_ean_loc' : 'inv_ean', inv_session: eanSession });
+    setStatus('➕ '+ean+' ('+intlFull.slice(ean.length)+') → '+rows[iI].qty+' ks');
+    renderTable(iI); return;
+  }
   if (existing.length > 0) {
     beepWarn();
     var info = 'EAN: '+ean+'\n\nNalezeno na:\n';
