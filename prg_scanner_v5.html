@@ -501,6 +501,7 @@
     <h2 class="info">📋 Inventory Tool</h2>
     <p>Právě máš rozjetou inventuru <b id="hub-inv-name"></b>. Co chceš udělat?</p>
     <button class="modal-btn info" onclick="hubInvContinue()">▶️ Pokračovat v rozjeté</button>
+    <button class="modal-btn" style="background:var(--danger)" onclick="hubInvEnd()">⏹ Ukončit rozjetou inventuru</button>
     <button class="modal-btn" style="background:var(--accent)" onclick="hubInvOther()">📋 Vybrat jinou inventuru</button>
     <button class="modal-btn secondary" onclick="closeModal('modal-hub-inv')">Zrušit</button>
   </div>
@@ -937,7 +938,14 @@ async function obDoFlush() {
 }
 function obFlush() { OB.chain = OB.chain.then(obDoFlush, obDoFlush); return OB.chain; }
 // Uloží záznam do fronty a hned zkusí odeslat (ve správném pořadí). Vrací {s:'done'|'conflict'|'fail'|'queued', ...}
+// Inventura se na serveru označí jako aktivní až s prvním skenem (ne při pouhém otevření)
+var OB_DEFER = [];
+function obDefer(op, match) { OB_DEFER.push({ op: op, match: match }); }
+function obDeferDrop(fn) { var had = false; OB_DEFER = OB_DEFER.filter(function(d){ if (fn(d.op)) { had = true; return false; } return true; }); return had; }
 async function obSubmit(op) {
+  for (var i = 0; i < OB_DEFER.length; i++) {
+    if (OB_DEFER[i].match(op)) { var d = OB_DEFER.splice(i, 1)[0]; i--; await obAdd(d.op); OB.count++; }
+  }
   var k = await obAdd(op);
   OB.count++; obBadge(OB.count);
   var res = await obFlush();
@@ -1400,6 +1408,12 @@ function hubChoose(mode) {
 function hubInvContinue() {
   closeModal('modal-hub-inv');
   if (appMode !== 'inventura') switchAppMode('inventura');
+}
+function hubInvEnd() {
+  closeModal('modal-hub-inv');
+  if (appMode !== 'inventura') switchAppMode('inventura');
+  if (invMode && invList.length) finishInventura();      // Uložit / Zrušit
+  else openInvEnd();                                       // Dokončit / Zrušit
 }
 function hubInvOther() {
   closeModal('modal-hub-inv');
@@ -2389,7 +2403,11 @@ async function selectIntlList(listId, listName) {
       if (p.found_at > last) last = p.found_at;
     });
     closeModal('modal-inv-server-pick');
-    obSubmit({ kind: 'inv_list_active', list_id: listId, user: currentUser, at: new Date().toISOString() });
+    obDeferDrop(function(o){ return o.kind === 'inv_list_active'; });
+    obDefer({ kind: 'inv_list_active', list_id: listId, user: currentUser, at: new Date().toISOString() }, function(o){
+      return (o.kind === 'rpc' && o.args && String(o.args.p_list) === String(listId)) ||
+             (['inv_found','inv_newloc_item','inv_newloc_extra','inv_extra'].indexOf(o.kind) >= 0 && invListMeta && String(invListMeta.id) === String(listId));
+    });
     stopCam();
     if (eanCount && !intlV) eanSessionEnd(!rows.length);
     invMode = false; invList = []; invExtra = []; invListMeta = null; myDevMode = false;
@@ -2636,7 +2654,8 @@ function invEndFinish() {
   if (intlV) {
     var exp = confirm('Stáhnout CSV s výsledkem?');
     if (exp) exportIntlCSV();
-    obSubmit({ kind: 'inv_complete', list_id: intlV.id, user: currentUser, at: new Date().toISOString() });
+    var lid0 = intlV.id;
+    if (!obDeferDrop(function(o){ return o.kind === 'inv_list_active' && String(o.list_id) === String(lid0); })) obSubmit({ kind: 'inv_complete', list_id: intlV.id, user: currentUser, at: new Date().toISOString() });
     intlStop(); stopCam(); renderTable(); refreshModeUI();
     setStatus('✅ Mezinárodka dokončena');
     document.getElementById('modal-inv-source').style.display = 'flex';
@@ -2656,10 +2675,12 @@ function invEndCancel() {
   closeModal('modal-inv-end');
   var at = new Date().toISOString();
   if (intlV) {
-    obSubmit({ kind: 'inv_cancel', list_id: intlV.id, user: currentUser, at: at });
+    var lid1 = intlV.id;
+    if (!obDeferDrop(function(o){ return o.kind === 'inv_list_active' && String(o.list_id) === String(lid1); })) obSubmit({ kind: 'inv_cancel', list_id: intlV.id, user: currentUser, at: at });
     intlStop();
   } else {
-    if (eanSession) obSubmit({ kind: 'inv_ean_cancel', session_uid: eanSession, user: currentUser, at: at });
+    var sid1 = eanSession;
+    if (eanSession && !obDeferDrop(function(o){ return o.kind === 'inv_ean_start' && o.row.session_uid === sid1; })) obSubmit({ kind: 'inv_ean_cancel', session_uid: eanSession, user: currentUser, at: at });
     eanSession = null;
     rows = []; expectingLoc = false; pendingEAN = null; eanCount = false; eanIntl = false;
     locPill.style.display = 'none';
@@ -2673,7 +2694,7 @@ function cancelListInventura() {
   if (!confirm('Opravdu ZRUŠIT inventuru bez dokončení?\n\nVe webu bude vedená jako zrušená. Naskenovaná data zůstanou na serveru.')) return;
   closeModal('modal-inv-finish');
   clearInterval(invPollTimer);
-  if (invListMeta && invListMeta.id) obSubmit({ kind: 'inv_cancel', list_id: invListMeta.id, user: currentUser, at: new Date().toISOString() });
+  if (invListMeta && invListMeta.id) { var lid2 = invListMeta.id; if (!obDeferDrop(function(o){ return o.kind === 'inv_list_active' && String(o.list_id) === String(lid2); })) obSubmit({ kind: 'inv_cancel', list_id: invListMeta.id, user: currentUser, at: new Date().toISOString() }); }
   stopCam();
   invMode = false; invList = []; invExtra = []; invListMeta = null;
   try { saveInvCache(); } catch(e) {}
@@ -2726,10 +2747,14 @@ function eanSessionStart(withLoc) {
     name: (eanIntl ? 'Mezinárodka' : (withLoc ? 'EAN + lokace' : 'Jen EAN')) + ' · ' + currentUser + ' · ' + d.toLocaleString('cs-CZ', { day:'numeric', month:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
     started_by: currentUser, started_at: d.toISOString() };
   if (currentDcId != null) row.dc_id = currentDcId;
-  obSubmit({ kind: 'inv_ean_start', row: row }).catch(function(){});
+  var sid = eanSession;
+  obDeferDrop(function(o){ return o.kind === 'inv_ean_start'; });
+  obDefer({ kind: 'inv_ean_start', row: row }, function(o){ return o.kind === 'scan' && o.row && o.row.inv_session === sid; });
 }
 function eanSessionEnd(empty) {
   if (!eanSession) return;
+  var sid0 = eanSession;
+  if (obDeferDrop(function(o){ return o.kind === 'inv_ean_start' && o.row.session_uid === sid0; })) { eanSession = null; return; }   // nic nenaskenováno -> na serveru nevznikla
   var op = { kind: 'inv_ean_finish', session_uid: eanSession, user: currentUser, at: new Date().toISOString() };
   if (empty) op.drop = true;
   eanSession = null;
@@ -3579,7 +3604,11 @@ async function selectInvList(listId, listName) {
     });
     closeModal('modal-inv-server-pick');
     // Označ seznam jako aktivní (nebo se jen připoj, pokud už aktivní je) — start info nastav jen poprvé
-    obSubmit({ kind: 'inv_list_active', list_id: listId, user: currentUser, at: new Date().toISOString() });
+    obDeferDrop(function(o){ return o.kind === 'inv_list_active'; });
+    obDefer({ kind: 'inv_list_active', list_id: listId, user: currentUser, at: new Date().toISOString() }, function(o){
+      return (o.kind === 'rpc' && o.args && String(o.args.p_list) === String(listId)) ||
+             (['inv_found','inv_newloc_item','inv_newloc_extra','inv_extra'].indexOf(o.kind) >= 0 && invListMeta && String(invListMeta.id) === String(listId));
+    });
     startInvScanning(list, { id: listId, name: listName });
     saveInvCache();
   } catch(err) {
@@ -3897,7 +3926,10 @@ async function confirmFinishInventura() {
   setStatus('💾 Uzavírám inventuru…');
   clearInterval(invPollTimer);
   var saveMsg = '';
-  if (invListMeta && invListMeta.id) {
+  var lid3 = invListMeta && invListMeta.id;
+  if (lid3 && obDeferDrop(function(o){ return o.kind === 'inv_list_active' && String(o.list_id) === String(lid3); })) {
+    saveMsg = 'ℹ️ Nic nenaskenováno – inventura zůstává v Nahraných';
+  } else if (invListMeta && invListMeta.id) {
     var fr = await obSubmit({ kind: 'inv_complete', list_id: invListMeta.id, user: currentUser, at: new Date().toISOString() });
     if (fr.s === 'done') saveMsg = '☁️ Inventura uzavřena na serveru';
     else if (fr.s === 'queued') saveMsg = '📴 Uzavření inventury se odešle po připojení (po všech skenech)';
