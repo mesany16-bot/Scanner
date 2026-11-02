@@ -6,7 +6,7 @@
   var esc=function(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');};
   var up=function(s){return String(s==null?'':s).trim().toUpperCase();};
   var nf=function(n){return (Number(n)||0).toLocaleString('cs-CZ');};
-  var E={},O=null,doc=null,items=[],skus=[],skuBy={},clients=[],whs=[],attrs=[],attrVals={},dirty=false,rowSeq=0,leaving=false;
+  var PEOPLE=[],E={},O=null,doc=null,items=[],skus=[],skuBy={},clients=[],whs=[],attrs=[],attrVals={},dirty=false,rowSeq=0,leaving=false;
 
   function css(){
     if(document.getElementById('docedit-css'))return;
@@ -47,13 +47,14 @@
   function page(){return O.kind==='receipt'?'wms_receipt.html':'wms_delivery.html';}
   function listPage(){return O.kind==='receipt'?'wms_receipts.html':'wms_deliveries.html';}
 
-  async function selAll(build){var out=[],from=0;while(true){var r=await build().range(from,from+999);if(r.error)return out;var d=r.data||[];out=out.concat(d);if(d.length<1000)break;from+=1000;}return out;}
+  async function selAll(build){var out=[],from=0;while(true){var r=await build().range(from,from+999);if(r.error)throw r.error;var d=r.data||[];out=out.concat(d);if(d.length<1000)break;from+=1000;}return out;}
 
   async function init(o){
     O=o;css();
     var root=document.getElementById('doc-root');
     var p=new URLSearchParams(location.search);var id=parseInt(p.get('id'))||null;
     var cr=await O.supa.from('clients').select('*').order('name');clients=cr.data||[];
+    try{PEOPLE=(await O.supa.from('profiles').select('id,name,role').order('name')).data||[];}catch(e){PEOPLE=[];}
     if(window.PRG_DC&&PRG_DC.list().length)whs=PRG_DC.list();else{var wr=await O.supa.from('warehouses').select('id,name,code').order('name');whs=wr.data||[];}
     if(id){
       var dr=await O.supa.from(T()).select('*').eq('id',id).single();
@@ -129,7 +130,8 @@
     skus=[];skuBy={};attrs=[];
     var info=g('f-flowinfo');
     if(!cid){renderAttrs();revalidate();if(info)info.textContent='';return;}
-    skus=await selAll(function(){return O.supa.from('stock_items').select('id,sku,ean,description,client_id,lot_exempt,is_active,gtin_carton,gtin_pallet,primary_location').or('client_id.eq.'+cid+',client_id.is.null').order('sku');});
+    try{skus=await selAll(function(){return O.supa.from('stock_items').select('*').or('client_id.eq.'+cid+',client_id.is.null').order('sku');});
+    }catch(e){skus=[];toast('❌ SKU klienta se nenačetla: '+(e.message||e));}
     skus=skus.filter(function(s){return s.is_active!==false&&s.sku;});
     skus.forEach(function(s){var k=up(s.sku);if(!skuBy[k]||skuBy[k].client_id==null)skuBy[k]=s;});
     var ar=await O.supa.from('client_attributes').select('*').eq('client_id',cid).order('sort_order');
@@ -139,7 +141,7 @@
     if(info){
       info.textContent=O.kind==='receipt'
         ?(cl.receipt_flow==='one_step'?'Příjem tohoto klienta: rovnou na lokaci (1 krok).':'Příjem tohoto klienta: přijmout na UNASSIGNED → zaskladnit (2 kroky).')+(cl.lot_required?' LOT je povinný.':'')
-        :(cl.auto_release?'Výdeje tohoto klienta se po uložení samy alokují a uvolní do skladu.':'Po uložení výdej alokuj a uvolni do skladu.')+(cl.round_full_pallets?' Vydává se po celých paletách.':'');
+        :(cl.auto_release?'Výdeje tohoto klienta se po uložení samy alokují a uvolní do skladu.':'Po uložení výdej alokuj a uvolni do skladu.')+(cl.round_full_pallets?' Vydává se po celých paletách.':'')+({pick_load_ship:' Postup: vychystat → naložit skenem → odjezd.',pick_pack_load_ship:' Postup: vychystat → zabalit → naložit skenem → odjezd.'}[cl.delivery_flow]||'');
     }
     if(!initial)revalidate();
   }
@@ -355,7 +357,8 @@
     var bar='<div style="display:flex;gap:3px;margin:10px 0 4px">'+steps.map(function(x,i){return '<div title="'+esc(F().meta(K,x).t)+'" style="flex:1;height:6px;border-radius:3px;background:'+(s==='cancelled'?'#f3c6c1':(i<=idx?'var(--accent)':'#e2e6ed'))+'"></div>';}).join('')+'</div>';
     var h='<div class="big">'+F().badge(K,s)+' <span style="font-size:13px;color:var(--muted)">'+esc(F().progress(K,doc,p))+'</span></div>'+bar
       +'<div style="font-size:12px;color:var(--muted)">'+esc(m.h)+'</div>'
-      +(doc.problem?'<div class="de-prob">⚠ '+esc(doc.problem)+'</div>':'');
+      +(doc.problem?'<div class="de-prob">⚠ '+esc(doc.problem)+'</div>':'')
+      +(K==='delivery'&&(doc.door||doc.plate||doc.seal)?'<div style="font-size:12px;margin-top:8px">🚚 '+[doc.door?'vrata '+esc(doc.door):'',doc.plate?'SPZ '+esc(doc.plate):'',doc.seal?'plomba '+esc(doc.seal):''].filter(Boolean).join(' · ')+'</div>':'');
     var a=[];
     if(K==='delivery'){
       if(s==='new')a.push('<button class="btn btn-primary" data-a="allocate">📦 Alokovat zásobu</button>');
@@ -363,6 +366,8 @@
       if(s==='allocated'||s==='released')a.push('<button class="btn btn-secondary" data-a="deallocate">↩ Zrušit alokaci</button>');
     }
     if(s==='new'&&K==='receipt')a.push('<div style="font-size:12px;color:var(--muted)">Příjem zahájí skladník ve scanneru (PRG WMS → Příjem).</div>');
+    if(isAdmin()&&s!=='done'&&s!=='shipped'&&s!=='cancelled')a.push('<label style="font-size:12px;color:var(--muted)">👤 Přiřazeno<select id="st-assign" style="display:block;width:100%;margin-top:3px;padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"><option value="">– komukoli –</option>'+PEOPLE.filter(function(x){return x.role!=='client';}).map(function(x){return '<option value="'+x.id+'"'+(doc.assigned_to===x.id?' selected':'')+'>'+esc(x.name||'')+'</option>';}).join('')+'</select></label>');
+    else if(doc.assigned_to){var pa=PEOPLE.find(function(x){return x.id===doc.assigned_to;});a.push('<div style="font-size:12px;color:var(--muted)">👤 Přiřazeno: '+esc(pa?pa.name:'')+'</div>');}
     a.push('<button class="btn btn-secondary" data-a="problem">⚠ '+(doc.problem?'Upravit / vyřešit problém':'Nahlásit problém')+'</button>');
     if(isAdmin()){
       a.push('<button class="btn btn-secondary" data-a="override">🛠 Ruční zásah (admin)</button>');
@@ -371,6 +376,7 @@
     }
     h+='<div class="acts">'+a.join('')+'</div>';
     st.innerHTML=h;
+    var asg=g('st-assign');if(asg)asg.onchange=async function(){var r=await O.supa.rpc('wms_assign',{p_type:K,p_ids:[doc.id],p_to:this.value||null,p_user:uid()});toast(r.error?'❌ '+F().errMsg(r.error):'Přiřazeno');reloadDoc();};
     st.querySelectorAll('[data-a]').forEach(function(b){b.onclick=function(){var x=b.getAttribute('data-a');
       if(x==='override')F().overrideDialog({supa:O.supa,type:K,doc:doc,userId:uid(),onDone:function(){toast('Status změněn');reloadDoc();}});
       else if(x==='problem')F().problemDialog({supa:O.supa,type:K,doc:doc,userId:uid(),onDone:reloadDoc});
@@ -401,6 +407,12 @@
       g('work-body').innerHTML='<table><thead><tr><th>SKU</th><th>Lokace</th><th>LPN</th><th>LOT</th><th>Ks</th><th>Vychystáno</th><th>Stav</th></tr></thead><tbody>'+a.map(function(x){
         return '<tr><td><b>'+esc(x.sku)+'</b></td><td>'+esc(x.location_code||'')+'</td><td style="font-family:JetBrains Mono,monospace;font-size:12px">'+esc(x.lpn||'–')+'</td><td>'+esc(x.lot||'–')+'</td>'
           +'<td>'+nf(x.qty)+'</td><td>'+nf(x.picked_qty)+(Number(x.short_qty)?' <span style="color:#c0392b">(short '+nf(x.short_qty)+')</span>':'')+'</td><td>'+(SB[x.status]||esc(x.status))+'</td></tr>';}).join('')+'</tbody></table>';
+      var pk=await O.supa.from('packages').select('*,package_lines(*)').eq('delivery_id',doc.id).order('id');
+      if(!pk.error&&pk.data&&pk.data.length){
+        var KN={pallet:'Paleta',carton:'Karton',other:'Jiné'};
+        g('work-body').innerHTML+='<div style="padding:12px 16px 4px;font-weight:700;font-size:13px">📦 Obaly ('+pk.data.length+')</div><table><thead><tr><th>Kód</th><th>Typ</th><th>Obsah</th><th>Váha</th><th>Rozměry</th><th>Nakládka</th></tr></thead><tbody>'+pk.data.map(function(p){
+          return '<tr><td style="font-family:JetBrains Mono,monospace;font-weight:700">'+esc(p.code)+'</td><td>'+esc(KN[p.kind]||p.kind)+'</td><td style="font-size:12px">'+(p.package_lines||[]).map(function(l){return esc(l.sku)+' '+nf(l.qty);}).join(', ')+'</td><td>'+(p.weight_kg!=null?nf(p.weight_kg)+' kg':'–')+'</td><td>'+(p.length_cm?nf(p.length_cm)+'×'+nf(p.width_cm)+'×'+nf(p.height_cm)+' cm':'–')+'</td><td>'+(p.status==='loaded'?'<span class="badge badge-green">Naloženo</span>':'<span class="badge badge-gray">Čeká</span>')+'</td></tr>';}).join('')+'</tbody></table>';
+      }
     }
   }
 

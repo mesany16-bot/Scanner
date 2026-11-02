@@ -497,6 +497,11 @@
     <button class="modal-btn" onclick="tkOpenList('receipt')">📥 Příjem <span id="wm-c-r" style="font-size:14px;font-weight:400"></span></button>
     <button class="modal-btn" onclick="tkStartPutaway()">🏷️ Zaskladnění <span id="wm-c-p" style="font-size:14px;font-weight:400"></span></button>
     <button class="modal-btn" onclick="tkOpenList('delivery')">📤 Vychystání <span id="wm-c-d" style="font-size:14px;font-weight:400"></span></button>
+    <button class="modal-btn" onclick="tkOpenList('pack')">📦 Balení <span id="wm-c-k" style="font-size:14px;font-weight:400"></span></button>
+    <button class="modal-btn" onclick="tkOpenList('load')">🚚 Nakládka <span id="wm-c-l" style="font-size:14px;font-weight:400"></span></button>
+    <button class="modal-btn" onclick="tkStartRepl()">🔁 Doplnění pick lokací</button>
+    <button class="modal-btn" onclick="tkOpenCounts()">📋 Cyklická inventura</button>
+    <button class="modal-btn info" onclick="tkStartInfo()">🔎 Info lokace / LPN · přesah</button>
     <button class="modal-btn info" onclick="closeModal('modal-wms-menu');openMyDevices()">📱 myDevices</button>
     <p style="font-size:12.5px;color:var(--muted);margin-top:4px">Inventury (seznam, EAN + lokace, jen EAN) najdeš v <b>Inventory Tool</b>.</p>
     <button class="modal-btn secondary" onclick="closeModal('modal-wms-menu')">Zavřít</button>
@@ -1436,7 +1441,7 @@ supa.auth.onAuthStateChange(function(event, session) {
 var task = null;
 var TK_ST = {
   receipt: { 'new':'Nový', arrived:'Dorazilo', receiving:'Přijímá se', received:'Přijato', putaway:'Zaskladňuje se', done:'Hotovo', cancelled:'Zrušeno' },
-  delivery: { 'new':'Nový', allocated:'Alokováno', released:'Uvolněno', picking:'Vychystává se', picked:'Vychystáno', shipped:'Odesláno', cancelled:'Zrušeno' }
+  delivery: { 'new':'Nový', allocated:'Alokováno', released:'Uvolněno', picking:'Vychystává se', picked:'Vychystáno', packed:'Zabaleno', loading:'Nakládá se', shipped:'Odesláno', cancelled:'Zrušeno' }
 };
 function tkEsc(v) { return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function tkUp(s) { return String(s == null ? '' : s).trim().toUpperCase(); }
@@ -1455,6 +1460,21 @@ function tkErr(m) {
   if (c === 'LPN_EXISTS') return 'LPN ' + a + ' už na skladě je';
   if (c === 'LPN_NOT_PENDING') return 'LPN ' + a + ' nečeká na zaskladnění';
   if (c === 'MIX_BULK') return 'Na bulk lokaci ' + a + ' je jiné SKU nebo LOT';
+  if (c === 'BLOCKED') return 'Lokace ' + a + ' je blokovaná – přesahuje na ni paleta ' + b;
+  if (c === 'LOC_OCCUPIED') return 'Lokace ' + a + ' je obsazená – přesah na ni nejde';
+  if (c === 'LOC_SYSTEM') return 'Na systémovou lokaci ' + a + ' přesah nejde';
+  if (c === 'LPN_NOT_FOUND') return 'Paleta ' + a + ' na skladě není';
+  if (c === 'FLOW_LOAD') return 'Tento klient má nakládku – odešli přes 🚚 Nakládka';
+  if (c === 'NOT_PACKED') return 'Výdej ještě není zabalený';
+  if (c === 'PKG_UNKNOWN') return 'Obal ' + a + ' neexistuje';
+  if (c === 'PKG_OTHER_DOC') return 'Obal ' + a + ' patří k jinému výdeji';
+  if (c === 'NOT_ALL_LOADED') return 'Nenaloženo ještě ' + a + ' obalů';
+  if (c === 'REPL_SOURCE') return 'Zdrojová paleta už na místě není';
+  if (c === 'EXPIRY_REQUIRED') return 'U SKU ' + a + ' je povinná expirace';
+  if (c === 'SERIALS_REQUIRED') return 'U SKU ' + a + ' je potřeba ' + b + ' sériových čísel';
+  if (c === 'SERIAL_EXISTS') return 'Sériové číslo ' + a + ' už na skladě je';
+  if (c === 'SERIAL_UNKNOWN') return 'Sériové číslo ' + a + ' na skladě není';
+  if (c === 'CC_STATE') return 'Inventura už byla odeslána';
   if (c === 'BELOW_RESERVED') return 'Část zásoby je rezervovaná';
   if (/function .* does not exist|schema cache/i.test(m)) return 'Na serveru chybí funkce – spusť SQL flow_setup-01.sql';
   return m;
@@ -1487,7 +1507,13 @@ function tkHint() {
   if (!task) return '';
   if (task.kind === 'list') return 'číslo dokladu';
   if (task.kind === 'receipt') return 'EAN / SKU';
-  if (task.kind === 'putaway') return task.step === 'loc' ? 'LOKACI' : 'LPN palety';
+  if (task.kind === 'putaway') return task.step === 'lpn' ? 'LPN palety' : (task.step === 'extra' ? 'SOUSEDNÍ lokaci' : 'LOKACI');
+  if (task.kind === 'info') return task.step === 'ovf' ? 'SOUSEDNÍ lokaci' : 'lokaci nebo LPN';
+  if (task.kind === 'pack') return 'EAN / SKU / LPN';
+  if (task.kind === 'load') return 'kód obalu / LPN';
+  if (task.kind === 'repl') return task.step === 'to' ? 'cílovou LOKACI' : 'LPN nebo zdrojovou lokaci';
+  if (task.kind === 'count') return task.step === 'loc' ? 'LOKACI' : 'LPN / EAN';
+  if (task.kind === 'cclist') return 'LOKACI';
   if (task.kind === 'pick') return task.step === 'loc' ? 'LOKACI' : 'LPN / EAN / SKU';
   return 'kód';
 }
@@ -1495,7 +1521,12 @@ function tkScanLabel() {
   if (!task) return null;
   if (task.kind === 'list') return '📄 SKENOVAT DOKLAD';
   if (task.kind === 'receipt') return '📥 SKENOVAT ZBOŽÍ';
-  if (task.kind === 'putaway') return task.step === 'loc' ? '📍 SKENOVAT LOKACI' : '🏷️ SKENOVAT LPN';
+  if (task.kind === 'putaway') return task.step === 'lpn' ? '🏷️ SKENOVAT LPN' : (task.step === 'extra' ? '↔ SKENOVAT PŘESAH' : (task.ovf ? '📍 SKENOVAT HLAVNÍ LOKACI' : '📍 SKENOVAT LOKACI'));
+  if (task.kind === 'info') return task.step === 'ovf' ? '↔ SKENOVAT PŘESAH' : '🔎 SKENOVAT LOKACI / LPN';
+  if (task.kind === 'pack') return '📦 SKENOVAT DO OBALU';
+  if (task.kind === 'load') return '🚚 SKENOVAT OBAL';
+  if (task.kind === 'repl') return task.step === 'to' ? '📍 SKENOVAT CÍL' : '🔁 SKENOVAT PALETU';
+  if (task.kind === 'count' || task.kind === 'cclist') return task.step === 'items' ? '📋 SKENOVAT PALETU / ZBOŽÍ' : '📍 SKENOVAT LOKACI';
   if (task.kind === 'pick') return task.step === 'loc' ? '📍 SKENOVAT LOKACI' : '📦 SKENOVAT ZBOŽÍ';
   return null;
 }
@@ -1510,46 +1541,65 @@ async function tkCounts() {
   if (!currentUserId) return;
   var set = function(id, n) { var e = document.getElementById(id); if (e) e.textContent = n ? '· ' + n : ''; };
   var rq = supa.from('receipts').select('id,status').in('status', ['new','arrived','receiving','received','putaway']);
-  var dq = supa.from('deliveries').select('id,status').in('status', ['released','picking','picked']);
+  var dq = supa.from('deliveries').select('id,status,clients(delivery_flow)').in('status', ['released','picking','picked','packed','loading']);
   if (currentDcId != null) { rq = rq.eq('warehouse_id', currentDcId); dq = dq.eq('warehouse_id', currentDcId); }
   var r = await tkFetch(rq), d = await tkFetch(dq);
   if (r.data) { set('wm-c-r', r.data.filter(function(x){ return /new|arrived|receiving/.test(x.status); }).length); set('wm-c-p', r.data.filter(function(x){ return /received|putaway/.test(x.status); }).length); }
-  if (d.data) set('wm-c-d', d.data.length);
+  if (d.data) {
+    var fl = function(x){ return (x.clients && x.clients.delivery_flow) || 'pick_ship'; };
+    set('wm-c-d', d.data.filter(TK_LIST.delivery.flt).filter(function(x){ return /released|picking|picked/.test(x.status); }).length);
+    set('wm-c-k', d.data.filter(TK_LIST.pack.flt).length); set('wm-c-l', d.data.filter(TK_LIST.load.flt).length);
+  }
 }
 
 // ── seznam dokladů ──
+var TK_NAMES = null;
+var TK_LIST = {
+  receipt: { title: '📥 Příjmy', table: 'receipts', st: ['new','arrived','receiving'], when: 'expected_at', empty: 'Žádné příjmy k vyřízení v tomto DC.' },
+  delivery: { title: '📤 Výdeje k vychystání', table: 'deliveries', st: ['released','picking','picked'], when: 'planned_at', empty: 'Žádné výdeje uvolněné do skladu v tomto DC.', flt: function(x){ return x.status !== 'picked' || ((x.clients && x.clients.delivery_flow) || 'pick_ship') === 'pick_ship'; } },
+  pack: { title: '📦 Balení', table: 'deliveries', st: ['picked','packed'], when: 'planned_at', empty: 'Nic nečeká na zabalení.', flt: function(x){ return (x.clients && x.clients.delivery_flow) === 'pick_pack_load_ship' && x.status === 'picked'; } },
+  load: { title: '🚚 Nakládka', table: 'deliveries', st: ['picked','packed','loading'], when: 'planned_at', empty: 'Nic nečeká na naložení.', flt: function(x){ var f = (x.clients && x.clients.delivery_flow) || 'pick_ship'; return x.status === 'loading' || (f === 'pick_load_ship' && x.status === 'picked') || (f === 'pick_pack_load_ship' && x.status === 'packed'); } }
+};
 async function tkOpenList(type) {
   tkStart();
+  var L = TK_LIST[type];
   task = { kind: 'list', type: type, docs: [] };
-  tkPanel('<div class="tk-head">' + (type === 'receipt' ? '📥 Příjmy' : '📤 Výdeje k vychystání') + '<button class="tk-x" onclick="tkClose()">✕</button></div><div class="tk-muted" style="padding:14px">Načítám…</div>');
-  var q = type === 'receipt'
-    ? supa.from('receipts').select('id,receipt_number,status,supplier,expected_at,priority,problem,client_id,warehouse_id,clients(name)').in('status', ['new','arrived','receiving']).order('expected_at', { ascending: true, nullsFirst: false }).limit(100)
-    : supa.from('deliveries').select('id,delivery_number,status,planned_at,priority,problem,client_id,warehouse_id,clients(name)').in('status', ['released','picking','picked']).order('planned_at', { ascending: true, nullsFirst: false }).limit(100);
+  tkPanel('<div class="tk-head">' + L.title + '<button class="tk-x" onclick="tkClose()">✕</button></div><div class="tk-muted" style="padding:14px">Načítám…</div>');
+  var q = supa.from(L.table).select('*,clients(name,delivery_flow)').in('status', L.st).order(L.when, { ascending: true, nullsFirst: false }).limit(150);
   if (currentDcId != null) q = q.eq('warehouse_id', currentDcId);
   var r = await tkFetch(q), off = false;
   if (r.data) { task.docs = r.data; tkCacheSet('list_' + type + '_' + currentDcId, r.data); }
   else { task.docs = tkCacheGet('list_' + type + '_' + currentDcId) || []; off = true; }
-  var pr = { high: 0, '': 1, normal: 1, low: 2 };
-  task.docs.sort(function(a, b){ return (pr[a.priority || ''] - pr[b.priority || '']) || String(a.expected_at || a.planned_at || '9').localeCompare(String(b.expected_at || b.planned_at || '9')); });
+  if (L.flt) task.docs = task.docs.filter(L.flt);
+  if (type === 'delivery') {
+    var wq = supa.from('waves').select('*').eq('status', 'released').order('created_at');
+    if (currentDcId != null) wq = wq.eq('dc_id', currentDcId);
+    var wr = await tkFetch(wq); task.waves = (wr.data || []).map(function(w){ w.n = task.docs.filter(function(x){ return x.wave_id === w.id && /released|picking/.test(x.status); }).length; return w; }).filter(function(w){ return w.n > 0; });
+    task.docs = task.docs.filter(function(x){ return !(x.wave_id && task.waves.some(function(w){ return w.id === x.wave_id; }) && /released|picking/.test(x.status)); });
+  }
+  if (!TK_NAMES) { var pn = await tkFetch(supa.from('profiles').select('id,name')); TK_NAMES = {}; (pn.data || []).forEach(function(x){ TK_NAMES[x.id] = x.name; }); }
+  var pr = { high: 0, '': 1, normal: 1, low: 2 }, mine = function(x){ return x.assigned_to === currentUserId ? 0 : (x.assigned_to ? 2 : 1); };
+  task.docs.sort(function(a, b){ return (mine(a) - mine(b)) || (pr[a.priority || ''] - pr[b.priority || '']) || String(a.expected_at || a.planned_at || '9').localeCompare(String(b.expected_at || b.planned_at || '9')); });
   tkRenderList(off);
-  setStatus((type === 'receipt' ? '📥 Vyber příjem' : '📤 Vyber výdej') + ' – klepni nebo naskenuj číslo dokladu');
+  setStatus(L.title + ' – klepni nebo naskenuj číslo dokladu');
   updateScanBtn();
 }
 function tkRenderList(off) {
   if (!task || task.kind !== 'list') return;
   var t = task.type, d = task.docs;
-  var h = '<div class="tk-head">' + (t === 'receipt' ? '📥 Příjmy' : '📤 Výdeje k vychystání') + '<button class="tk-x" onclick="tkClose()">✕</button></div>';
+  var h = '<div class="tk-head">' + TK_LIST[t].title + '<button class="tk-x" onclick="tkClose()">✕</button></div>';
   if (off) h += '<div class="tk-warn">📴 Bez signálu – seznam je z poslední synchronizace</div>';
-  if (!d.length) h += '<div class="tk-muted" style="padding:18px;text-align:center">' + (t === 'receipt' ? 'Žádné příjmy k vyřízení v tomto DC.' : 'Žádné výdeje uvolněné do skladu v tomto DC.') + '</div>';
+  (task.waves || []).forEach(function(w){ h += '<div class="tk-card" style="border-color:#2980b9" onclick="tkOpenWave(' + w.id + ')"><div style="display:flex;justify-content:space-between"><b>🌊 ' + tkEsc(w.name) + '</b><span class="tk-badge tk-b-released">Vlna</span></div><div class="tk-sub">' + w.n + ' výdejů – vychystáš je jednou trasou</div></div>'; });
+  if (!d.length && !(task.waves || []).length) h += '<div class="tk-muted" style="padding:18px;text-align:center">' + TK_LIST[t].empty + '</div>';
   h += d.map(function(x, i){
     var num = x.receipt_number || x.delivery_number, when = x.expected_at || x.planned_at;
-    return '<div class="tk-card" onclick="tkOpenDoc(' + i + ')"><div style="display:flex;justify-content:space-between;gap:8px"><b class="tk-mono">' + tkEsc(num) + '</b><span class="tk-badge tk-b-' + x.status + '">' + tkEsc(TK_ST[t][x.status] || x.status) + '</span></div>'
+    return '<div class="tk-card" onclick="tkOpenDoc(' + i + ')"><div style="display:flex;justify-content:space-between;gap:8px"><b class="tk-mono">' + tkEsc(num) + '</b><span class="tk-badge tk-b-' + x.status + '">' + tkEsc(TK_ST[t === 'receipt' ? 'receipt' : 'delivery'][x.status] || x.status) + '</span></div>'
       + '<div class="tk-sub">' + tkEsc((x.clients && x.clients.name) || '') + (x.supplier ? ' · ' + tkEsc(x.supplier) : '') + (when ? ' · ' + new Date(when).toLocaleString('cs-CZ', { day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit' }) : '')
-      + (x.priority === 'high' ? ' · <b style="color:#c0392b">VYSOKÁ PRIORITA</b>' : '') + (x.problem ? '<br><span style="color:#c0392b">⚠ ' + tkEsc(x.problem) + '</span>' : '') + '</div></div>';
+      + (x.priority === 'high' ? ' · <b style="color:#c0392b">VYSOKÁ PRIORITA</b>' : '') + (x.assigned_to ? '<br>👤 ' + (x.assigned_to === currentUserId ? '<b>moje</b>' : tkEsc((TK_NAMES && TK_NAMES[x.assigned_to]) || 'přiřazeno')) : '') + (x.problem ? '<br><span style="color:#c0392b">⚠ ' + tkEsc(x.problem) + '</span>' : '') + '</div></div>';
   }).join('');
   tkPanel(h);
 }
-function tkOpenDoc(i) { var x = task.docs[i]; if (!x) return; if (task.type === 'receipt') tkOpenReceipt(x.id); else tkOpenPick(x.id); }
+function tkOpenDoc(i) { var x = task.docs[i]; if (!x) return; var t = task.type; if (t === 'receipt') tkOpenReceipt(x.id); else if (t === 'pack') tkOpenPack(x.id); else if (t === 'load') tkOpenLoad(x.id); else tkOpenPick(x.id); }
 
 // ── PŘÍJEM ──
 async function tkOpenReceipt(id) {
@@ -1560,7 +1610,7 @@ async function tkOpenReceipt(id) {
     var d = r.data;
     var it = await tkFetch(supa.from('receipt_items').select('*').eq('receipt_id', id));
     var sc = await tkFetch(supa.from('receipt_scans').select('*').eq('receipt_id', id).order('id'));
-    var sk = await tkFetch(supa.from('stock_items').select('id,sku,ean,gtin_carton,gtin_pallet,units_per_carton,units_per_pallet,description,lot_exempt,primary_location,client_id').or(d.client_id != null ? 'client_id.eq.' + d.client_id + ',client_id.is.null' : 'client_id.is.null').limit(5000));
+    var sk = await tkFetch(supa.from('stock_items').select('*').or(d.client_id != null ? 'client_id.eq.' + d.client_id + ',client_id.is.null' : 'client_id.is.null').limit(5000));
     c = { doc: d, items: it.data || [], scans: (sc.data || []).map(function(s){ return { sku: s.sku, qty: Number(s.qty), lot: s.lot, lpn: s.lpn, loc: s.location_code, st: 'ok', id: s.id }; }), skus: sk.data || (c && c.skus) || [] };
     tkCacheSet('rc_' + id, c);
   } else if (!c) { tkPanel('<div class="tk-warn">Příjem nejde načíst (' + tkEsc(r.error ? tkErr(r.error.message) : 'bez signálu') + ').</div><button class="tk-btn sec" onclick="tkOpenList(\'receipt\')">↩ Zpět</button>'); return; }
@@ -1609,6 +1659,8 @@ function tkRenderReceipt() {
 function tkLineSheet(o) {   // formulář pro množství / LOT / LPN / lokaci; čtečka píše rovnou do zaměřeného pole
   var w = document.getElementById('tk-sheet');
   var f = o.fields.map(function(x){
+    if (x.area) return '<label class="tk-l">' + tkEsc(x.label) + (x.req ? ' *' : '') + '</label><textarea id="tkf-' + x.k + '" class="tk-in" rows="4" style="font-size:16px" placeholder="' + tkEsc(x.ph || '') + '">' + tkEsc(x.v == null ? '' : x.v) + '</textarea>';
+    if (x.opts) return '<label class="tk-l">' + tkEsc(x.label) + '</label><select id="tkf-' + x.k + '" class="tk-in">' + x.opts.map(function(op){ return '<option value="' + tkEsc(op[0]) + '"' + (String(op[0]) === String(x.v) ? ' selected' : '') + '>' + tkEsc(op[1]) + '</option>'; }).join('') + '</select>';
     return '<label class="tk-l">' + tkEsc(x.label) + (x.req ? ' *' : '') + '</label><input id="tkf-' + x.k + '" class="tk-in" ' + (x.num ? 'type="number" inputmode="decimal" min="0"' : 'type="text" autocapitalize="characters" autocomplete="off" spellcheck="false"') + ' value="' + tkEsc(x.v == null ? '' : x.v) + '" placeholder="' + tkEsc(x.ph || '') + '">';
   }).join('');
   w.innerHTML = '<div class="modal"><h2 style="font-size:22px">' + o.title + '</h2>' + (o.sub ? '<p>' + o.sub + '</p>' : '') + f + '<div id="tk-sheet-err" class="tk-err"></div>'
@@ -1617,7 +1669,7 @@ function tkLineSheet(o) {   // formulář pro množství / LOT / LPN / lokaci; �
     + '<button class="modal-btn secondary" id="tk-cancel">Zrušit</button></div>';
   w.style.display = 'flex';
   var ins = o.fields.map(function(x){ return document.getElementById('tkf-' + x.k); });
-  ins.forEach(function(inp, i){ inp.addEventListener('keydown', function(e){ if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); if (i < ins.length - 1) { ins[i + 1].focus(); ins[i + 1].select(); } else document.getElementById('tk-ok').click(); } }); });
+  ins.forEach(function(inp, i){ inp.addEventListener('keydown', function(e){ if (inp.tagName === 'TEXTAREA' && e.key === 'Enter') return; if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); if (i < ins.length - 1) { ins[i + 1].focus(); ins[i + 1].select(); } else document.getElementById('tk-ok').click(); } }); });
   var first = ins.find(function(inp, i){ return o.fields[i].focus; }) || ins[0];
   setTimeout(function(){ if (first) { first.focus(); first.select(); } }, 80);
   return new Promise(function(res){
@@ -1641,10 +1693,14 @@ async function tkReceiptCode(code) {
   var lotReq = cl.lot_required && !s.lot_exempt, one = cl.receipt_flow === 'one_step';
   var fields = [{ k: 'qty', label: 'Množství (ks)', num: true, v: def, req: true, focus: true }, { k: 'lot', label: 'LOT', req: lotReq, ph: lotReq ? 'povinný' : 'nepovinný' }, { k: 'lpn', label: 'LPN (štítek palety)', ph: 'prázdné = přidělí systém' }];
   if (one) fields.push({ k: 'loc', label: 'Lokace', req: true, ph: s.primary_location || 'naskenuj lokaci', v: '' });
+  if (s.expiry_tracked) fields.push({ k: 'exp', label: 'Expirace', req: true, ph: 'DD.MM.RRRR' });
+  if (s.serial_in) fields.push({ k: 'ser', label: 'Sériová čísla (každé na nový řádek / sken)', req: true, area: true });
   var v = await tkLineSheet({ title: '📥 ' + tkEsc(s.sku), sub: tkEsc(s.description || '') + (m.by !== 'sku' && m.by !== 'ean' ? ' · ' + (m.by === 'pallet' ? 'paleta' : 'karton') : ''), fields: fields,
-    validate: function(x){ if (!(Number(x.qty) > 0)) return 'Zadej množství'; if (lotReq && !x.lot) return 'LOT je povinný'; if (one && !x.loc) return 'Zadej lokaci'; return ''; } });
+    validate: function(x){ if (!(Number(x.qty) > 0)) return 'Zadej množství'; if (lotReq && !x.lot) return 'LOT je povinný'; if (one && !x.loc) return 'Zadej lokaci'; if (s.expiry_tracked && (!tkDate(x.exp) || tkDate(x.exp) === 'bad')) return 'Zadej expiraci (DD.MM.RRRR)'; if (s.serial_in && tkSerials(x.ser).length !== Number(x.qty)) return 'Počet sériových čísel (' + tkSerials(x.ser).length + ') musí být ' + x.qty; return ''; } });
   if (!v) { setStatus('✖ Zrušeno'); return; }
   var line = { sku: s.sku, qty: Number(v.qty), lot: v.lot || null, lpn: tkUp(v.lpn) || null, location: one ? tkUp(v.loc) : null };
+  if (s.expiry_tracked) line.expiry = tkDate(v.exp);
+  if (s.serial_in) line.serials = tkSerials(v.ser);
   var rec = { sku: s.sku, qty: line.qty, lot: line.lot, lpn: line.lpn, loc: line.location, st: 'q' };
   task.scans.push(rec); task.doc.status = 'receiving'; tkRenderReceipt(); tkRcSave();
   var r = await tkRpc('wms_receipt_scan', { p_id: task.id, p_line: line }, 'příjem – ' + s.sku + ' ' + line.qty + ' ks');
@@ -1693,7 +1749,7 @@ async function tkStartPutaway(receiptId) {
   if (r.data) { task.list = r.data; tkCacheSet(key, r.data); } else { task.list = tkCacheGet(key) || []; off = true; }
   var skus = task.list.map(function(x){ return x.sku; }).filter(function(v, i, a){ return a.indexOf(v) === i; });
   task.prim = {};
-  if (skus.length && !off) { var p = await tkFetch(supa.from('stock_items').select('sku,primary_location').in('sku', skus.slice(0, 300))); (p.data || []).forEach(function(s){ if (s.primary_location) task.prim[tkUp(s.sku)] = s.primary_location; }); }
+  if (skus.length && !off) { var p = await tkFetch(supa.from('stock_items').select('*').in('sku', skus.slice(0, 300))); (p.data || []).forEach(function(s){ if (s.primary_location) task.prim[tkUp(s.sku)] = s.primary_location; }); }
   task.off = off;
   tkRenderPutaway();
   setStatus('🏷️ Naskenuj LPN palety');
@@ -1704,9 +1760,21 @@ function tkRenderPutaway() {
   if (task.off) h += '<div class="tk-warn">📴 Bez signálu – seznam z poslední synchronizace</div>';
   if (task.cur) {
     var c = task.cur, sug = task.prim[tkUp(c.sku)];
-    h += '<div class="tk-big"><div class="tk-sub">PALETA</div><div class="tk-mono" style="font-size:22px;font-weight:700">' + tkEsc(c.lpn) + '</div><div>' + tkEsc(c.sku) + ' · ' + tkNf(c.qty) + ' ks' + (c.lot ? ' · LOT ' + tkEsc(c.lot) : '') + '</div>'
-      + (sug ? '<div style="margin-top:8px">Doporučená lokace: <b class="tk-mono">' + tkEsc(sug) + '</b></div>' : '') + '<div style="margin-top:10px;font-size:20px">📍 Naskenuj cílovou LOKACI</div></div>'
-      + '<button class="tk-btn sec" onclick="task.cur=null;task.step=\'lpn\';tkRenderPutaway();updateScanBtn()">✖ Jiná paleta</button>';
+    h += '<div class="tk-big' + (task.step === 'extra' ? ' on' : '') + '"><div class="tk-sub">PALETA</div><div class="tk-mono" style="font-size:22px;font-weight:700">' + tkEsc(c.lpn) + '</div><div>' + tkEsc(c.sku) + ' · ' + tkNf(c.qty) + ' ks' + (c.lot ? ' · LOT ' + tkEsc(c.lot) : '') + '</div>';
+    if (task.step === 'extra') {
+      h += '<div style="margin-top:8px">Hlavní lokace: <b class="tk-mono">' + tkEsc(task.mainLoc) + '</b></div>'
+        + '<div style="margin-top:6px">Přesah na: ' + (task.extra.length ? task.extra.map(function(x){ return '<b class="tk-mono">' + tkEsc(x) + '</b>'; }).join(', ') : '<span class="tk-sub">zatím nic</span>') + '</div>'
+        + '<div style="margin-top:10px;font-size:19px">📍 Naskenuj SOUSEDNÍ lokaci, kam paleta přesahuje</div></div>'
+        + '<button class="tk-btn" onclick="tkPutawaySend()">✅ Hotovo – zaskladnit' + (task.extra.length ? ' (+' + task.extra.length + ' přesah)' : '') + '</button>'
+        + '<button class="tk-btn sec" onclick="task.step=\'loc\';task.extra=[];task.mainLoc=null;tkRenderPutaway();updateScanBtn()">↩ Změnit hlavní lokaci</button>';
+    } else {
+      var sg = task.sug || [];
+      if (sg.length) h += '<div style="margin-top:8px;text-align:left"><div class="tk-sub">NÁVRH LOKACE</div>' + sg.map(function(x){ return '<div style="display:flex;justify-content:space-between;padding:3px 0"><b class="tk-mono">' + tkEsc(x.code) + '</b><span class="tk-sub">' + tkEsc(x.why === 'Primarni lokace SKU' ? 'primární lokace SKU' : x.why === 'Volna lokace' ? 'volná' : 'stejné SKU') + (x.state === 'occupied' ? ' · obsazená' : '') + '</span></div>'; }).join('') + '</div>';
+      else if (sug) h += '<div style="margin-top:8px">Doporučená lokace: <b class="tk-mono">' + tkEsc(sug) + '</b></div>';
+      h += '<label style="display:flex;gap:10px;align-items:center;justify-content:center;margin-top:12px;font-size:17px"><input type="checkbox" id="tk-ovf" ' + (task.ovf ? 'checked' : '') + ' onchange="task.ovf=this.checked;updateScanBtn()" style="width:22px;height:22px"> Paleta přesahuje na další pozici</label>'
+        + '<div style="margin-top:8px;font-size:20px">📍 Naskenuj ' + (task.ovf ? 'HLAVNÍ ' : 'cílovou ') + 'LOKACI</div></div>'
+        + '<button class="tk-btn sec" onclick="task.cur=null;task.step=\'lpn\';task.ovf=false;tkRenderPutaway();updateScanBtn()">✖ Jiná paleta</button>';
+    }
   }
   h += '<div class="tk-sec">Čeká na zaskladnění: ' + task.list.length + '</div>' + task.list.slice(0, 60).map(function(x){
     return '<div class="tk-row"><span><b class="tk-mono">' + tkEsc(x.lpn) + '</b><br><span class="tk-sub">' + tkEsc(x.sku) + ' · ' + tkNf(x.qty) + ' ks · ' + tkEsc(x.receipts ? x.receipts.receipt_number : '') + '</span></span><span class="tk-sub">' + tkEsc(task.prim[tkUp(x.sku)] || 'UNASSIGNED') + '</span></div>';
@@ -1714,34 +1782,132 @@ function tkRenderPutaway() {
   if (!task.list.length && !task.cur) h += '<div class="tk-muted" style="padding:16px;text-align:center">✅ Nic nečeká na zaskladnění.</div>';
   tkPanel(h);
 }
+async function tkLoadSuggest(lpn) {
+  task.sug = [];
+  try { var r = await supa.rpc('wms_suggest_location', { p_lpn: lpn, p_limit: 4 }); if (!r.error && Array.isArray(r.data) && task && task.cur && tkUp(task.cur.lpn) === tkUp(lpn)) { task.sug = r.data; tkRenderPutaway(); } } catch(e) {}
+}
 async function tkPutawayCode(code) {
   var k = tkUp(code);
   if (task.step === 'lpn') {
     var x = task.list.find(function(y){ return tkUp(y.lpn) === k; });
     if (!x && !task.off) { beepError(); setStatus('❌ LPN ' + code + ' nečeká na zaskladnění'); return; }
-    task.cur = x || { lpn: k, sku: '?', qty: 0 }; task.step = 'loc';
-    beepOk(); tkRenderPutaway(); updateScanBtn(); setStatus('📍 ' + task.cur.lpn + ' → naskenuj lokaci'); return;
+    task.cur = x || { lpn: k, sku: '?', qty: 0 }; task.step = 'loc'; task.ovf = false; task.extra = []; task.mainLoc = null; task.sug = [];
+    beepOk(); tkRenderPutaway(); updateScanBtn(); setStatus('📍 ' + task.cur.lpn + ' → naskenuj lokaci');
+    if (!task.off) tkLoadSuggest(task.cur.lpn);
+    return;
   }
   if (tkUp(task.cur.lpn) === k) { beepWarn(); setStatus('⚠️ To je LPN – naskenuj LOKACI'); return; }
-  var c = task.cur;
-  var r = await tkRpc('wms_putaway', { p_lpn: c.lpn, p_location: k }, 'zaskladnění ' + c.lpn + ' → ' + k);
-  if (r.s === 'fail') { beepError(); setStatus('❌ ' + tkErr(r.msg)); return; }
+  if (task.step === 'loc') {
+    if (task.ovf) { task.mainLoc = k; task.extra = []; task.step = 'extra'; beepOk(); tkRenderPutaway(); updateScanBtn(); setStatus('📍 Hlavní ' + k + ' · naskenuj sousední lokaci (přesah), pak Hotovo'); return; }
+    task.mainLoc = k; task.extra = [];
+    return tkPutawaySend();
+  }
+  if (task.step === 'extra') {
+    if (k === task.mainLoc || task.extra.indexOf(k) >= 0) { beepWarn(); setStatus('⚠️ Lokace ' + k + ' už je zadaná'); return; }
+    task.extra.push(k); beepOk(); tkRenderPutaway(); setStatus('➕ Přesah ' + k + ' · další sousední lokace, nebo Hotovo'); return;
+  }
+}
+async function tkPutawaySend() {
+  var c = task.cur, k = task.mainLoc, ex = task.extra.slice();
+  if (!c || !k) return;
+  var args = { p_lpn: c.lpn, p_location: k }; if (ex.length) args.p_extra = ex;
+  var r = await tkRpc('wms_putaway', args, 'zaskladnění ' + c.lpn + ' → ' + k + (ex.length ? ' (+' + ex.join(',') + ')' : ''));
+  if (r.s === 'fail') { beepError(); setStatus('❌ ' + tkErr(r.msg)); if (task.step === 'extra') { task.step = 'loc'; task.extra = []; tkRenderPutaway(); updateScanBtn(); } return; }
   beepOk();
   task.list = task.list.filter(function(y){ return y !== c && tkUp(y.lpn) !== tkUp(c.lpn); });
   tkCacheSet('pa_' + currentDcId + '_' + (task.receiptId || ''), task.list);
-  task.cur = null; task.step = 'lpn';
-  setStatus((r.s === 'done' ? '✅ ' : '⏳ ') + c.lpn + ' → ' + k + (r.s === 'done' ? '' : ' (odešle se později)') + ' · další LPN');
+  task.cur = null; task.step = 'lpn'; task.ovf = false; task.extra = []; task.mainLoc = null;
+  setStatus((r.s === 'done' ? '✅ ' : '⏳ ') + c.lpn + ' → ' + k + (ex.length ? ' + přesah ' + ex.join(', ') : '') + (r.s === 'done' ? '' : ' (odešle se později)') + ' · další LPN');
   tkRenderPutaway(); updateScanBtn();
+}
+
+// ── INFO: co je na lokaci / kde je LPN, nastavení přesahu ──
+function tkStartInfo() {
+  tkStart();
+  task = { kind: 'info', step: 'code', res: null };
+  tkRenderInfo();
+  setStatus('🔎 Naskenuj lokaci nebo LPN');
+  updateScanBtn();
+}
+function tkRenderInfo() {
+  var h = '<div class="tk-head">🔎 Info lokace / LPN<button class="tk-x" onclick="tkClose()">✕</button></div>', r = task.res;
+  if (task.step === 'ovf') {
+    h += '<div class="tk-big on"><div class="tk-sub">PŘESAH PALETY</div><div class="tk-mono" style="font-size:22px;font-weight:700">' + tkEsc(task.lpn) + '</div><div>na ' + tkEsc(task.loc || '?') + '</div>'
+      + '<div style="margin-top:6px">Přesah na: ' + (task.extra.length ? task.extra.map(function(x){ return '<b class="tk-mono">' + tkEsc(x) + '</b>'; }).join(', ') : '<span class="tk-sub">nic (= zrušit přesah)</span>') + '</div>'
+      + '<div style="margin-top:10px;font-size:19px">📍 Naskenuj sousední lokace</div></div>'
+      + '<button class="tk-btn" onclick="tkInfoOvfSave()">✅ Uložit přesah</button><button class="tk-btn sec" onclick="task.step=\'code\';tkRenderInfo();updateScanBtn()">Zrušit</button>';
+    tkPanel(h); return;
+  }
+  if (!r) h += '<div class="tk-muted" style="padding:18px;text-align:center">Naskenuj kód lokace nebo LPN palety.</div>';
+  else if (r.err) h += '<div class="tk-warn">' + tkEsc(r.err) + '</div>';
+  else if (r.type === 'loc') {
+    var o = r.occ || {}, stTxt = { free: '🟢 Volná', occupied: '🔵 Obsazená', blocked: '🟠 Blokovaná přesahem' }[o.state] || '';
+    h += '<div class="tk-big"><div class="tk-sub">LOKACE</div><div class="tk-mono" style="font-size:28px;font-weight:700">' + tkEsc(r.code) + '</div><div style="margin-top:4px;font-size:18px">' + stTxt + '</div>'
+      + (o.state === 'blocked' ? '<div style="margin-top:4px">Přesahuje sem paleta <b class="tk-mono">' + tkEsc(o.blocked_by_lpn) + '</b> z ' + tkEsc(o.blocked_from || '') + '</div>' : '') + '</div>';
+    h += r.rows.length ? '<div class="tk-sec">Na lokaci</div>' + r.rows.map(function(b){ return '<div class="tk-row" onclick="tkInfoCode(\'' + tkEsc(b.lpn || '') + '\')"><span><b>' + tkEsc(b.sku) + '</b> · ' + tkNf(b.units_total) + ' ks' + (b.lot ? ' · LOT ' + tkEsc(b.lot) : '') + '<br><span class="tk-sub tk-mono">' + tkEsc(b.lpn || 'bez LPN') + (b.condition_code ? ' · ' + tkEsc(b.condition_code) : '') + '</span></span><span class="tk-sub">' + tkEsc(b.customer || '') + '</span></div>'; }).join('') : '';
+    if (o.state === 'blocked') h += '<button class="tk-btn sec" onclick="tkInfoUnblock(\'' + tkEsc(r.code) + '\')">🔓 Uvolnit blokaci</button>';
+  } else if (r.type === 'lpn') {
+    var b = r.bal;
+    h += '<div class="tk-big"><div class="tk-sub">PALETA</div><div class="tk-mono" style="font-size:22px;font-weight:700">' + tkEsc(b.lpn) + '</div><div style="font-size:18px;margin-top:4px">📍 <b class="tk-mono">' + tkEsc(b.location_code || '?') + '</b></div>'
+      + '<div>' + tkEsc(b.sku) + ' · ' + tkNf(b.units_total) + ' ks' + (b.lot ? ' · LOT ' + tkEsc(b.lot) : '') + '</div><div class="tk-sub">' + tkEsc(b.customer || '') + (b.units_committed > 0 ? ' · rezervováno ' + tkNf(b.units_committed) : '') + '</div>'
+      + '<div style="margin-top:6px">Přesah: ' + (r.blocks.length ? r.blocks.map(function(x){ return '<b class="tk-mono">' + tkEsc(x.location_code) + '</b>'; }).join(', ') : '<span class="tk-sub">žádný</span>') + '</div></div>'
+      + '<button class="tk-btn sec" onclick="tkInfoOvfStart()">↔ Nastavit přesah na další pozice</button>';
+  }
+  tkPanel(h);
+}
+async function tkInfoCode(code) {
+  var k = tkUp(code); if (!k) return;
+  task.step = 'code';
+  var lq = supa.from('v_location_occupancy').select('*').ilike('code', k).limit(5);
+  if (currentDcId != null) lq = lq.eq('dc_id', currentDcId);
+  var l = await tkFetch(lq);
+  if (l.net) { task.res = { err: '📴 Bez signálu – info potřebuje připojení' }; tkRenderInfo(); return; }
+  var occ = (l.data || []).find(function(x){ return tkUp(x.code) === k; });
+  if (occ) {
+    var bq = supa.from('stock_balances').select('*').eq('dc_id', occ.dc_id).ilike('location_code', k).gt('units_total', 0).limit(50);
+    var b = await tkFetch(bq);
+    task.res = { type: 'loc', code: occ.code, occ: occ, rows: b.data || [] }; beepOk(); tkRenderInfo(); return;
+  }
+  var pq = supa.from('stock_balances').select('*').ilike('lpn', k).gt('units_total', 0).order('id', { ascending: false }).limit(1);
+  if (currentDcId != null) pq = pq.eq('dc_id', currentDcId);
+  var p = await tkFetch(pq);
+  if (p.data && p.data.length) {
+    var bl = await tkFetch(supa.from('location_blocks').select('location_code').eq('balance_id', p.data[0].id));
+    task.res = { type: 'lpn', bal: p.data[0], blocks: bl.data || [] }; beepOk(); tkRenderInfo(); return;
+  }
+  beepError(); task.res = { err: '❌ ' + code + ' – taková lokace ani paleta (LPN) na skladě není' }; tkRenderInfo();
+}
+function tkInfoOvfStart() { var b = task.res.bal; task.step = 'ovf'; task.lpn = b.lpn; task.loc = b.location_code; task.extra = (task.res.blocks || []).map(function(x){ return tkUp(x.location_code); }); tkRenderInfo(); updateScanBtn(); setStatus('📍 Naskenuj sousední lokace, kam paleta přesahuje'); }
+async function tkInfoOvfSave() {
+  var r = await tkRpc('wms_overflow_set', { p_lpn: task.lpn, p_locations: task.extra }, 'přesah ' + task.lpn);
+  if (r.s === 'fail') { beepError(); setStatus('❌ ' + tkErr(r.msg)); return; }
+  beepOk(); setStatus((r.s === 'done' ? '✅ Přesah uložen' : '⏳ Přesah se uloží, až bude signál'));
+  var l = task.lpn; task.step = 'code'; await tkInfoCode(l); updateScanBtn();
+}
+async function tkInfoUnblock(code) {
+  if (!confirm('Uvolnit blokaci lokace ' + code + '? (Paleta už sem nepřesahuje.)')) return;
+  var r = await tkRpc('wms_unblock_location', { p_dc: currentDcId, p_code: code }, 'uvolnění ' + code);
+  if (r.s === 'fail') { beepError(); setStatus('❌ ' + tkErr(r.msg)); return; }
+  beepOk(); await tkInfoCode(code);
+}
+async function tkInfoScan(code) {
+  if (task.step === 'ovf') {
+    var k = tkUp(code);
+    if (k === tkUp(task.loc) || k === tkUp(task.lpn)) { beepWarn(); setStatus('⚠️ To je hlavní lokace / LPN'); return; }
+    if (task.extra.indexOf(k) < 0) task.extra.push(k);
+    beepOk(); tkRenderInfo(); return;
+  }
+  return tkInfoCode(code);
 }
 
 // ── VYCHYSTÁNÍ ──
 async function tkOpenPick(id) {
   tkPanel('<div class="tk-muted" style="padding:18px">Načítám výdej…</div>');
-  var r = await tkFetch(supa.from('deliveries').select('*,clients(name)').eq('id', id).single());
+  var r = await tkFetch(supa.from('deliveries').select('*,clients(name,delivery_flow)').eq('id', id).single());
   var c = tkCacheGet('pk_' + id), off = false;
   if (r.data) {
     var al = await tkFetch(supa.from('delivery_allocations').select('*').eq('delivery_id', id).order('location_code'));
-    var sk = await tkFetch(supa.from('stock_items').select('sku,ean,gtin_carton,gtin_pallet,description,client_id').or(r.data.client_id != null ? 'client_id.eq.' + r.data.client_id + ',client_id.is.null' : 'client_id.is.null').limit(5000));
+    var sk = await tkFetch(supa.from('stock_items').select('*').or(r.data.client_id != null ? 'client_id.eq.' + r.data.client_id + ',client_id.is.null' : 'client_id.is.null').limit(5000));
     c = { doc: r.data, allocs: (al.data || []).map(function(a){ a.loc_done = 0; a.local = 0; return a; }), skus: sk.data || (c && c.skus) || [] };
     tkCacheSet('pk_' + id, c);
   } else if (!c) { tkPanel('<div class="tk-warn">Výdej nejde načíst (' + tkEsc(r.error ? tkErr(r.error.message) : 'bez signálu') + ').</div><button class="tk-btn sec" onclick="tkOpenList(\'delivery\')">↩ Zpět</button>'); return; }
@@ -1749,7 +1915,19 @@ async function tkOpenPick(id) {
   task = { kind: 'pick', id: id, doc: c.doc, allocs: c.allocs, skus: c.skus, off: off, step: 'loc', cur: null, skip: [] };
   tkNextPick();
 }
-function tkPkSave() { if (task && task.kind === 'pick') tkCacheSet('pk_' + task.id, { doc: task.doc, allocs: task.allocs, skus: task.skus }); }
+async function tkOpenWave(wid) {
+  tkPanel('<div class="tk-muted" style="padding:18px">Načítám vlnu…</div>');
+  var w = await tkFetch(supa.from('waves').select('*').eq('id', wid).single());
+  var ds = await tkFetch(supa.from('deliveries').select('*,clients(name,delivery_flow)').eq('wave_id', wid).in('status', ['released', 'picking']));
+  if (!w.data || !ds.data) { tkPanel('<div class="tk-warn">Vlnu nejde načíst (vlny potřebují připojení).</div><button class="tk-btn sec" onclick="tkOpenList(\'delivery\')">↩ Zpět</button>'); return; }
+  var ids = ds.data.map(function(x){ return x.id; }), num = {}; ds.data.forEach(function(x){ num[x.id] = x.delivery_number; });
+  var al = await tkFetch(supa.from('delivery_allocations').select('*').in('delivery_id', ids.length ? ids : [0]).order('location_code'));
+  var sk = await tkFetch(supa.from('stock_items').select('*').limit(10000));
+  task = { kind: 'pick', id: 'w' + wid, wave: wid, doc: { delivery_number: '🌊 ' + w.data.name, status: 'picking', clients: { name: ds.data.length + ' výdejů', delivery_flow: 'wave' } },
+    allocs: (al.data || []).map(function(a){ a.local = 0; a.dnum = num[a.delivery_id]; return a; }), skus: sk.data || [], off: false, step: 'loc', cur: null, skip: [] };
+  tkNextPick();
+}
+function tkPkSave() { if (task && task.kind === 'pick' && !task.wave) tkCacheSet('pk_' + task.id, { doc: task.doc, allocs: task.allocs, skus: task.skus }); }
 function tkRest(a) { return Number(a.qty) - Number(a.picked_qty) - Number(a.short_qty) - (a.local || 0); }
 function tkNextPick() {
   var open = task.allocs.filter(function(a){ return a.status === 'open' && tkRest(a) > 0; });
@@ -1772,15 +1950,18 @@ function tkRenderPick() {
     var f = task.skus.find(function(s){ return tkUp(s.sku) === tkUp(c.sku); });
     h += '<div class="tk-big' + (task.step === 'item' ? ' on' : '') + '"><div class="tk-sub">' + (task.step === 'loc' ? 'JDI NA LOKACI' : 'NA LOKACI') + '</div><div class="tk-mono" style="font-size:30px;font-weight:700">' + tkEsc(c.location_code || '?') + '</div>'
       + '<div style="font-size:19px;margin-top:4px"><b>' + tkEsc(c.sku) + '</b> · <b>' + tkNf(tkRest(c)) + ' ks</b></div>' + (f && f.description ? '<div class="tk-sub">' + tkEsc(f.description) + '</div>' : '')
-      + (c.lpn ? '<div class="tk-mono" style="margin-top:4px">LPN ' + tkEsc(c.lpn) + '</div>' : '') + (c.lot ? '<div>LOT ' + tkEsc(c.lot) + '</div>' : '')
+      + (c.lpn ? '<div class="tk-mono" style="margin-top:4px">LPN ' + tkEsc(c.lpn) + '</div>' : '') + (c.dnum ? '<div style="margin-top:4px;font-size:17px">➡ do výdeje <b class="tk-mono">' + tkEsc(c.dnum) + '</b></div>' : '') + (c.lot ? '<div>LOT ' + tkEsc(c.lot) + '</div>' : '')
       + '<div style="margin-top:10px;font-size:18px">' + (task.step === 'loc' ? '📍 Naskenuj LOKACI' : '📦 Naskenuj ' + (c.lpn ? 'LPN' : 'EAN / SKU')) + '</div></div>'
       + '<div style="display:flex;gap:8px;padding:0 14px"><button class="tk-btn sec" style="flex:1;margin:8px 0" onclick="tkPickSkip()">⏭ Přeskočit</button><button class="tk-btn sec" style="flex:1;margin:8px 0;color:#c0392b" onclick="tkPickShort()">⚠ Chybí</button></div>';
   } else if (d.status !== 'shipped') {
-    h += '<div class="tk-big on"><div style="font-size:22px">✅ Vše vychystáno</div><div class="tk-sub">Až bude zboží naložené, potvrď odeslání.</div></div><button class="tk-btn" onclick="tkShip()">🚚 Odeslat (odjezd)</button>';
+    var fl = (d.clients && d.clients.delivery_flow) || 'pick_ship';
+    if (fl === 'wave') { h += '<div class="tk-big on"><div style="font-size:22px">✅ Vlna vychystána</div><div class="tk-sub">Výdeje pokračují podle klienta – odeslání, balení nebo nakládka.</div></div><button class="tk-btn" onclick="tkOpenList(\'delivery\')">↩ Seznam výdejů</button>'; try { supa.rpc('wms_wave_refresh', { p_wave: task.wave }); } catch(e) {} }
+    else if (fl === 'pick_ship') h += '<div class="tk-big on"><div style="font-size:22px">✅ Vše vychystáno</div><div class="tk-sub">Až bude zboží naložené, potvrď odeslání.</div></div><button class="tk-btn" onclick="tkShip()">🚚 Odeslat (odjezd)</button>';
+    else h += '<div class="tk-big on"><div style="font-size:22px">✅ Vše vychystáno</div><div class="tk-sub">Pokračuj ' + (fl === 'pick_pack_load_ship' ? 'balením' : 'nakládkou') + '.</div></div><button class="tk-btn" onclick="' + (fl === 'pick_pack_load_ship' ? 'tkOpenPack(' : 'tkOpenLoad(') + task.id + ')">' + (fl === 'pick_pack_load_ship' ? '📦 Balit' : '🚚 Nakládat') + '</button>';
   }
   h += '<div class="tk-sec">Řádky</div>' + task.allocs.map(function(a){
     var rest = tkRest(a), st = a.status === 'short' || (Number(a.short_qty) && rest <= 0) ? '⚠' : (rest <= 0 ? '✅' : (a.local ? '⏳' : ''));
-    return '<div class="tk-row' + (c && a.id === c.id ? ' cur' : '') + '"><span><b class="tk-mono">' + tkEsc(a.location_code || '?') + '</b> · ' + tkEsc(a.sku) + '<br><span class="tk-sub">' + tkNf(Number(a.picked_qty) + (a.local || 0)) + ' / ' + tkNf(a.qty) + ' ks' + (a.lpn ? ' · ' + tkEsc(a.lpn) : '') + '</span></span><span>' + st + '</span></div>';
+    return '<div class="tk-row' + (c && a.id === c.id ? ' cur' : '') + '"><span><b class="tk-mono">' + tkEsc(a.location_code || '?') + '</b> · ' + tkEsc(a.sku) + (a.dnum ? ' → ' + tkEsc(a.dnum) : '') + '<br><span class="tk-sub">' + tkNf(Number(a.picked_qty) + (a.local || 0)) + ' / ' + tkNf(a.qty) + ' ks' + (a.lpn ? ' · ' + tkEsc(a.lpn) : '') + '</span></span><span>' + st + '</span></div>';
   }).join('');
   h += '<button class="tk-btn sec" onclick="tkOpenList(\'delivery\')">↩ Seznam výdejů</button>';
   tkPanel(h);
@@ -1798,19 +1979,23 @@ async function tkPickCode(code) {
   }
   var byLpn = !!(c.lpn && k === tkUp(c.lpn)), m0 = byLpn ? null : tkFindSku(code, task.skus);
   if (!byLpn && !(m0 && tkUp(m0.s.sku) === tkUp(c.sku))) { beepError(); setStatus('❌ ' + code + ' není ' + (c.lpn ? 'LPN ' + c.lpn + ' ani ' : '') + 'SKU ' + c.sku); return; }
-  var rest = tkRest(c), qty = rest;
+  var rest = tkRest(c), qty = rest, serials = null;
+  var skuRec = task.skus.find(function(x){ return tkUp(x.sku) === tkUp(c.sku); }) || {};
+  if (byLpn && skuRec.serial_out) byLpn = false;
   if (!byLpn) {   // sken LPN = celá rezervovaná část palety; sken EAN/SKU = zadat kusy
     var v = await tkLineSheet({ title: '📦 ' + tkEsc(c.sku) + ' z ' + tkEsc(c.location_code || ''), sub: 'Zbývá vychystat ' + tkNf(rest) + ' ks', okText: '✅ Vychystáno', extra: '⚠ Chybí (short)',
-      fields: [{ k: 'qty', label: 'Vychystané množství', num: true, v: rest, req: true, focus: true }],
-      validate: function(x){ var n = Number(x.qty); if (!(n > 0) || n > rest) return 'Množství 1 až ' + rest; return ''; } });
+      fields: [{ k: 'qty', label: 'Vychystané množství', num: true, v: rest, req: true, focus: true }].concat(skuRec.serial_out ? [{ k: 'ser', label: 'Sériová čísla (každé na nový řádek / sken)', req: true, area: true }] : []),
+      validate: function(x){ var n = Number(x.qty); if (!(n > 0) || n > rest) return 'Množství 1 až ' + rest; if (skuRec.serial_out && tkSerials(x.ser).length !== n) return 'Počet sériových čísel (' + tkSerials(x.ser).length + ') musí být ' + n; return ''; } });
     if (!v) { setStatus('✖ Zrušeno'); return; }
     if (v._extra) { tkPickShort(); return; }
     qty = Number(v.qty);
+    if (skuRec.serial_out) serials = tkSerials(v.ser);
   }
   c.local = (c.local || 0) + qty; tkPkSave();
-  var r = await tkRpc('wms_pick', { p_alloc_id: c.id, p_qty: qty }, 'vychystání ' + c.sku + ' ' + qty + ' ks');
+  var pa = { p_alloc_id: c.id, p_qty: qty }; if (serials) pa.p_serials = serials;
+  var r = await tkRpc('wms_pick', pa, 'vychystání ' + c.sku + ' ' + qty + ' ks');
   if (r.s === 'fail') { c.local -= qty; beepError(); setStatus('❌ ' + tkErr(r.msg)); tkRenderPick(); return; }
-  if (r.s === 'done') { c.picked_qty = Number(c.picked_qty) + qty; c.local -= qty; if (r.data && r.data.delivery_status) task.doc.status = r.data.delivery_status; }
+  if (r.s === 'done') { c.picked_qty = Number(c.picked_qty) + qty; c.local -= qty; if (r.data && r.data.delivery_status && !task.wave) task.doc.status = r.data.delivery_status; }
   if (tkRest(c) <= 0) c.status = 'picked';
   if (task.doc.status === 'released') task.doc.status = 'picking';
   beepOk(); tkPkSave();
@@ -1826,7 +2011,7 @@ async function tkPickShort() {
   c.local = (c.local || 0) + rest; tkPkSave();
   var r = await tkRpc('wms_pick_short', { p_alloc_id: c.id, p_note: note || null }, 'short ' + c.sku);
   if (r.s === 'fail') { c.local -= rest; beepError(); setStatus('❌ ' + tkErr(r.msg)); tkRenderPick(); return; }
-  if (r.s === 'done') { c.short_qty = Number(c.short_qty) + rest; c.local -= rest; if (r.data && r.data.delivery_status) task.doc.status = r.data.delivery_status; }
+  if (r.s === 'done') { c.short_qty = Number(c.short_qty) + rest; c.local -= rest; if (r.data && r.data.delivery_status && !task.wave) task.doc.status = r.data.delivery_status; }
   c.status = Number(c.picked_qty) > 0 ? 'picked' : 'short';
   beepWarn(); tkPkSave();
   setStatus('⚠ Short nahlášen – lokace ' + c.location_code + ' jde do PIR');
@@ -1841,6 +2026,214 @@ async function tkShip() {
   tkOpenList('delivery');
 }
 
+
+// ── BALENÍ ──
+async function tkOpenPack(id) {
+  tkPanel('<div class="tk-muted" style="padding:18px">Načítám výdej…</div>');
+  var r = await tkFetch(supa.from('deliveries').select('*,clients(name,delivery_flow)').eq('id', id).single());
+  if (!r.data) { tkPanel('<div class="tk-warn">Výdej nejde načíst' + (r.net ? ' – bez signálu (balení potřebuje připojení)' : '') + '.</div><button class="tk-btn sec" onclick="tkOpenList(\'pack\')">↩ Zpět</button>'); return; }
+  var al = await tkFetch(supa.from('delivery_allocations').select('*').eq('delivery_id', id).order('id'));
+  var pk = await tkFetch(supa.from('packages').select('*,package_lines(*)').eq('delivery_id', id).order('id'));
+  var sk = await tkFetch(supa.from('stock_items').select('*').or(r.data.client_id != null ? 'client_id.eq.' + r.data.client_id + ',client_id.is.null' : 'client_id.is.null').limit(5000));
+  task = { kind: 'pack', id: id, doc: r.data, allocs: (al.data || []).filter(function(a){ return Number(a.picked_qty) > 0; }), pkgs: pk.data || [], skus: sk.data || [], box: {} };
+  tkRenderPack(); setStatus('📦 Naskenuj zboží do obalu, nebo zabal vše najednou'); updateScanBtn();
+}
+function tkPacked(a) { var n = 0; task.pkgs.forEach(function(p){ (p.package_lines || []).forEach(function(l){ if (l.alloc_id === a.id) n += Number(l.qty); }); }); return n; }
+function tkUnpacked(a) { return Number(a.picked_qty) - tkPacked(a) - (task.box[a.id] || 0); }
+function tkRenderPack() {
+  var d = task.doc, boxN = Object.keys(task.box).reduce(function(s, k){ return s + task.box[k]; }, 0), left = task.allocs.reduce(function(s, a){ return s + tkUnpacked(a); }, 0);
+  var h = '<div class="tk-head">📦 ' + tkEsc(d.delivery_number) + ' <span class="tk-badge tk-b-' + d.status + '">' + tkEsc(TK_ST.delivery[d.status] || d.status) + '</span><button class="tk-x" onclick="tkOpenList(\'pack\')">↩</button></div>'
+    + '<div class="tk-sub" style="padding:0 14px 8px">' + tkEsc((d.clients && d.clients.name) || '') + ' · zbývá zabalit ' + tkNf(left) + ' ks</div>';
+  h += '<div class="tk-big' + (boxN ? ' on' : '') + '"><div class="tk-sub">ROZBALENÝ OBAL</div><div style="font-size:24px;font-weight:700">' + tkNf(boxN) + ' ks</div>'
+    + (boxN ? Object.keys(task.box).map(function(k){ var a = task.allocs.find(function(x){ return String(x.id) === k; }); return '<div>' + tkEsc(a ? a.sku : k) + ' · ' + tkNf(task.box[k]) + ' ks</div>'; }).join('') : '<div class="tk-sub">naskenuj EAN / SKU / LPN</div>') + '</div>';
+  if (boxN) h += '<button class="tk-btn" onclick="tkPackClose(false)">✅ Uzavřít obal</button><button class="tk-btn sec" onclick="task.box={};tkRenderPack()">✖ Vyprázdnit obal</button>';
+  else if (left > 0) h += '<button class="tk-btn" onclick="tkPackClose(true)">📦 Zabalit vše zbývající do jednoho obalu</button>';
+  else h += '<div class="tk-big on"><div style="font-size:20px">✅ Vše zabaleno</div></div><button class="tk-btn" onclick="tkOpenLoad(' + task.id + ')">🚚 Pokračovat nakládkou</button>';
+  h += '<div class="tk-sec">Řádky</div>' + task.allocs.map(function(a){ var u = tkUnpacked(a); return '<div class="tk-row"><span><b>' + tkEsc(a.sku) + '</b>' + (a.lot ? ' · LOT ' + tkEsc(a.lot) : '') + '<br><span class="tk-sub">zabaleno ' + tkNf(tkPacked(a)) + ' / ' + tkNf(a.picked_qty) + ' ks</span></span><span>' + (u <= 0 ? '✅' : tkNf(u)) + '</span></div>'; }).join('');
+  if (task.pkgs.length) h += '<div class="tk-sec">Obaly (' + task.pkgs.length + ')</div>' + task.pkgs.map(function(p){ return '<div class="tk-row"><span><b class="tk-mono">' + tkEsc(p.code) + '</b><br><span class="tk-sub">' + tkEsc(p.kind === 'carton' ? 'karton' : p.kind === 'pallet' ? 'paleta' : p.kind) + (p.weight_kg ? ' · ' + tkNf(p.weight_kg) + ' kg' : '') + (p.length_cm ? ' · ' + tkNf(p.length_cm) + '×' + tkNf(p.width_cm) + '×' + tkNf(p.height_cm) + ' cm' : '') + '</span></span><span class="tk-sub">' + (p.package_lines || []).reduce(function(s, l){ return s + Number(l.qty); }, 0) + ' ks</span></div>'; }).join('');
+  tkPanel(h);
+}
+async function tkPackCode(code) {
+  var k = tkUp(code), a = task.allocs.find(function(x){ return x.lpn && tkUp(x.lpn) === k && tkUnpacked(x) > 0; });
+  if (!a) { var m = tkFindSku(code, task.skus); if (m) a = task.allocs.find(function(x){ return tkUp(x.sku) === tkUp(m.s.sku) && tkUnpacked(x) > 0; }); }
+  if (!a) { beepError(); setStatus('❌ ' + code + ' – nic takového k zabalení není'); return; }
+  var u = tkUnpacked(a);
+  var v = await tkLineSheet({ title: '📦 ' + tkEsc(a.sku), sub: 'K zabalení zbývá ' + tkNf(u) + ' ks', fields: [{ k: 'qty', label: 'Kusů do obalu', num: true, v: u, req: true, focus: true }],
+    validate: function(x){ var n = Number(x.qty); return n > 0 && n <= u ? '' : 'Množství 1 až ' + u; } });
+  if (!v) return;
+  task.box[a.id] = (task.box[a.id] || 0) + Number(v.qty); beepOk(); tkRenderPack();
+}
+async function tkPackClose(all) {
+  var v = await tkLineSheet({ title: '📦 Uzavřít obal', fields: [
+    { k: 'kind', label: 'Typ', opts: [['pallet', 'Paleta'], ['carton', 'Karton'], ['other', 'Jiné']], v: all ? 'pallet' : 'carton' },
+    { k: 'w', label: 'Váha (kg)', num: true, focus: true }, { k: 'l', label: 'Délka (cm)', num: true }, { k: 'wi', label: 'Šířka (cm)', num: true }, { k: 'h', label: 'Výška (cm)', num: true }] });
+  if (!v) return;
+  var lines = all ? null : Object.keys(task.box).map(function(k){ return { alloc_id: Number(k), qty: task.box[k] }; });
+  var n = function(x){ return x === '' || x == null ? null : Number(x); };
+  var r = await tkRpc('wms_pack', { p_id: task.id, p_kind: v.kind, p_weight: n(v.w), p_l: n(v.l), p_w: n(v.wi), p_h: n(v.h), p_lines: lines }, 'balení ' + task.doc.delivery_number);
+  if (r.s === 'fail') { beepError(); setStatus('❌ ' + tkErr(r.msg)); return; }
+  if (r.s !== 'done') { beepWarn(); setStatus('⏳ Balení potřebuje signál – zkus znovu'); return; }
+  beepOk(); setStatus('✅ Obal ' + r.data.code + ' – napiš nebo nalep štítek s tímto kódem');
+  alert('Obal uzavřen: ' + r.data.code + '\nOznač obal tímto kódem (štítek lze vytisknout na webu u výdeje).');
+  tkOpenPack(task.id);
+}
+
+// ── NAKLÁDKA ──
+async function tkOpenLoad(id) {
+  tkPanel('<div class="tk-muted" style="padding:18px">Načítám výdej…</div>');
+  var r = await tkFetch(supa.from('deliveries').select('*,clients(name,delivery_flow)').eq('id', id).single());
+  var c = tkCacheGet('ld_' + id);
+  if (r.data) {
+    var pk = await tkFetch(supa.from('packages').select('*').eq('delivery_id', id).order('code'));
+    c = { doc: r.data, pkgs: pk.data || [] }; tkCacheSet('ld_' + id, c);
+  } else if (!c) { tkPanel('<div class="tk-warn">Výdej nejde načíst.</div><button class="tk-btn sec" onclick="tkOpenList(\'load\')">↩ Zpět</button>'); return; }
+  task = { kind: 'load', id: id, doc: c.doc, pkgs: c.pkgs, off: !r.data };
+  if (!task.doc.plate) {
+    var v = await tkLineSheet({ title: '🚚 Nakládka ' + tkEsc(task.doc.delivery_number), sub: 'Nepovinné – vyplň, pokud víš', fields: [{ k: 'door', label: 'Vrata', v: task.doc.door || '' }, { k: 'plate', label: 'SPZ', v: '' }], okText: '▶ Začít nakládat' });
+    if (v) { task.doc.door = v.door || task.doc.door; task.doc.plate = v.plate || null; }
+  }
+  tkRenderLoad(); setStatus('🚚 Naskenuj obaly / palety při nakládce'); updateScanBtn();
+}
+function tkRenderLoad() {
+  var d = task.doc, done = task.pkgs.filter(function(p){ return p.status === 'loaded'; }).length;
+  var h = '<div class="tk-head">🚚 ' + tkEsc(d.delivery_number) + ' <span class="tk-badge tk-b-' + d.status + '">' + tkEsc(TK_ST.delivery[d.status] || d.status) + '</span><button class="tk-x" onclick="tkOpenList(\'load\')">↩</button></div>'
+    + '<div class="tk-sub" style="padding:0 14px 8px">' + tkEsc((d.clients && d.clients.name) || '') + (d.door ? ' · vrata ' + tkEsc(d.door) : '') + (d.plate ? ' · ' + tkEsc(d.plate) : '') + '</div>';
+  if (task.off) h += '<div class="tk-warn">📴 Bez signálu – skeny se odešlou později</div>';
+  h += '<div class="tk-big' + (task.pkgs.length && done === task.pkgs.length ? ' on' : '') + '"><div style="font-size:30px;font-weight:700">' + done + ' / ' + task.pkgs.length + '</div><div class="tk-sub">naloženo</div></div>';
+  if (!task.pkgs.length) h += '<div class="tk-warn">Výdej nemá žádné obaly ani palety k naložení' + (d.status === 'picked' ? ' – první sken palety (LPN) je založí' : '') + '.</div>';
+  if (task.pkgs.length && done === task.pkgs.length) h += '<button class="tk-btn" onclick="tkLoadFinish(false)">🚚 Odjezd – potvrdit odeslání</button>';
+  else if (done > 0) h += '<button class="tk-btn sec" onclick="tkLoadFinish(true)">⚠ Odjezd i bez zbývajících obalů</button>';
+  h += '<div class="tk-sec">Obaly a palety</div>' + task.pkgs.map(function(p){ return '<div class="tk-row"><span><b class="tk-mono">' + tkEsc(p.code) + '</b><br><span class="tk-sub">' + tkEsc(p.kind === 'carton' ? 'karton' : 'paleta') + (p.weight_kg ? ' · ' + tkNf(p.weight_kg) + ' kg' : '') + '</span></span><span>' + (p.status === 'loaded' ? '✅' : (p._q ? '⏳' : '')) + '</span></div>'; }).join('');
+  tkPanel(h);
+}
+async function tkLoadCode(code) {
+  var k = tkUp(code), p = task.pkgs.find(function(x){ return tkUp(x.code) === k || tkUp(x.sscc) === k; });
+  if (!p && task.pkgs.length) { beepError(); setStatus('❌ ' + code + ' nepatří k tomuto výdeji'); return; }
+  if (p && p.status === 'loaded') { beepWarn(); setStatus('⚠️ ' + p.code + ' už je naložený'); return; }
+  var r = await tkRpc('wms_load_scan', { p_id: task.id, p_code: k }, 'nakládka ' + k);
+  if (r.s === 'fail') { beepError(); setStatus('❌ ' + tkErr(r.msg)); return; }
+  beepOk();
+  if (!p) { tkOpenLoad(task.id); return; }
+  p.status = r.s === 'done' ? 'loaded' : p.status; p._q = r.s !== 'done';
+  if (r.s !== 'done') p.status = 'loaded';
+  task.doc.status = 'loading'; tkCacheSet('ld_' + task.id, { doc: task.doc, pkgs: task.pkgs });
+  setStatus((r.s === 'done' ? '✅ ' : '⏳ ') + p.code + ' naložen'); tkRenderLoad();
+}
+async function tkLoadFinish(force) {
+  var v = await tkLineSheet({ title: '🚚 Odjezd ' + tkEsc(task.doc.delivery_number), sub: force ? '⚠ Nenaložené obaly zůstanou ve skladu jako vychystané – zkontroluj!' : 'Zásoba se odepíše ze skladu.', okText: '✅ Potvrdit odjezd',
+    fields: [{ k: 'plate', label: 'SPZ', v: task.doc.plate || '' }, { k: 'seal', label: 'Plomba', v: '', focus: true }, { k: 'door', label: 'Vrata', v: task.doc.door || '' }] });
+  if (!v) return;
+  var r = await tkRpc('wms_load_finish', { p_id: task.id, p_door: v.door || null, p_plate: v.plate || null, p_seal: v.seal || null, p_force: !!force }, 'odjezd ' + task.doc.delivery_number);
+  if (r.s === 'fail') { beepError(); setStatus('❌ ' + tkErr(r.msg)); return; }
+  beepOk(); setStatus(r.s === 'done' ? '🚚 Odjelo – výdej odeslán' : '⏳ Odjezd se potvrdí, až bude signál');
+  tkOpenList('load');
+}
+
+// ── DOPLŇOVÁNÍ PICK LOKACÍ ──
+async function tkStartRepl() {
+  tkStart();
+  task = { kind: 'repl', step: 'from', list: [], cur: null };
+  tkPanel('<div class="tk-muted" style="padding:18px">Hledám, co doplnit…</div>');
+  if (currentDcId != null) { try { await supa.rpc('wms_repl_generate', { p_dc: currentDcId, p_user: currentUserId }); } catch(e) {} }
+  var q = supa.from('repl_tasks').select('*').eq('status', 'open').order('from_location').limit(200);
+  if (currentDcId != null) q = q.eq('dc_id', currentDcId);
+  var r = await tkFetch(q);
+  task.list = r.data || tkCacheGet('repl_' + currentDcId) || []; task.off = !r.data;
+  if (r.data) tkCacheSet('repl_' + currentDcId, r.data);
+  tkRenderRepl(); setStatus('🔁 Jdi na zdrojovou lokaci a naskenuj paletu (LPN) nebo lokaci'); updateScanBtn();
+}
+function tkRenderRepl() {
+  var h = '<div class="tk-head">🔁 Doplnění pick lokací<button class="tk-x" onclick="tkClose()">✕</button></div>';
+  if (task.off) h += '<div class="tk-warn">📴 Bez signálu – seznam z poslední synchronizace</div>';
+  var c = task.cur;
+  if (c) h += '<div class="tk-big on"><div class="tk-sub">PŘEVEZ PALETU</div><div class="tk-mono" style="font-size:20px;font-weight:700">' + tkEsc(c.lpn || '') + '</div><div>' + tkEsc(c.sku) + ' · ' + tkNf(c.qty) + ' ks</div><div style="font-size:22px;margin-top:6px">' + tkEsc(c.from_location) + ' → <b class="tk-mono">' + tkEsc(c.to_location) + '</b></div><div style="margin-top:8px;font-size:18px">📍 Naskenuj cílovou lokaci</div></div><button class="tk-btn sec" onclick="task.cur=null;task.step=\'from\';tkRenderRepl();updateScanBtn()">✖ Jiná úloha</button>';
+  h += '<div class="tk-sec">Úkoly: ' + task.list.length + '</div>' + (task.list.length ? task.list.map(function(t){ return '<div class="tk-row' + (c && c.id === t.id ? ' cur' : '') + '"><span><b class="tk-mono">' + tkEsc(t.from_location) + '</b> → <b class="tk-mono">' + tkEsc(t.to_location) + '</b><br><span class="tk-sub">' + tkEsc(t.sku) + ' · ' + tkNf(t.qty) + ' ks · ' + tkEsc(t.lpn || '') + '</span></span></div>'; }).join('') : '<div class="tk-muted" style="padding:16px;text-align:center">✅ Všechny pick lokace jsou doplněné.</div>');
+  tkPanel(h);
+}
+async function tkReplCode(code) {
+  var k = tkUp(code);
+  if (task.step === 'from') {
+    var t = task.list.find(function(x){ return tkUp(x.lpn) === k; }) || task.list.find(function(x){ return tkUp(x.from_location) === k; });
+    if (!t) { beepError(); setStatus('❌ ' + code + ' – žádná úloha doplnění'); return; }
+    task.cur = t; task.step = 'to'; beepOk(); tkRenderRepl(); updateScanBtn(); setStatus('📍 Převez na ' + t.to_location + ' a naskenuj ji'); return;
+  }
+  var c = task.cur;
+  if (k !== tkUp(c.to_location)) { beepError(); setStatus('❌ Špatná lokace – cíl je ' + c.to_location); return; }
+  var r = await tkRpc('wms_repl_done', { p_task: c.id, p_to: k }, 'doplnění ' + c.sku + ' → ' + k);
+  if (r.s === 'fail') { beepError(); setStatus('❌ ' + tkErr(r.msg)); return; }
+  beepOk(); task.list = task.list.filter(function(x){ return x.id !== c.id; }); tkCacheSet('repl_' + currentDcId, task.list);
+  task.cur = null; task.step = 'from'; tkRenderRepl(); updateScanBtn(); setStatus((r.s === 'done' ? '✅ ' : '⏳ ') + c.sku + ' doplněno na ' + k);
+}
+
+
+// ── CYKLICKÁ INVENTURA (naslepo) ──
+function tkDate(v) {
+  v = String(v || '').trim(); if (!v) return null;
+  var m = v.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})$/); if (m) { var y = +m[3]; if (y < 100) y += 2000; return y + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2); }
+  m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+  m = v.match(/^(\d{2})(\d{2})(\d{2})$/); if (m) return '20' + m[1] + '-' + m[2] + '-' + (m[3] === '00' ? '28' : m[3]);   // GS1 (17) RRMMDD
+  return 'bad';
+}
+function tkSerials(v) { return String(v || '').split(/[\s,;]+/).map(function(x){ return x.trim().toUpperCase(); }).filter(Boolean); }
+async function tkOpenCounts() {
+  tkStart();
+  task = { kind: 'cclist', list: [] };
+  tkPanel('<div class="tk-muted" style="padding:18px">Načítám inventury…</div>');
+  var q = supa.from('count_tasks').select('*').eq('status', 'open').order('location_code').limit(200);
+  if (currentDcId != null) q = q.eq('dc_id', currentDcId);
+  var r = await tkFetch(q);
+  task.list = r.data || tkCacheGet('cc_' + currentDcId) || []; if (r.data) tkCacheSet('cc_' + currentDcId, r.data);
+  var h = '<div class="tk-head">📋 Cyklická inventura<button class="tk-x" onclick="tkClose()">✕</button></div>';
+  if (!r.data) h += '<div class="tk-warn">📴 Bez signálu – seznam z poslední synchronizace</div>';
+  h += task.list.length ? task.list.map(function(t, i){ return '<div class="tk-card" onclick="tkOpenCount(' + i + ')"><b class="tk-mono" style="font-size:20px">' + tkEsc(t.location_code) + '</b><div class="tk-sub">' + tkEsc(t.reason || '') + ' · ' + new Date(t.created_at).toLocaleDateString('cs-CZ') + '</div></div>'; }).join('')
+    : '<div class="tk-muted" style="padding:18px;text-align:center">Žádné otevřené inventury. Vedoucí je založí na webu (Přesnost zásob).</div>';
+  tkPanel(h); setStatus('📋 Naskenuj lokaci k inventuře nebo ji vyber'); updateScanBtn();
+}
+async function tkOpenCount(i) {
+  var t = task.list[i]; if (!t) return;
+  var sk = tkCacheGet('skus_all');
+  if (!sk || !sk.length) { var r = await tkFetch(supa.from('stock_items').select('*').limit(10000)); sk = r.data || []; if (r.data) tkCacheSet('skus_all', sk); }
+  task = { kind: 'count', t: t, step: 'loc', lines: [], skus: sk || [] };
+  tkRenderCount(); setStatus('📍 Naskenuj lokaci ' + t.location_code); updateScanBtn();
+}
+function tkRenderCount() {
+  var t = task.t, n = task.lines.reduce(function(s, l){ return s + l.qty; }, 0);
+  var h = '<div class="tk-head">📋 ' + tkEsc(t.location_code) + '<button class="tk-x" onclick="tkOpenCounts()">↩</button></div>';
+  h += '<div class="tk-big' + (task.step === 'items' ? ' on' : '') + '">' + (task.step === 'loc' ? '<div style="font-size:20px">📍 Naskenuj lokaci <b class="tk-mono">' + tkEsc(t.location_code) + '</b></div>'
+    : '<div class="tk-sub">NAPOČÍTÁNO (NASLEPO)</div><div style="font-size:28px;font-weight:700">' + tkNf(n) + ' ks</div><div class="tk-sub">Skenuj každou paletu (LPN) nebo zboží (EAN) a zadej kusy</div>') + '</div>';
+  if (task.step === 'items') {
+    h += '<button class="tk-btn" onclick="tkCountSubmit()">✅ Dokončit lokaci</button><button class="tk-btn sec" onclick="tkCountEmpty()">⬜ Lokace je prázdná</button>';
+    h += task.lines.slice().reverse().map(function(l){ return '<div class="tk-row"><span><b>' + tkEsc(l.sku) + '</b> · ' + tkNf(l.qty) + ' ks' + (l.lot ? ' · LOT ' + tkEsc(l.lot) : '') + '<br><span class="tk-sub tk-mono">' + tkEsc(l.lpn || 'bez LPN') + '</span></span><span onclick="tkCountDel(' + task.lines.indexOf(l) + ')" style="color:#c0392b;font-size:20px;cursor:pointer">✕</span></div>'; }).join('');
+  }
+  tkPanel(h);
+}
+function tkCountDel(i) { task.lines.splice(i, 1); tkRenderCount(); }
+async function tkCountCode(code) {
+  var k = tkUp(code), t = task.t;
+  if (task.step === 'loc') { if (k !== tkUp(t.location_code)) { beepError(); setStatus('❌ Máš být na ' + t.location_code); return; } task.step = 'items'; beepOk(); tkRenderCount(); updateScanBtn(); setStatus('📦 Skenuj palety / zboží na lokaci'); return; }
+  var m = tkFindSku(code, task.skus), lpn = null, sku = null;
+  if (m) sku = m.s.sku; else {
+    lpn = k;
+    if (task.lines.some(function(l){ return l.lpn === lpn; })) { beepWarn(); setStatus('⚠️ Paleta ' + lpn + ' už je napočítaná'); return; }
+    var c = await tkLineSheet({ title: '🏷️ Paleta ' + tkEsc(lpn), sub: 'Naskenuj nebo zadej SKU / EAN zboží na paletě', fields: [{ k: 'sku', label: 'SKU / EAN', req: true, focus: true }], validate: function(x){ return tkFindSku(x.sku, task.skus) ? '' : 'Takové SKU neznám'; } });
+    if (!c) return; sku = tkFindSku(c.sku, task.skus).s.sku;
+  }
+  var v = await tkLineSheet({ title: '📦 ' + tkEsc(sku), sub: lpn ? 'Paleta ' + tkEsc(lpn) : 'Bez LPN', fields: [{ k: 'qty', label: 'Napočítané kusy', num: true, req: true, focus: true }, { k: 'lot', label: 'LOT (je-li)' }],
+    validate: function(x){ return Number(x.qty) >= 0 && x.qty !== '' ? '' : 'Zadej kusy'; } });
+  if (!v) return;
+  task.lines.push({ sku: sku, lpn: lpn, lot: v.lot || null, qty: Number(v.qty) }); beepOk(); tkRenderCount();
+}
+async function tkCountEmpty() { if (task.lines.length && !confirm('Smazat napočítané řádky a nahlásit prázdnou lokaci?')) return; task.lines = []; return tkCountSubmit(true); }
+async function tkCountSubmit(empty) {
+  if (!empty && !task.lines.length && !confirm('Nic není napočítané – nahlásit lokaci jako prázdnou?')) return;
+  var r = await tkRpc('wms_cc_submit', { p_task: task.t.id, p_lines: task.lines, p_uid: obUid() }, 'inventura ' + task.t.location_code);
+  if (r.s === 'fail') { beepError(); setStatus('❌ ' + tkErr(r.msg)); return; }
+  beepOk();
+  setStatus(r.s === 'done' ? (r.data && r.data.diff_lines ? '⚠ ' + task.t.location_code + ': rozdíl – čeká na schválení vedoucím' : '✅ ' + task.t.location_code + ' sedí') : '⏳ Inventura se odešle, až bude signál');
+  var id = task.t.id, lst = (tkCacheGet('cc_' + currentDcId) || []).filter(function(x){ return x.id !== id; }); tkCacheSet('cc_' + currentDcId, lst);
+  tkOpenCounts();
+}
+
 // ── směrování kódů ──
 async function taskCode(code) {
   if (!task) return;
@@ -1851,6 +2244,12 @@ async function taskCode(code) {
   }
   if (task.kind === 'receipt') return tkReceiptCode(code);
   if (task.kind === 'putaway') return tkPutawayCode(code);
+  if (task.kind === 'info') return tkInfoScan(code);
+  if (task.kind === 'pack') return tkPackCode(code);
+  if (task.kind === 'load') return tkLoadCode(code);
+  if (task.kind === 'repl') return tkReplCode(code);
+  if (task.kind === 'count') return tkCountCode(code);
+  if (task.kind === 'cclist') { var ci = task.list.findIndex(function(x){ return tkUp(x.location_code) === tkUp(code); }); if (ci < 0) { beepError(); setStatus('❌ Na lokaci ' + code + ' není otevřená inventura'); return; } beepOk(); await tkOpenCount(ci); return tkCountCode(code); }
   if (task.kind === 'pick') return tkPickCode(code);
 }
 

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="cs"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Nastavení systému – PRG WMS</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="wms_nav.js"></script>
+<script src="wms_flow.js"></script>
+<script src="wms_dc.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+:root{--bg:#f0f2f5;--surface:#fff;--border:#e2e6ed;--accent:#0a7c4e;--accent-light:#e8f7f1;--danger:#c0392b;--danger-light:#fdecea;--warning:#e67e22;--warning-light:#fef3e8;--info:#2980b9;--info-light:#eaf4fb;--text:#1a1d27;--muted:#7a8090;--shadow:0 2px 12px rgba(0,0,0,0.07);--sidebar-w:220px;}
+*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.btn{padding:9px 18px;border:none;border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;transition:opacity 0.15s;text-decoration:none;display:inline-flex;align-items:center;gap:6px;}.btn:active{opacity:0.8;}.btn-primary{background:var(--accent);color:#fff;}.btn-secondary{background:var(--bg);color:var(--muted);border:1.5px solid var(--border);}.btn-danger{background:var(--danger);color:#fff;}.btn-warning{background:var(--warning);color:#fff;}.btn-sm{padding:6px 12px;font-size:12px;}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}.badge-green{background:var(--accent-light);color:var(--accent);}.badge-orange{background:var(--warning-light);color:var(--warning);}.badge-red{background:var(--danger-light);color:var(--danger);}.badge-blue{background:var(--info-light);color:var(--info);}.badge-gray{background:#f0f2f5;color:var(--muted);}
+.card{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden;margin-bottom:20px;}.card-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}.card-header h3{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;}
+table{width:100%;border-collapse:collapse;font-size:13px;}thead{background:#f8f9fb;}th{padding:9px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;}td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}tbody tr:last-child td{border-bottom:none;}tbody tr:hover{background:#fafbfc;}.empty-row td{text-align:center;color:var(--muted);padding:28px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}.form-row.single{grid-template-columns:1fr;}.form-row.triple{grid-template-columns:1fr 1fr 1fr;}
+.form-group{display:flex;flex-direction:column;gap:5px;}.form-group label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;}
+.form-group input,.form-group select,.form-group textarea{padding:9px 12px;border:1.5px solid var(--border);border-radius:7px;font-family:'Inter',sans-serif;font-size:13px;outline:none;transition:border-color 0.2s;background:#fff;}.form-group input:focus,.form-group select:focus{border-color:var(--accent);}.form-group textarea{resize:vertical;min-height:70px;}
+.form-section{font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+#sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);background:#0a7c4e;display:flex;flex-direction:column;z-index:50;transition:transform 0.25s ease;}.sidebar-logo{padding:20px 18px 14px;font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:#fff;letter-spacing:1.5px;border-bottom:1px solid rgba(255,255,255,0.15);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;}.sidebar-logo span{font-size:11px;font-weight:400;opacity:0.7;width:100%;letter-spacing:0;}#sidebar-close-btn{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;opacity:0.8;display:none;}nav{flex:1;padding:10px 0;overflow-y:auto;}.nav-item{display:flex;align-items:center;gap:10px;padding:11px 18px;color:rgba(255,255,255,0.75);cursor:pointer;font-size:14px;font-weight:500;transition:background 0.15s,color 0.15s;border-left:3px solid transparent;}.nav-item:hover{background:rgba(255,255,255,0.1);color:#fff;}.nav-item.active{background:rgba(255,255,255,0.15);color:#fff;border-left-color:#fff;}.nav-icon{font-size:17px;width:22px;text-align:center;}.sidebar-user{padding:12px 18px;border-top:1px solid rgba(255,255,255,0.15);font-size:12px;color:rgba(255,255,255,0.7);display:flex;flex-direction:column;gap:4px;}.sidebar-user strong{color:#fff;font-size:13px;}.sidebar-user button{background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;margin-top:4px;}
+#main{margin-left:var(--sidebar-w);min-height:100vh;}.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:13px 24px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow);position:sticky;top:0;z-index:40;}.topbar h2{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;flex:1;}.topbar-actions{display:flex;gap:8px;align-items:center;}.hamburger-btn{display:inline-flex;align-items:center;background:none;border:none;font-size:24px;cursor:pointer;color:var(--text);padding:4px 8px;margin-right:4px;border-radius:6px;}.content{padding:24px;}#sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:49;}
+.back-btn{background:var(--bg);border:1.5px solid var(--border);border-radius:7px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;text-decoration:none;display:flex;align-items:center;gap:6px;}.back-btn:hover{border-color:var(--accent);color:var(--accent);}
+.items-table td input,.items-table td select{padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;width:100%;outline:none;font-family:'Inter',sans-serif;}
+#toast{position:fixed;bottom:24px;right:24px;background:#1a1d27;color:#fff;padding:12px 20px;border-radius:9px;font-size:13px;font-weight:500;z-index:999;opacity:0;transition:opacity 0.3s;pointer-events:none;}#toast.show{opacity:1;}
+@media(min-width:901px){.hamburger-btn{display:none;}#sidebar-close-btn{display:none !important;}}
+@media(max-width:900px){:root{--sidebar-w:0px;}#sidebar{transform:translateX(-220px);width:220px;}#sidebar.open{transform:translateX(0);}#sidebar-close-btn{display:block !important;}#main{margin-left:0;}.content{padding:14px;}.topbar{padding:11px 14px;}}
+/* mobilní zobrazení – sjednoceno s Inventory Tool */
+@media(max-width:900px){
+body{overflow-x:hidden;}
+#main{min-width:0;max-width:100%;}
+.content{padding:12px !important;min-width:0;max-width:100%;}
+.card{min-width:0;max-width:100%;}
+.topbar{flex-wrap:wrap;gap:8px;padding:10px 12px !important;}
+.topbar h2{font-size:19px !important;min-width:0;flex:1 1 auto;}
+.topbar-actions{flex-wrap:wrap;gap:6px;margin-left:auto;}
+#last-refresh{display:none;}
+#theme-popover{right:8px !important;max-width:calc(100vw - 16px);}
+.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:10px !important;}
+.two-col{grid-template-columns:minmax(0,1fr) !important;}
+.stat-grid>*,.two-col>*{min-width:0;}
+.form-row{grid-template-columns:1fr !important;}
+}
+</style></head><body>
+<div id="session-check" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)"><div style="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:16px;opacity:0.85;">Načítám…</div></div><div id="auth-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)"><div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)"><h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1><p style="font-size:13px;color:#7a8090;margin-bottom:20px">Warehouse Management System</p><div id="auth-msg" style="font-size:13px;color:#c0392b;min-height:18px;margin-bottom:8px"></div><input id="login-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none"><input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none"><button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Přihlásit se</button></div></div>
+<div id="app" style="display:none">
+  <div id="sidebar"><div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">&#x2715;</button></div>
+  <nav id="wms-nav" data-active="settings"></nav>
+  <div class="sidebar-user"><strong id="sidebar-user-name">-</strong><span id="sidebar-user-role" class="badge badge-gray"></span><button onclick="doLogout()">Odhlásit se</button></div></div>
+  <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+  <div id="main">
+<div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">&#9776;</button><h2>⚙️ Nastavení systému</h2><div class="topbar-actions"></div></div>
+<div class="content" style="max-width:1100px">
+<style>.sx label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:3px}.sx{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;padding:14px 16px}.code{font-family:JetBrains Mono,monospace;font-size:12px;background:#f4f6f8;border-radius:8px;padding:10px 12px;white-space:pre-wrap;word-break:break-all;margin:6px 0}</style>
+<div class="card"><div class="card-header"><h3>🏢 Firma (CMR, dokumenty)</h3><button class="btn btn-primary btn-sm" onclick="saveSet(['company_name','company_address','company_city','company_country'])">💾 Uložit</button></div><div class="sx">
+<div><label>Název</label><input id="s-company_name" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%"></div><div><label>Ulice</label><input id="s-company_address" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%"></div><div><label>Město</label><input id="s-company_city" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%"></div><div><label>Země</label><input id="s-company_country" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%"></div></div></div>
+<div class="card"><div class="card-header"><h3>🏷 GS1 / SSCC</h3><button class="btn btn-primary btn-sm" onclick="saveSet(['gs1_prefix','sscc_ext'])">💾 Uložit</button></div><div class="sx">
+<div><label>GS1 prefix firmy (7–10 číslic)</label><input id="s-gs1_prefix" inputmode="numeric" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%" placeholder="např. 8590123"></div><div><label>Rozšiřující číslice SSCC</label><input id="s-sscc_ext" maxlength="1" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%"></div></div>
+<div style="padding:0 16px 14px;font-size:12px;color:var(--muted)">Když je prefix vyplněný, každý nový obal / paleta při balení a nakládce dostane SSCC (18 číslic s kontrolní číslicí) – tiskne se na CMR a štítcích. Prefix přiděluje GS1 Czech Republic.</div></div>
+<div class="card"><div class="card-header"><h3>🔌 API pro objednávky a avíza klientů</h3><button class="btn btn-secondary btn-sm" onclick="newToken()">🔄 Nový token</button></div><div style="padding:14px 16px;font-size:13px;line-height:1.55">
+Klient (nebo jeho systém) pošle objednávku výdeje či avízo příjmu jako HTTP POST. Doklad se založí ve stavu Nový; u klienta s „Výdej rovnou do skladu“ se rovnou alokuje a uvolní.
+<div><b>URL</b></div><div class="code" id="api-url"></div><div><b>Hlavičky</b></div><div class="code" id="api-h"></div>
+<div><b>Objednávka (výdej)</b></div><div class="code">{"type":"order","client":"Klient A","dc":"DC29","number":"PO-123","planned_at":"2026-11-05T10:00:00Z","priority":"high","note":"…","lines":[{"sku":"A-100","qty":5,"lot":null}]}</div>
+<div><b>Avízo (příjem)</b></div><div class="code">{"type":"asn","client":"Klient A","dc":"DC29","number":"ASN-55","supplier":"Dodavatel","expected_at":"2026-11-04T08:00:00Z","lines":[{"sku":"A-100","qty":480}]}</div>
+<div><b>Stav dokladu</b></div><div class="code">{"type":"status","number":"PO-123"}</div>
+<div style="color:var(--muted);font-size:12px">Odpověď: {"id":…, "number":…, "status":…}. Chyby: BAD_TOKEN, UNKNOWN_CLIENT, UNKNOWN_DC, UNKNOWN_SKU, DUPLICATE, NO_LINES. Token drž v tajnosti – kdo ho má, může zakládat doklady.</div></div></div>
+<div class="card"><div class="card-header"><h3>✉️ E-mailová upozornění</h3><button class="btn btn-primary btn-sm" onclick="addRule()">+ Pravidlo</button></div>
+<div style="overflow-x:auto"><table><thead><tr><th>Událost</th><th>Klient</th><th>Komu</th><th>Aktivní</th><th></th></tr></thead><tbody id="nr-body"></tbody></table></div>
+<div style="padding:12px 16px;font-size:13px;line-height:1.55"><b>Fronta zpráv</b> (posledních 30)<div style="overflow-x:auto"><table><thead><tr><th>Kdy</th><th>Událost</th><th>Komu</th><th>Předmět</th><th>Stav</th></tr></thead><tbody id="nq-body"></tbody></table></div>
+<details style="margin-top:12px"><summary style="cursor:pointer;font-weight:700">Jak zapnout odesílání (jednorázově, cca 10 min)</summary><ol style="margin:8px 0 0 18px">
+<li>Založ účet na <b>resend.com</b>, ověř svou doménu (nebo pro test použij výchozí odesílatele) a vytvoř <b>API key</b>.</li>
+<li>Supabase → <b>Edge Functions</b> → Create a new function → název <b>prg-notify</b> → vlož kód níže → Deploy.</li>
+<li>Edge Functions → <b>Secrets</b>: <code>RESEND_API_KEY</code> = klíč z Resendu, <code>NOTIFY_FROM</code> = např. <code>PRG WMS &lt;wms@vase-domena.cz&gt;</code>.</li>
+<li>Database → <b>Webhooks</b> → Create: tabulka <code>notify_queue</code>, událost <b>Insert</b>, typ <b>Supabase Edge Functions</b> → prg-notify.</li>
+<li>Přidej tady pravidlo a vyzkoušej (např. dokonči příjem) – zpráva se objeví ve frontě a během pár sekund jako „odesláno“.</li></ol>
+<div class="code" style="max-height:260px;overflow:auto">// Supabase Edge Function &quot;prg-notify&quot; – odesílá e-maily z tabulky notify_queue přes Resend (https://resend.com)
+// Nastavení: Supabase → Edge Functions → Create function &quot;prg-notify&quot; → vložit tento kód → Deploy.
+// Secrets (Edge Functions → Secrets): RESEND_API_KEY = klíč z Resendu, NOTIFY_FROM = &quot;PRG WMS &lt;wms@vase-domena.cz&gt;&quot;.
+// Spouštění: Database → Webhooks → Create: tabulka notify_queue, událost INSERT, typ Supabase Edge Function → prg-notify.
+import { createClient } from &#x27;npm:@supabase/supabase-js@2&#x27;;
+
+Deno.serve(async () =&gt; {
+  const supa = createClient(Deno.env.get(&#x27;SUPABASE_URL&#x27;)!, Deno.env.get(&#x27;SUPABASE_SERVICE_ROLE_KEY&#x27;)!);
+  const key = Deno.env.get(&#x27;RESEND_API_KEY&#x27;);
+  const from = Deno.env.get(&#x27;NOTIFY_FROM&#x27;) ?? &#x27;PRG WMS &lt;onboarding@resend.dev&gt;&#x27;;
+  if (!key) return new Response(JSON.stringify({ error: &#x27;RESEND_API_KEY chybí&#x27; }), { status: 500 });
+  const { data: rows, error } = await supa.from(&#x27;notify_queue&#x27;).select(&#x27;*&#x27;).is(&#x27;sent_at&#x27;, null).lt(&#x27;tries&#x27;, 5).order(&#x27;id&#x27;).limit(50);
+  if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+  let sent = 0;
+  for (const r of rows ?? []) {
+    const to = String(r.to_emails).split(/[,;\s]+/).filter(Boolean);
+    const res = await fetch(&#x27;https://api.resend.com/emails&#x27;, {
+      method: &#x27;POST&#x27;,
+      headers: { Authorization: `Bearer ${key}`, &#x27;Content-Type&#x27;: &#x27;application/json&#x27; },
+      body: JSON.stringify({ from, to, subject: r.subject, text: `${r.body}\n\n—\nPRG Systems (automatická zpráva)` }),
+    });
+    if (res.ok) { await supa.from(&#x27;notify_queue&#x27;).update({ sent_at: new Date().toISOString(), error: null }).eq(&#x27;id&#x27;, r.id); sent++; }
+    else { await supa.from(&#x27;notify_queue&#x27;).update({ tries: (r.tries ?? 0) + 1, error: (await res.text()).slice(0, 500) }).eq(&#x27;id&#x27;, r.id); }
+  }
+  return new Response(JSON.stringify({ sent, waiting: (rows?.length ?? 0) - sent }), { headers: { &#x27;Content-Type&#x27;: &#x27;application/json&#x27; } });
+});
+</div></details></div></div>
+<div class="card"><div class="card-header"><h3>🏢 Klientský portál a ochrana dat</h3></div><div style="padding:14px 16px;font-size:13px;line-height:1.6">
+<ol style="margin-left:18px"><li>V <a href="wms_users.html">Uživatelích</a> nastav účtu roli <b>Klient</b> a vyber klienta. Po přihlášení uvidí jen <a href="wms_portal.html">klientský portál</a> (zásoby, příjmy, výdeje, teploty – jen čtení).</li>
+<li>Aby klient nemohl data jiných klientů vidět ani přes přímé dotazy, spusť v Supabase <b>rls_setup-01.sql</b> (zapne ochranu dat na řádcích). Zaměstnanci fungují dál beze změny. Vrácení: <b>rls_off-01.sql</b>.</li>
+<li>Admin si může portál prohlédnout za libovolného klienta (výběr nahoře v portálu).</li></ol></div></div>
+</div>
+</div>
+</div>
+<div id="toast"></div>
+<script>
+var SUPA_URL="https://ujvqanqqhmnfxsfeqixc.supabase.co";var SUPA_KEY="sb_publishable_5o19BnZUEi8j-rU5DDAgBA_HwKB7V-v";
+var supa=supabase.createClient(SUPA_URL,SUPA_KEY);
+var currentUser=null,currentProfile=null;
+async function doLogin(){var email=document.getElementById('login-email').value.trim();var pass=document.getElementById('login-pass').value;if(!email||!pass){document.getElementById('auth-msg').textContent='Vyplňte pole';return;}document.getElementById('auth-msg').textContent='Přihlašování…';var res=await supa.auth.signInWithPassword({email,password:pass});if(res.error){document.getElementById('auth-msg').textContent='Chyba: '+res.error.message;return;}await onLoggedIn(res.data.user);}
+// idle logout
+var SESSION_IDLE_MS=2*60*60*1000;var sessionIdleTimer=null;function startSessionIdleWatch(){function reset(){clearTimeout(sessionIdleTimer);sessionIdleTimer=setTimeout(async function(){await supa.auth.signOut();alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');window.location.href='wms_dashboard.html';},SESSION_IDLE_MS);}['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){document.addEventListener(evt,reset,{passive:true});});reset();}
+async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}var allowed=currentProfile.allowed_apps;if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1){alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';(async function(){try{if(window.PRG_DC)await PRG_DC.init(supa,currentProfile);}catch(e){console.warn('DC',e);}if(typeof afterLogin==='function')afterLogin();})();startSessionIdleWatch();}
+async function doLogout(){await supa.auth.signOut();window.location.href='wms_dashboard.html';}
+function go(u){window.location.href=u;}
+function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
+var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(_tt);_tt=setTimeout(function(){e.classList.remove('show');},2800);}
+function closeModal(id){document.getElementById(id).style.display='none';}
+function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
+supa.auth.getSession().then(function(res){if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}else{window.location.href='wms_dashboard.html';}});
+
+var SET={},CL=[];
+var EV={receipt_done:'Příjem dokončen',delivery_shipped:'Výdej odeslán',temp_alarm:'Alarm teploty',problem:'Problém u dokladu'};
+function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+async function afterLogin(){
+  if(!(currentProfile&&currentProfile.role==='admin')){document.querySelector('.content').innerHTML='<div class="card" style="padding:20px">Nastavení je jen pro administrátory.</div>';return;}
+  var r=await supa.from('wms_settings').select('*');if(r.error){toast(/wms_settings|schema cache/.test(r.error.message)?'Spusť v Supabase s09_setup-01.sql':r.error.message);return;}
+  (r.data||[]).forEach(function(x){SET[x.key]=x.value;var e=document.getElementById('s-'+x.key);if(e)e.value=x.value||'';});
+  CL=(await supa.from('clients').select('id,name').order('name')).data||[];
+  document.getElementById('api-url').textContent=SUPA_URL+'/rest/v1/rpc/wms_api';
+  document.getElementById('api-h').textContent='apikey: '+SUPA_KEY+'\nContent-Type: application/json\nX-PRG-Token: '+(SET.api_token||'');
+  rules();queue();
+}
+async function saveSet(keys){var rows=keys.map(function(k){return {key:k,value:document.getElementById('s-'+k).value.trim(),updated_at:new Date().toISOString()};});
+  if(keys.indexOf('gs1_prefix')>=0){var g=rows.find(function(x){return x.key==='gs1_prefix';}).value.replace(/\D/g,'');if(g&&(g.length<6||g.length>12)){toast('GS1 prefix má 6–12 číslic');return;}}
+  var r=await supa.from('wms_settings').upsert(rows,{onConflict:'key'});toast(r.error?'❌ '+r.error.message:'Uloženo');}
+async function newToken(){if(!confirm('Vytvořit nový API token? Starý přestane platit a klientské systémy ho musí změnit.'))return;
+  var t=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(function(b){return ('0'+b.toString(16)).slice(-2);}).join('');
+  var r=await supa.from('wms_settings').upsert({key:'api_token',value:t,updated_at:new Date().toISOString()},{onConflict:'key'});if(r.error){toast('❌ '+r.error.message);return;}SET.api_token=t;document.getElementById('api-h').textContent='apikey: '+SUPA_KEY+'\nContent-Type: application/json\nX-PRG-Token: '+t;toast('Nový token uložen');}
+async function rules(){var r=(await supa.from('notify_rules').select('*').order('id')).data||[];
+  document.getElementById('nr-body').innerHTML=r.map(function(x){var c=CL.find(function(k){return k.id===x.client_id;});return '<tr><td>'+esc(EV[x.event]||x.event)+'</td><td>'+esc(c?c.name:'všichni')+'</td><td>'+esc(x.emails)+'</td><td>'+(x.is_active?'✅':'–')+'</td><td><button class="btn btn-secondary btn-sm" onclick="toggleRule('+x.id+','+(!x.is_active)+')">'+(x.is_active?'Vypnout':'Zapnout')+'</button> <button class="btn btn-secondary btn-sm" onclick="delRule('+x.id+')">🗑</button></td></tr>';}).join('')||'<tr class="empty-row"><td colspan="5">Žádná pravidla</td></tr>';}
+async function addRule(){var ev=prompt('Událost – napiš číslo:\n1 = Příjem dokončen\n2 = Výdej odeslán\n3 = Alarm teploty\n4 = Problém u dokladu','2');if(!ev)return;var k=['receipt_done','delivery_shipped','temp_alarm','problem'][Number(ev)-1];if(!k){toast('Neplatná volba');return;}
+  var c=prompt('Pro kterého klienta? Číslo, nebo prázdné = všichni:\n'+CL.map(function(x,i){return (i+1)+' = '+x.name;}).join('\n'),'');if(c===null)return;var cid=c?((CL[Number(c)-1]||{}).id||null):null;
+  var em=prompt('E-maily (oddělené čárkou):','');if(!em)return;
+  var r=await supa.from('notify_rules').insert({event:k,client_id:cid,emails:em.trim()});toast(r.error?'❌ '+r.error.message:'Pravidlo přidáno');rules();}
+async function toggleRule(id,on){await supa.from('notify_rules').update({is_active:on}).eq('id',id);rules();}
+async function delRule(id){if(!confirm('Smazat pravidlo?'))return;await supa.from('notify_rules').delete().eq('id',id);rules();}
+async function queue(){var r=(await supa.from('notify_queue').select('*').order('id',{ascending:false}).limit(30)).data||[];
+  document.getElementById('nq-body').innerHTML=r.map(function(x){return '<tr><td style="font-size:12px">'+new Date(x.created_at).toLocaleString('cs-CZ')+'</td><td>'+esc(EV[x.event]||x.event)+'</td><td style="font-size:12px">'+esc(x.to_emails)+'</td><td>'+esc(x.subject)+'</td><td>'+(x.sent_at?'<span class="badge badge-green">odesláno</span>':(x.error?'<span class="badge badge-red" title="'+esc(x.error)+'">chyba</span>':'<span class="badge badge-gray">čeká</span>'))+'</td></tr>';}).join('')||'<tr class="empty-row"><td colspan="5">Fronta je prázdná</td></tr>';}
+</script></body></html>

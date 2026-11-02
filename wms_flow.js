@@ -16,12 +16,14 @@
       allocated:{t:'Alokováno',c:'blue',h:'Zásoba je rezervovaná, čeká na uvolnění do skladu'},
       released:{t:'Uvolněno',c:'blue',h:'Ve frontě úloh scanneru'},
       picking:{t:'Vychystává se',c:'orange',h:'Skladník vychystává ve scanneru'},
-      picked:{t:'Vychystáno',c:'green',h:'Vše vychystáno, čeká na odeslání'},
+      picked:{t:'Vychystáno',c:'green',h:'Vše vychystáno, čeká na odeslání / balení / nakládku'},
+      packed:{t:'Zabaleno',c:'blue',h:'Zabaleno do obalů, čeká na nakládku'},
+      loading:{t:'Nakládá se',c:'orange',h:'Obaly se skenují při nakládce'},
       shipped:{t:'Odesláno',c:'green',h:'Odjelo, odepsáno ze skladu'},
       cancelled:{t:'Zrušeno',c:'red',h:'Doklad zrušen'}
     }
   };
-  var ORDER={receipt:['new','arrived','receiving','received','putaway','done'],delivery:['new','allocated','released','picking','picked','shipped']};
+  var ORDER={receipt:['new','arrived','receiving','received','putaway','done'],delivery:['new','allocated','released','picking','picked','packed','loading','shipped']};
   var LEGACY={draft:'new',confirmed:'done',loaded:'shipped',ready:'new'};
   function norm(type,s){s=s||'new';if(S[type][s])return s;if(type==='delivery'&&s==='confirmed')return 'shipped';return LEGACY[s]||s;}
   function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -37,7 +39,7 @@
       if(s==='done')return nf(p.scanned_qty||p.expected_qty)+' ks';
       return nf(p.expected_qty)+' ks';
     }
-    if(s==='picking'||s==='picked')return nf(p.picked_qty)+' / '+nf(p.alloc_qty)+' ks'+(Number(p.short_qty)?' · short '+nf(p.short_qty):'');
+    if(s==='picking'||s==='picked'||s==='packed'||s==='loading')return nf(p.picked_qty)+' / '+nf(p.alloc_qty)+' ks'+(Number(p.short_qty)?' · short '+nf(p.short_qty):'');
     if(s==='allocated'||s==='released')return nf(p.alloc_qty)+' / '+nf(p.ordered_qty)+' ks';
     return nf(p.ordered_qty)+' ks';
   }
@@ -56,7 +58,7 @@
     QTY_RANGE:'Neplatné množství.',NOT_ADMIN:'Tohle smí jen administrátor.',REASON_REQUIRED:'Zadej důvod.',
     CANCEL_POSTED:'Zboží z dokladu už je na skladě – zrušit nejde. Případné opravy udělej v Adjustments.',
     PICKED_EXISTS:'Už se začalo vychystávat – alokaci nejde zrušit.',NO_DC:'Doklad nemá zvolené DC.',NO_LINES:'Doklad nemá položky.',
-    LOCATION_REQUIRED:'Klient má příjem rovnou na lokaci – naskenuj lokaci.',ALREADY_CONFIRMED:'Doklad už je zaúčtovaný.'
+    LOCATION_REQUIRED:'Klient má příjem rovnou na lokaci – naskenuj lokaci.',FLOW_LOAD:'Klient má nakládku – výdej se odešle skenem při nakládce.',NOT_PACKED:'Výdej ještě není zabalený.',ALREADY_CONFIRMED:'Doklad už je zaúčtovaný.'
   };
   function errMsg(e){
     var m=String((e&&(e.message||e.msg))||e||'');
@@ -103,7 +105,7 @@
   }
   var TARGETS={
     receipt:{'new':['arrived','cancelled'],arrived:['new','cancelled'],receiving:['new','cancelled'],received:['done'],putaway:['done'],cancelled:['new']},
-    delivery:{allocated:['new','cancelled'],released:['new','cancelled'],picking:['released','picked','new','cancelled'],picked:['shipped','released','new','cancelled'],'new':['cancelled'],cancelled:['new']}
+    delivery:{allocated:['new','cancelled'],released:['new','cancelled'],picking:['released','picked','new','cancelled'],picked:['shipped','released','new','cancelled'],packed:['picked','shipped','released','new','cancelled'],loading:['picked','shipped','released','new','cancelled'],'new':['cancelled'],cancelled:['new']}
   };
   var THELP={
     receipt:{done:'Zbytek palet zůstane na lokaci UNASSIGNED.',cancelled:'Jen když zboží ještě není na skladě.','new':'Smaže skeny, které ještě nejsou zaúčtované.'},

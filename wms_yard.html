@@ -143,6 +143,7 @@ body.kiosk .kbar{display:flex}.kbar h1{font-size:34px;flex:1}.kbar .clock{font-s
     <div class="lf-bar"><span id="y-info" class="hint" style="flex:1">Načítám…</span><button class="btn btn-secondary" onclick="load()">↻ Obnovit</button></div>
   </div>
   <div class="card">
+    <div id="y-doors" class="noprint" style="padding:10px 16px;border-bottom:1px solid var(--border)"></div>
     <div style="overflow-x:auto"><table><thead><tr><th>Čas</th><th>Směr</th><th>Klient</th><th>Dopravce</th><th>Kontejner / SPZ</th><th>Plomba</th><th>Rampa</th><th>Stav</th><th>Doklad</th><th class="noprint">Akce</th></tr></thead><tbody id="y-tb"><tr class="empty-row"><td colspan="10">Načítám…</td></tr></tbody></table></div>
   </div>
 </div>
@@ -218,13 +219,20 @@ function render(){
     return true;});
   var cnt={};rows.forEach(function(x){cnt[x.status]=(cnt[x.status]||0)+1;});
   document.getElementById('y-info').textContent=rows.length+' záznamů · '+Object.keys(ST_CS).filter(function(k){return cnt[k];}).map(function(k){return ST_CS[k]+': '+cnt[k];}).join(' · ');
+  var act=rows.filter(function(x){return x.door&&x.status!=='cancelled'&&x.status!=='departed';}),clash={};
+  act.forEach(function(a){act.forEach(function(b){if(a.id<b.id&&a.door===b.door&&Math.abs(new Date(a.appointment_at)-new Date(b.appointment_at))<60*60000){clash[a.id]=1;clash[b.id]=1;}});});
+  var doors={};act.forEach(function(x){(doors[x.door]=doors[x.door]||[]).push(x);});
+  var dk=Object.keys(doors).sort(function(a,b){return a.localeCompare(b,'cs',{numeric:true});}),H0=5,H1=23,pc=function(t){var d=new Date(t);return Math.max(0,Math.min(100,((d.getHours()+d.getMinutes()/60)-H0)/(H1-H0)*100));};
+  document.getElementById('y-doors').innerHTML=dk.length?'<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">OBSAZENÍ RAMP '+H0+':00–'+H1+':00 (blok = 1 hod)'+(Object.keys(clash).length?' · <span style="color:#c0392b">⚠ kolize: '+Object.keys(clash).length+'</span>':'')+'</div>'+dk.map(function(d){
+    return '<div style="display:flex;align-items:center;gap:8px;margin:3px 0"><b style="flex:0 0 60px;font-size:13px">'+escH(d)+'</b><div style="position:relative;flex:1;height:18px;background:#f0f2f5;border-radius:4px">'+doors[d].map(function(x){
+      return '<div title="'+escH(hm(x.appointment_at)+' '+(x.container||x.plate||x.carrier||''))+'" style="position:absolute;top:1px;bottom:1px;left:'+pc(x.appointment_at)+'%;width:'+(100/(H1-H0))+'%;border-radius:3px;background:'+(clash[x.id]?'#c0392b':(x.direction==='in'?'#2980b9':'#0a7c4e'))+'"></div>';}).join('')+'</div></div>';}).join(''):'';
   var tb=document.getElementById('y-tb');
   if(!list.length){tb.innerHTML='<tr class="empty-row"><td colspan="10">Žádné příjezdy ani odjezdy</td></tr>';return;}
   tb.innerHTML=list.map(function(x){
     var late=x.status==='planned'&&new Date(x.appointment_at).getTime()<now-15*60000;
     var nx=NEXT[x.status];
     var times=['arrived_at','door_at','done_at','departed_at'].filter(function(k){return x[k];}).map(function(k){return {arrived_at:'přijel',door_at:'rampa',done_at:'hotovo',departed_at:'odjel'}[k]+' '+hm(x[k]);}).join(' · ');
-    return '<tr><td style="white-space:nowrap"><b>'+hm(x.appointment_at)+'</b>'+(late?'<div class="late">zpoždění</div>':'')+'</td><td>'+(x.direction==='in'?'⬇ Příjezd':'⬆ Odjezd')+'</td><td>'+escH(clients[x.client_id]||'–')+'</td><td>'+escH(x.carrier||'')+'</td><td><b>'+escH(x.container||'')+'</b>'+(x.plate?'<div class="hint">'+escH(x.plate)+'</div>':'')+'</td><td>'+escH(x.seal||'')+'</td><td><b>'+escH(x.door||'–')+'</b></td><td><span class="st st-'+x.status+'">'+escH(ST_CS[x.status]||x.status)+'</span>'+(times?'<div class="hint">'+escH(times)+'</div>':'')+'</td><td>'+escH(x.doc_ref||'')+'</td><td class="noprint" style="white-space:nowrap">'+(kiosk?'':((nx?'<button class="btn btn-primary btn-sm" onclick="setStatus('+x.id+',\''+nx[0]+'\')">'+nx[1]+'</button> ':'')+'<button class="btn btn-secondary btn-sm" onclick="openYard('+x.id+')">✏️</button>'+(x.status==='planned'?' <button class="btn btn-secondary btn-sm" title="Zrušit" onclick="setStatus('+x.id+',\'cancelled\')">✕</button>':'')))+'</td></tr>';}).join('');
+    return '<tr><td style="white-space:nowrap"><b>'+hm(x.appointment_at)+'</b>'+(late?'<div class="late">zpoždění</div>':'')+(clash[x.id]?'<div class="late">⚠ kolize rampy</div>':'')+'</td><td>'+(x.direction==='in'?'⬇ Příjezd':'⬆ Odjezd')+'</td><td>'+escH(clients[x.client_id]||'–')+'</td><td>'+escH(x.carrier||'')+'</td><td><b>'+escH(x.container||'')+'</b>'+(x.plate?'<div class="hint">'+escH(x.plate)+'</div>':'')+'</td><td>'+escH(x.seal||'')+'</td><td><b>'+escH(x.door||'–')+'</b></td><td><span class="st st-'+x.status+'">'+escH(ST_CS[x.status]||x.status)+'</span>'+(times?'<div class="hint">'+escH(times)+'</div>':'')+'</td><td>'+escH(x.doc_ref||'')+'</td><td class="noprint" style="white-space:nowrap">'+(kiosk?'':((nx?'<button class="btn btn-primary btn-sm" onclick="setStatus('+x.id+',\''+nx[0]+'\')">'+nx[1]+'</button> ':'')+'<button class="btn btn-secondary btn-sm" onclick="openYard('+x.id+')">✏️</button>'+(x.status==='planned'?' <button class="btn btn-secondary btn-sm" title="Zrušit" onclick="setStatus('+x.id+',\'cancelled\')">✕</button>':'')))+'</td></tr>';}).join('');
 }
 async function loadDoors(dcId){
   var dl=document.getElementById('ym-doors');dl.innerHTML='';if(!dcId)return;

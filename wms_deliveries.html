@@ -75,10 +75,11 @@ body{overflow-x:hidden;}
       <select id="f-client" onchange="filterDocs()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"><option value="">Všichni klienti</option></select>
       <select id="f-special" onchange="filterDocs()" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none"><option value="">Bez příznaku i s ním</option><option value="preorder">Předobjednávka</option><option value="hold">Hold</option></select>
       <span id="f-info" style="font-size:12px;color:var(--muted)"></span>
+      <span id="sel-bar" style="display:none;gap:6px;align-items:center"><b id="sel-n" style="font-size:13px"></b><button class="btn btn-primary btn-sm" onclick="makeWave()">🌊 Vytvořit vlnu</button><button class="btn btn-secondary btn-sm" onclick="assignSel()">👤 Přiřadit</button><button class="btn btn-secondary btn-sm" onclick="clearSel()">✕</button></span>
     </div>
     <div style="overflow-x:auto;">
-    <table><thead><tr><th>Číslo</th><th>Klient</th><th>Příznak</th><th>DC</th><th>Stav</th><th>Průběh</th><th>Odjezd</th><th>Vytvořil</th><th>Akce</th></tr></thead>
-    <tbody id="tbody"><tr class="empty-row"><td colspan="9">Načítám…</td></tr></tbody></table>
+    <table><thead><tr><th style="width:30px"><input type="checkbox" id="sel-all" onchange="selAll(this.checked)"></th><th>Číslo</th><th>Klient</th><th>Příznak</th><th>DC</th><th>Stav</th><th>Průběh</th><th>Odjezd</th><th>Vytvořil</th><th>Akce</th></tr></thead>
+    <tbody id="tbody"><tr class="empty-row"><td colspan="10">Načítám…</td></tr></tbody></table>
     </div>
   </div>
 </div>
@@ -88,7 +89,7 @@ body{overflow-x:hidden;}
 <script src="wms_auth.js"></script>
 <script>
 
-var data=[],prog={},KIND='delivery',firstLoad=true;
+var SEL={},NAMES={},WAVES={},data=[],prog={},KIND='delivery',firstLoad=true;
 function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 async function afterLogin(){
   document.getElementById('f-status').innerHTML=PRG_FLOW.statusOptions(KIND,true);
@@ -102,23 +103,25 @@ async function load(){
   var q=supa.from('deliveries').select('*,warehouses(name,code),profiles(name),clients(name)').order('created_at',{ascending:false}).limit(2000);
   if(window.PRG_DC)q=PRG_DC.apply(q,'warehouse_id');
   var res=await q;
-  if(res.error){document.getElementById('tbody').innerHTML='<tr class="empty-row"><td colspan="9">Chyba: '+esc(res.error.message)+'</td></tr>';return;}
+  if(res.error){document.getElementById('tbody').innerHTML='<tr class="empty-row"><td colspan="10">Chyba: '+esc(res.error.message)+'</td></tr>';return;}
   data=res.data||[];
   var open=data.filter(function(r){return PRG_FLOW.isOpen(KIND,r.status);}).map(function(r){return r.id;});
+  var pn=await supa.from('profiles').select('id,name');(pn.data||[]).forEach(function(x){NAMES[x.id]=x.name;});
+  if(KIND==='delivery'){var wv=await supa.from('waves').select('*').order('created_at',{ascending:false}).limit(200);(wv.data||[]).forEach(function(w){WAVES[w.id]=w;});}
   prog=await PRG_FLOW.fetchProgress(supa,KIND,open.length?open:data.slice(0,200).map(function(r){return r.id;}));
   filterDocs();
 }
 function when(v){if(!v)return '–';var d=new Date(v);return d.toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});}
 function renderDocs(d){
   var tb=document.getElementById('tbody');
-  if(!d.length){tb.innerHTML='<tr class="empty-row"><td colspan="9">Žádné doklady</td></tr>';return;}
+  if(!d.length){tb.innerHTML='<tr class="empty-row"><td colspan="10">Žádné doklady</td></tr>';return;}
   tb.innerHTML=d.map(function(r){
     var wn=(r.warehouses&&(r.warehouses.code||r.warehouses.name))||'–',cn=(r.clients&&r.clients.name)||'–',un=(r.profiles&&r.profiles.name)||'–';
     var st=PRG_FLOW.norm(KIND,r.status);
-    return '<tr><td><a href="wms_delivery.html?id='+r.id+'" style="font-weight:700;color:var(--accent);text-decoration:none;font-family:\'JetBrains Mono\',monospace">'+esc(r.delivery_number)+'</a>'+PRG_FLOW.problemIcon(r)+'</td>'
+    return '<tr><td><input type="checkbox" class="sel" value="'+r.id+'" onchange="selUpd()"'+(SEL[r.id]?' checked':'')+'></td><td><a href="wms_delivery.html?id='+r.id+'" style="font-weight:700;color:var(--accent);text-decoration:none;font-family:\'JetBrains Mono\',monospace">'+esc(r.delivery_number)+'</a>'+PRG_FLOW.problemIcon(r)+'</td>'
       +'<td>'+esc(cn)+'</td>'+'<td>'+(r.special_status==='hold'?'<span class="badge badge-red">Hold</span>':r.special_status==='preorder'?'<span class="badge badge-orange">Předobjednávka</span>':'')+'</td>'+'<td>'+esc(wn)+'</td>'
       +'<td>'+PRG_FLOW.badge(KIND,st)+'</td>'
-      +'<td style="font-size:12px;color:var(--muted);white-space:nowrap">'+esc(PRG_FLOW.progress(KIND,r,prog[r.id]))+'</td>'
+      +'<td style="font-size:12px;color:var(--muted);white-space:nowrap">'+esc(PRG_FLOW.progress(KIND,r,prog[r.id]))+(r.wave_id?'<br>🌊 '+esc((WAVES[r.wave_id]||{}).name||'vlna'):'')+(r.assigned_to?'<br>👤 '+esc(NAMES[r.assigned_to]||''):'')+'</td>'
       +'<td style="font-size:12px;white-space:nowrap">'+when(r.planned_at)+(r.priority==='high'?' <span class="badge badge-red">Vysoká</span>':'')+'</td>'
       +'<td>'+esc(un)+'</td>'
       +'<td><div style="display:flex;gap:4px"><a href="wms_delivery.html?id='+r.id+'" class="btn btn-secondary btn-sm">Detail</a>'
@@ -143,6 +146,21 @@ function filterDocs(){
   document.getElementById('f-info').textContent=out.length+' z '+data.length;
   renderDocs(out);
 }
+function selUpd(){SEL={};document.querySelectorAll('.sel:checked').forEach(function(c){SEL[c.value]=1;});var n=Object.keys(SEL).length,b=document.getElementById('sel-bar');b.style.display=n?'inline-flex':'none';document.getElementById('sel-n').textContent=n+' vybráno';}
+function selAll(on){document.querySelectorAll('.sel').forEach(function(c){c.checked=on;});selUpd();}
+function clearSel(){selAll(false);document.getElementById('sel-all').checked=false;}
+function selIds(){return Object.keys(SEL).map(Number);}
+async function assignSel(){var ids=selIds();if(!ids.length)return;var opts=Object.keys(NAMES).map(function(id,i){return (i+1)+' = '+NAMES[id];}).join('\n');
+  var c=prompt('Přiřadit '+ids.length+' dokladů komu? Napiš číslo:\n0 = nikomu\n'+opts,'');if(c===null)return;var keys=Object.keys(NAMES),to=Number(c)>0?keys[Number(c)-1]:null;
+  if(Number(c)>0&&!to){toast('Neplatná volba');return;}
+  var r=await supa.rpc('wms_assign',{p_type:KIND,p_ids:ids,p_to:to,p_user:currentUser.id});if(r.error){toast('❌ '+PRG_FLOW.errMsg(r.error));return;}toast('Přiřazeno');clearSel();load();}
+async function makeWave(){var ids=selIds();if(!ids.length)return;var dc=window.PRG_DC&&PRG_DC.currentId();
+  var first=data.find(function(x){return x.id===ids[0];});if(dc==null&&first)dc=first.warehouse_id;
+  if(data.some(function(x){return SEL[x.id]&&String(x.warehouse_id)!==String(dc);})){toast('Vlna může být jen z jednoho DC');return;}
+  var nm=prompt('Název vlny (prázdné = podle času):','');if(nm===null)return;
+  var r=await supa.rpc('wms_wave_create',{p_dc:isNaN(Number(dc))?dc:Number(dc),p_ids:ids,p_name:nm||null,p_user:currentUser.id});
+  if(r.error){toast('❌ '+PRG_FLOW.errMsg(r.error));return;}
+  var d=r.data||{};alert('Vlna: zařazeno '+d.added+' výdejů'+(d.skipped?'\nNezařazeno: '+d.skipped:''));clearSel();load();}
 async function del(id){
   var r=data.find(function(x){return x.id===id;});
   if(!r||PRG_FLOW.norm(KIND,r.status)!=='new'){toast('Smazat jde jen doklad ve stavu Nový');return;}

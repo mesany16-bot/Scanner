@@ -148,6 +148,7 @@ setTimeout(function(){
     <p style="font-size:13px;color:#7a8090;margin-bottom:18px">Co chceš otevřít?</p>
     <button class="mode-select-btn wms" id="btn-wms" onclick="enterMode('wms')"><span class="msb-icon">🏭</span><span class="msb-title">PRG WMS</span><span class="msb-sub">Sklad, klienti, příjmy, výdeje</span></button>
     <button class="mode-select-btn inv" id="btn-inv" onclick="enterMode('inventura')"><span class="msb-icon">📋</span><span class="msb-title">Inventory Tool</span><span class="msb-sub">Seznamy majetku a výsledky inventur</span></button>
+    <button class="mode-select-btn sim" id="btn-temp" onclick="enterMode('teploty')" style="background:linear-gradient(135deg,#c0392b,#e67e22)"><span class="msb-icon">🌡️</span><span class="msb-title">Monitoring teplot</span><span class="msb-sub">Čidla, alarmy, reporty (GDP)</span></button>
     <button class="mode-select-btn sim" id="btn-sim" onclick="enterMode('simulator')"><span class="msb-icon">🚜</span><span class="msb-title">Retrak simulátor</span><span class="msb-sub">Simulace provozu haly a retraků</span></button>
   </div>
 </div>
@@ -358,12 +359,14 @@ async function onLoggedIn(user){
     window.location.reload();
     return;
   }
+  if(currentProfile.role==='client'){window.location.href='wms_portal.html';return;}
   var allowed=currentProfile.allowed_apps;
   var restricted=currentProfile.role!=='admin' && Array.isArray(allowed);
   var hasWms=!restricted || allowed.indexOf('wms')!==-1;
   var hasInv=!restricted || allowed.indexOf('inventura')!==-1;
   var hasSim=!restricted || allowed.indexOf('simulator')!==-1;
-  if(!hasWms && !hasInv && !hasSim){
+  var hasTemp=!restricted || allowed.indexOf('teploty')!==-1;
+  if(!hasWms && !hasInv && !hasSim && !hasTemp){
     document.getElementById('session-check').style.display='none';
     alert('Tvůj účet čeká na schválení administrátorem.');
     await supa.auth.signOut();
@@ -378,7 +381,8 @@ async function onLoggedIn(user){
   document.getElementById('auth-screen').style.display='none';
   startSessionIdleWatch();
   var reqApp=new URLSearchParams(window.location.search).get('app');
-  var availApps=[hasWms&&'wms',hasInv&&'inventura',hasSim&&'simulator'].filter(Boolean);
+  var availApps=[hasWms&&'wms',hasInv&&'inventura',hasSim&&'simulator',hasTemp&&'teploty'].filter(Boolean);
+  document.getElementById('btn-temp').style.display=hasTemp?'block':'none';
   document.getElementById('btn-wms').style.display=hasWms?'block':'none';
   document.getElementById('btn-inv').style.display=hasInv?'block':'none';
   document.getElementById('btn-sim').style.display=hasSim?'block':'none';
@@ -390,6 +394,7 @@ async function onLoggedIn(user){
 async function enterMode(mode){
   if(mode==='inventura'){ window.location.href='wms_inventura.html'; return; }
   if(mode==='simulator'){ window.location.href='wms_simulator.html'; return; }
+  if(mode==='teploty'){ window.location.href='wms_temp.html'; return; }
   document.getElementById('mode-select-screen').style.display='none';
   document.getElementById('app').style.display='block';
   try{if(window.PRG_DC)await PRG_DC.init(supa,currentProfile);}catch(e){console.warn('DC',e);}

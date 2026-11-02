@@ -112,7 +112,7 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
     <div class="modal-header"><h3>Upravit uživatele</h3><button class="modal-close" onclick="closeModal('modal')">✕</button></div>
     <div class="modal-body">
       <div class="form-row single"><div class="form-group"><label>Jméno</label><input id="f-name" type="text"></div></div>
-      <div class="form-row"><div class="form-group"><label>Role</label><select id="f-role"><option value="user">User – může editovat</option><option value="admin">Admin – plná práva</option></select></div>
+      <div class="form-row"><div class="form-group"><label>Role</label><select id="f-role" onchange="roleUi()"><option value="user">User – může editovat</option><option value="admin">Admin – plná práva</option><option value="client">Klient – jen klientský portál (čtení)</option></select></div><div class="form-group" id="f-client-wrap" style="display:none"><label>Klient</label><select id="f-client"></select></div>
       <div class="form-group"><label>Stav</label><select id="f-active"><option value="true">Aktivní</option><option value="false">Deaktivován</option></select></div></div>
       <div class="form-row single"><div class="form-group"><label>Přístup do prostředí</label><div id="f-apps" style="display:flex;gap:6px 16px;flex-wrap:wrap;margin-top:4px;"></div></div></div>
       <div class="form-row single"><div class="form-group"><label>Přístup do DC</label>
@@ -151,7 +151,7 @@ async function afterLogin(){
   if(currentProfile&&currentProfile.role!=='admin'){toast('⚠️ Přístup pouze pro administrátory');setTimeout(function(){go('wms_dashboard.html');},1500);return;}
   load();
 }
-function isPending(u){return u.role!=='admin'&&u.is_active!==false&&Array.isArray(u.allowed_apps)&&u.allowed_apps.length===0;}
+function isPending(u){return u.role!=='admin'&&u.role!=='client'&&u.is_active!==false&&Array.isArray(u.allowed_apps)&&u.allowed_apps.length===0;}
 var dcList=[];
 async function load(){
   var res=await supa.rpc('admin_list_users');
@@ -210,7 +210,7 @@ async function resetPw(email){
   if(res.error){toast('❌ '+res.error.message);return;}
   toast('✅ Odkaz na reset hesla odeslán na '+email);
 }
-var APP_LIST=[{key:'wms',label:'PRG WMS'},{key:'inventura',label:'Inventory Tool'},{key:'simulator',label:'Retrak simulátor'}];
+var APP_LIST=[{key:'wms',label:'PRG WMS'},{key:'inventura',label:'Inventory Tool'},{key:'simulator',label:'Retrak simulátor'},{key:'teploty',label:'Monitoring teplot'}];
 function renderAppCheckboxes(allowed){
   var wrap=document.getElementById('f-apps');
   wrap.innerHTML=APP_LIST.map(function(a){
@@ -233,7 +233,14 @@ function toggleDcAll(){
   document.querySelectorAll('.f-dc-cb').forEach(function(cb){cb.disabled=all;if(all)cb.checked=false;});
 }
 function escH(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function edit(id){
+var CLS=null;
+function roleUi(){document.getElementById('f-client-wrap').style.display=document.getElementById('f-role').value==='client'?'':'none';}
+async function edit(id){
+  if(!CLS){CLS=(await supa.from('clients').select('id,name').order('name')).data||[];document.getElementById('f-client').innerHTML='<option value="">– vyber klienta –</option>'+CLS.map(function(c){return '<option value="'+c.id+'">'+String(c.name).replace(/</g,'&lt;')+'</option>';}).join('');}
+  var pc=await supa.from('profiles').select('client_id').eq('id',id).maybeSingle();document.getElementById('f-client').value=(pc.data&&pc.data.client_id)||'';
+  return edit0(id);
+}
+function edit0(id){
   var u=data.find(function(x){return x.id===id;});
   if(!u)return;
   editId=id;
@@ -242,6 +249,7 @@ function edit(id){
   document.getElementById('f-active').value=u.is_active===false?'false':'true';
   renderAppCheckboxes(u.allowed_apps);
   renderDcCheckboxes(u.allowed_dcs);
+  roleUi();
   document.getElementById('modal').style.display='flex';
 }
 async function save(){
@@ -249,6 +257,7 @@ async function save(){
   var allDc=document.getElementById('f-dc-all').checked;
   var dcVals=Array.prototype.slice.call(document.querySelectorAll('.f-dc-cb:checked')).map(function(cb){var w=dcList.find(function(x){return String(x.id)===cb.value;});return w?w.id:cb.value;});
   var upd={name:document.getElementById('f-name').value.trim(),role:document.getElementById('f-role').value,is_active:document.getElementById('f-active').value==='true',allowed_apps:allowedApps,allowed_dcs:allDc?null:dcVals};
+  if(upd.role==='client'){var cv=document.getElementById('f-client').value;if(!cv){toast('Vyber klienta');return;}upd.client_id=Number(cv);upd.allowed_apps=[];}else upd.client_id=null;
   var res=await supa.from('profiles').update(upd).eq('id',editId).select();
   if(res.error){toast('❌ '+res.error.message);return;}
   if(!res.data||!res.data.length){toast('❌ Uložení se nepovedlo (chybí oprávnění v databázi)');return;}

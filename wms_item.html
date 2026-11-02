@@ -153,6 +153,14 @@ body{overflow-x:hidden;}
           <div class="form-group"><label>Stav</label><select id="f-act2" disabled><option value="1">Aktivní</option><option value="0">Neaktivní</option></select></div>
         </div>
         <div class="form-row" style="padding:0 20px">
+          <div class="form-group"><label>Expirace</label><select id="f-exp" disabled><option value="0">Nesledovat</option><option value="1">Sledovat (povinná při příjmu, výdej FEFO)</option></select></div>
+          <div class="form-group"><label>Min. trvanlivost při výdeji (dní)</label><input id="f-shelf" type="number" min="0" disabled></div>
+        </div>
+        <div class="form-row" style="padding:0 20px">
+          <div class="form-group"><label>Sériová čísla</label><select id="f-ser" disabled><option value="none">Nesledovat</option><option value="in">Při příjmu</option><option value="out">Při výdeji</option><option value="both">Při příjmu i výdeji</option></select></div>
+          <div class="form-group"></div>
+        </div>
+        <div class="form-row" style="padding:0 20px">
           <div class="form-group"><label>Foto URL</label><input id="f-photo" type="url" disabled></div>
           <div class="form-group"></div>
         </div>
@@ -268,6 +276,7 @@ async function loadItem(){
   document.getElementById('f-prim').value=i.primary_location||'';
   document.getElementById('f-pmin').value=i.pick_min!=null?i.pick_min:'';
   document.getElementById('f-lotx').value=i.lot_exempt?'1':'0';
+  document.getElementById('f-exp').value=i.expiry_tracked?'1':'0';document.getElementById('f-shelf').value=i.shelf_min_days!=null?i.shelf_min_days:'';document.getElementById('f-ser').value=i.serial_in&&i.serial_out?'both':i.serial_in?'in':i.serial_out?'out':'none';
   document.getElementById('f-act2').value=i.is_active===false?'0':'1';
   loadBalances(i);
   document.getElementById('f-photo').value=i.photo_url||'';
@@ -320,7 +329,7 @@ async function saveItem(){
   var gc=document.getElementById('f-gtc').value.trim(),gp=document.getElementById('f-gtp').value.trim();
   if((gc&&!/^\d{14}$/.test(gc))||(gp&&!/^\d{14}$/.test(gp))){toast('⚠️ GTIN kartonu/palety musí mít 14 číslic');return;}
   var ivv=function(id){var v=parseInt(document.getElementById(id).value);return isNaN(v)?null:v;};
-  Object.assign(p,{units_per_carton:ivv('f-upc'),abc_class:document.getElementById('f-abcc').value||null,gtin_carton:gc||null,gtin_pallet:gp||null,primary_location:document.getElementById('f-prim').value.trim().toUpperCase()||null,pick_min:ivv('f-pmin'),lot_exempt:document.getElementById('f-lotx').value==='1',is_active:document.getElementById('f-act2').value==='1'});
+  Object.assign(p,{units_per_carton:ivv('f-upc'),abc_class:document.getElementById('f-abcc').value||null,gtin_carton:gc||null,gtin_pallet:gp||null,primary_location:document.getElementById('f-prim').value.trim().toUpperCase()||null,pick_min:ivv('f-pmin'),lot_exempt:document.getElementById('f-lotx').value==='1',is_active:document.getElementById('f-act2').value==='1',expiry_tracked:document.getElementById('f-exp').value==='1',shelf_min_days:ivv('f-shelf'),serial_in:/in|both/.test(document.getElementById('f-ser').value),serial_out:/out|both/.test(document.getElementById('f-ser').value)});
   if(!p.sku){toast('⚠️ SKU je povinné');return;}
   var res=await supa.from('stock_items').update(p).eq('id',itemId);
   if(res.error){toast('❌ '+res.error.message);return;}

@@ -4,7 +4,10 @@
   var ITEMS=[
     {k:'hub',      i:'📊', t:'Hub',        u:'wms_dashboard.html'},
     {k:'wms',      i:'🏭', t:'PRG WMS',    u:'wms_dashboard.html?app=wms'},
+    {k:'kpi',      i:'📈', t:'KPI',        u:'wms_kpi.html'},
     {k:'balances', i:'🧮', t:'Zásoby',     u:'wms_balances.html'},
+    {k:'occupancy',i:'🗺️', t:'Obsazenost', u:'wms_occupancy.html'},
+    {k:'accuracy', i:'🎯', t:'Přesnost zásob', u:'wms_accuracy.html'},
     {k:'adjustments',i:'🔧', t:'Adjustments', u:'wms_adjustments.html'},
     {k:'history',  i:'🕘', t:'Historie',   u:'wms_history.html'},
     {k:'clients',  i:'🏢', t:'Klienti',    u:'wms_clients.html'},
@@ -12,14 +15,17 @@
     {k:'deliveries',i:'📤',t:'Výdeje',     u:'wms_deliveries.html'},
     {k:'yard',     i:'🚛', t:'Yard',       u:'wms_yard.html'},
     {k:'scans',    i:'📱', t:'Skeny',      u:'wms_scans.html'},
+    {k:'billing',  i:'💰', t:'Fakturace',  u:'wms_billing.html', admin:true},
     {group:'setup', i:'⚙️', t:'Setup', items:[
       {k:'stock',    i:'🏷️', t:'SKU Setup',     u:'wms_stock.html'},
       {k:'dc',       i:'🏬', t:'DC',            u:'wms_warehouses.html'},
       {k:'locations',i:'📍', t:'Lokace',        u:'wms_locations.html'},
-      {k:'print',    i:'🖨️', t:'Šablony tisku', u:'wms_print.html', admin:true}
+      {k:'print',    i:'🖨️', t:'Šablony tisku', u:'wms_print.html', admin:true},
+      {k:'settings', i:'🔧', t:'Nastavení systému', u:'wms_settings.html', admin:true}
     ]},
     {sep:true},
     {k:'inventura',i:'📋', t:'Inventory Tool', u:'wms_inventura.html'},
+    {k:'temp',     i:'🌡️', t:'Monitoring teplot', u:'wms_temp.html'},
     {k:'users',    i:'👥', t:'Uživatelé',  u:'wms_users.html', admin:true}
   ];
   var KEY='prg_nav_open_';
@@ -145,7 +151,7 @@
     'wms_dashboard.html':function(){return hasFn('loadDashboard')&&loadDashboard();},
     'wms_balances.html':'load','wms_clients.html':'load','wms_receipts.html':'load','wms_deliveries.html':'load',
     'wms_scans.html':'load','wms_locations.html':'load','wms_warehouses.html':'load','wms_yard.html':'load',
-    'wms_stock.html':'load','wms_users.html':'load',
+    'wms_stock.html':'load','wms_users.html':'load','wms_occupancy.html':'load','wms_temp.html':'refresh','wms_kpi.html':'load','wms_accuracy.html':'load',
     'wms_adjustments.html':'loadHistory',
     'wms_history.html':function(){return hVal('h-q')&&hasFn('runSearch')&&runSearch();},
     'wms_inventura.html':function(){return hasFn('loadInvPage')&&loadInvPage(true);},

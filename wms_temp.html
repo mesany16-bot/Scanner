@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="cs"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Monitoring teplot – PRG WMS</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="wms_nav.js"></script>
+<script src="wms_flow.js"></script>
+<script src="wms_dc.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+:root{--bg:#f0f2f5;--surface:#fff;--border:#e2e6ed;--accent:#0a7c4e;--accent-light:#e8f7f1;--danger:#c0392b;--danger-light:#fdecea;--warning:#e67e22;--warning-light:#fef3e8;--info:#2980b9;--info-light:#eaf4fb;--text:#1a1d27;--muted:#7a8090;--shadow:0 2px 12px rgba(0,0,0,0.07);--sidebar-w:220px;}
+*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.btn{padding:9px 18px;border:none;border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;transition:opacity 0.15s;text-decoration:none;display:inline-flex;align-items:center;gap:6px;}.btn:active{opacity:0.8;}.btn-primary{background:var(--accent);color:#fff;}.btn-secondary{background:var(--bg);color:var(--muted);border:1.5px solid var(--border);}.btn-danger{background:var(--danger);color:#fff;}.btn-warning{background:var(--warning);color:#fff;}.btn-sm{padding:6px 12px;font-size:12px;}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}.badge-green{background:var(--accent-light);color:var(--accent);}.badge-orange{background:var(--warning-light);color:var(--warning);}.badge-red{background:var(--danger-light);color:var(--danger);}.badge-blue{background:var(--info-light);color:var(--info);}.badge-gray{background:#f0f2f5;color:var(--muted);}
+.card{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden;margin-bottom:20px;}.card-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}.card-header h3{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;}
+table{width:100%;border-collapse:collapse;font-size:13px;}thead{background:#f8f9fb;}th{padding:9px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;}td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}tbody tr:last-child td{border-bottom:none;}tbody tr:hover{background:#fafbfc;}.empty-row td{text-align:center;color:var(--muted);padding:28px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}.form-row.single{grid-template-columns:1fr;}.form-row.triple{grid-template-columns:1fr 1fr 1fr;}
+.form-group{display:flex;flex-direction:column;gap:5px;}.form-group label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;}
+.form-group input,.form-group select,.form-group textarea{padding:9px 12px;border:1.5px solid var(--border);border-radius:7px;font-family:'Inter',sans-serif;font-size:13px;outline:none;transition:border-color 0.2s;background:#fff;}.form-group input:focus,.form-group select:focus{border-color:var(--accent);}.form-group textarea{resize:vertical;min-height:70px;}
+.form-section{font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+#sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);background:#0a7c4e;display:flex;flex-direction:column;z-index:50;transition:transform 0.25s ease;}.sidebar-logo{padding:20px 18px 14px;font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:#fff;letter-spacing:1.5px;border-bottom:1px solid rgba(255,255,255,0.15);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;}.sidebar-logo span{font-size:11px;font-weight:400;opacity:0.7;width:100%;letter-spacing:0;}#sidebar-close-btn{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;opacity:0.8;display:none;}nav{flex:1;padding:10px 0;overflow-y:auto;}.nav-item{display:flex;align-items:center;gap:10px;padding:11px 18px;color:rgba(255,255,255,0.75);cursor:pointer;font-size:14px;font-weight:500;transition:background 0.15s,color 0.15s;border-left:3px solid transparent;}.nav-item:hover{background:rgba(255,255,255,0.1);color:#fff;}.nav-item.active{background:rgba(255,255,255,0.15);color:#fff;border-left-color:#fff;}.nav-icon{font-size:17px;width:22px;text-align:center;}.sidebar-user{padding:12px 18px;border-top:1px solid rgba(255,255,255,0.15);font-size:12px;color:rgba(255,255,255,0.7);display:flex;flex-direction:column;gap:4px;}.sidebar-user strong{color:#fff;font-size:13px;}.sidebar-user button{background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;margin-top:4px;}
+#main{margin-left:var(--sidebar-w);min-height:100vh;}.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:13px 24px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow);position:sticky;top:0;z-index:40;}.topbar h2{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;flex:1;}.topbar-actions{display:flex;gap:8px;align-items:center;}.hamburger-btn{display:inline-flex;align-items:center;background:none;border:none;font-size:24px;cursor:pointer;color:var(--text);padding:4px 8px;margin-right:4px;border-radius:6px;}.content{padding:24px;}#sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:49;}
+.back-btn{background:var(--bg);border:1.5px solid var(--border);border-radius:7px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;text-decoration:none;display:flex;align-items:center;gap:6px;}.back-btn:hover{border-color:var(--accent);color:var(--accent);}
+.items-table td input,.items-table td select{padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;width:100%;outline:none;font-family:'Inter',sans-serif;}
+#toast{position:fixed;bottom:24px;right:24px;background:#1a1d27;color:#fff;padding:12px 20px;border-radius:9px;font-size:13px;font-weight:500;z-index:999;opacity:0;transition:opacity 0.3s;pointer-events:none;}#toast.show{opacity:1;}
+@media(min-width:901px){.hamburger-btn{display:none;}#sidebar-close-btn{display:none !important;}}
+@media(max-width:900px){:root{--sidebar-w:0px;}#sidebar{transform:translateX(-220px);width:220px;}#sidebar.open{transform:translateX(0);}#sidebar-close-btn{display:block !important;}#main{margin-left:0;}.content{padding:14px;}.topbar{padding:11px 14px;}}
+/* mobilní zobrazení – sjednoceno s Inventory Tool */
+@media(max-width:900px){
+body{overflow-x:hidden;}
+#main{min-width:0;max-width:100%;}
+.content{padding:12px !important;min-width:0;max-width:100%;}
+.card{min-width:0;max-width:100%;}
+.topbar{flex-wrap:wrap;gap:8px;padding:10px 12px !important;}
+.topbar h2{font-size:19px !important;min-width:0;flex:1 1 auto;}
+.topbar-actions{flex-wrap:wrap;gap:6px;margin-left:auto;}
+#last-refresh{display:none;}
+#theme-popover{right:8px !important;max-width:calc(100vw - 16px);}
+.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:10px !important;}
+.two-col{grid-template-columns:minmax(0,1fr) !important;}
+.stat-grid>*,.two-col>*{min-width:0;}
+.form-row{grid-template-columns:1fr !important;}
+}
+</style></head><body>
+<div id="session-check" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)"><div style="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:16px;opacity:0.85;">Načítám…</div></div><div id="auth-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)"><div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)"><h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1><p style="font-size:13px;color:#7a8090;margin-bottom:20px">Warehouse Management System</p><div id="auth-msg" style="font-size:13px;color:#c0392b;min-height:18px;margin-bottom:8px"></div><input id="login-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none"><input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none"><button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Přihlásit se</button></div></div>
+<div id="app" style="display:none">
+  <div id="sidebar"><div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">&#x2715;</button></div>
+  <nav id="wms-nav" data-active="temp"></nav>
+  <div class="sidebar-user"><strong id="sidebar-user-name">-</strong><span id="sidebar-user-role" class="badge badge-gray"></span><button onclick="doLogout()">Odhlásit se</button></div></div>
+  <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+  <div id="main">
+<div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">&#9776;</button><h2>🌡️ Monitoring teplot</h2><div class="topbar-actions"><button class="btn btn-secondary btn-sm" onclick="refresh()">↻ Obnovit</button></div></div>
+<div class="content">
+<style>
+.tt-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:14px}.tt-tab{padding:9px 16px;border-radius:9px;border:1.5px solid var(--border);background:#fff;font-weight:600;font-size:14px;cursor:pointer;color:var(--muted)}.tt-tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.tt-kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}.tt-k{background:#fff;border:1px solid var(--border);border-radius:12px;padding:14px 16px}.tt-k b{display:block;font-family:Barlow Condensed,sans-serif;font-size:30px}.tt-k span{font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:600}
+.tt-zone{margin-bottom:18px}.tt-zh{display:flex;align-items:baseline;gap:10px;margin:0 0 8px;font-family:Barlow Condensed,sans-serif;font-size:19px;font-weight:700}.tt-zh small{font-family:Inter,sans-serif;font-size:12px;color:var(--muted);font-weight:500}
+.tt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.tt-s{background:#fff;border:2px solid var(--border);border-radius:14px;padding:14px;cursor:pointer;position:relative}.tt-s:hover{box-shadow:var(--shadow)}
+.tt-s .t{font-family:Barlow Condensed,sans-serif;font-size:40px;font-weight:700;line-height:1}.tt-s .n{font-weight:700;font-size:14px;margin-bottom:6px;padding-right:60px}.tt-s .m{font-size:12px;color:var(--muted);margin-top:6px}
+.tt-s .st{position:absolute;top:12px;right:12px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:10px}
+.tt-ok{border-color:#bfe6d2}.tt-ok .st{background:var(--accent-light);color:var(--accent)}.tt-warn{border-color:#f5c99a}.tt-warn .st{background:var(--warning-light);color:var(--warning)}
+.tt-crit{border-color:#e8a29b;background:#fff7f6}.tt-crit .st{background:var(--danger);color:#fff}.tt-crit .t{color:var(--danger)}.tt-off{border-color:#d5d8de;background:#f7f8fa}.tt-off .st{background:#d5d8de;color:#555}.tt-off .t{color:#9aa0ab}
+.tt-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)}.tt-bar select,.tt-bar input{padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px}
+.tt-banner{background:var(--danger);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:14px;font-weight:600;display:none;cursor:pointer}
+.tt-form{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;padding:14px 16px}.tt-form label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;display:block;margin-bottom:3px}.tt-form input,.tt-form select{width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px}
+.tt-code{font-family:JetBrains Mono,monospace;font-size:12px;background:#f4f6f8;border-radius:8px;padding:10px 12px;word-break:break-all;white-space:pre-wrap}
+@media(max-width:640px){.tt-kpi{grid-template-columns:repeat(2,minmax(0,1fr))}.tt-s .t{font-size:34px}}
+@media print{#sidebar,.topbar,.tt-tabs,.tt-bar,.no-print,#toast{display:none!important}#main{margin:0!important}.content{padding:0!important}.card{box-shadow:none;border:none}#tab-report .print-only{display:block!important}}
+</style>
+<div class="tt-banner" id="banner" onclick="tab('alarms')"></div>
+<div class="tt-tabs no-print">
+  <button class="tt-tab on" data-t="live" onclick="tab('live')">📡 Přehled</button>
+  <button class="tt-tab" data-t="chart" onclick="tab('chart')">📈 Grafy</button>
+  <button class="tt-tab" data-t="alarms" onclick="tab('alarms')">🚨 Alarmy <span id="alarm-cnt"></span></button>
+  <button class="tt-tab" data-t="report" onclick="tab('report')">📄 Reporty</button>
+  <button class="tt-tab admin-only" data-t="setup" onclick="tab('setup')" style="display:none">⚙️ Nastavení</button>
+</div>
+
+<div id="tab-live">
+  <div class="tt-kpi" id="kpi"></div>
+  <div id="zones"><div style="color:var(--muted);padding:20px">Načítám…</div></div>
+</div>
+
+<div id="tab-chart" style="display:none">
+  <div class="card"><div class="tt-bar">
+    <select id="c-sensor" multiple size="1" style="min-width:220px;height:38px"></select>
+    <select id="c-range" onchange="chartLoad()"><option value="24">24 hodin</option><option value="168">7 dní</option><option value="720">30 dní</option><option value="custom">Vlastní…</option></select>
+    <input type="datetime-local" id="c-from" style="display:none"><input type="datetime-local" id="c-to" style="display:none">
+    <button class="btn btn-primary btn-sm" onclick="chartLoad()">Zobrazit</button>
+    <button class="btn btn-secondary btn-sm" onclick="chartXlsx()">📊 XLSX</button>
+    <span id="c-info" style="font-size:12px;color:var(--muted)"></span>
+  </div><div style="padding:14px;height:420px"><canvas id="c-canvas"></canvas></div>
+  <div style="padding:0 16px 14px;font-size:12px;color:var(--muted)">Tip: Ctrl/Shift pro výběr více čidel. Čárkovaně jsou limity zóny.</div></div>
+</div>
+
+<div id="tab-alarms" style="display:none">
+  <div class="card"><div class="tt-bar">
+    <select id="a-filter" onchange="alarmsLoad()"><option value="open">Otevřené a nepotvrzené</option><option value="7">Posledních 7 dní</option><option value="30">Posledních 30 dní</option><option value="all">Vše</option></select>
+    <select id="a-kind" onchange="alarmsLoad()"><option value="">Všechny typy</option><option value="temp">Teplota</option><option value="hum">Vlhkost</option><option value="offline">Výpadek čidla</option><option value="battery">Baterie</option></select>
+    <button class="btn btn-secondary btn-sm" id="notif-btn" onclick="enableNotif()">🔔 Upozornění v prohlížeči</button>
+  </div><div style="overflow-x:auto"><table><thead><tr><th>Zóna / čidlo</th><th>Typ</th><th>Začátek</th><th>Konec</th><th>Trvání</th><th>Extrém / limit</th><th>Potvrzení</th></tr></thead><tbody id="a-body"></tbody></table></div></div>
+</div>
+
+<div id="tab-report" style="display:none">
+  <div class="card"><div class="tt-bar">
+    <select id="r-period" onchange="repPeriod()"><option value="lm">Minulý měsíc</option><option value="tm">Tento měsíc</option><option value="7">Posledních 7 dní</option><option value="custom">Vlastní…</option></select>
+    <input type="date" id="r-from"><input type="date" id="r-to">
+    <select id="r-zone"><option value="">Všechny zóny</option></select>
+    <select id="r-client"><option value="">Všichni klienti</option></select>
+    <button class="btn btn-primary btn-sm" onclick="repLoad()">Vytvořit report</button>
+    <button class="btn btn-secondary btn-sm" onclick="repXlsx()">📊 XLSX</button>
+    <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨 Tisk / PDF</button>
+  </div>
+  <div id="r-out" style="padding:16px"><div style="color:var(--muted)">Vyber období a klikni na Vytvořit report.</div></div></div>
+</div>
+
+<div id="tab-setup" style="display:none">
+  <div class="card"><div class="card-header"><h3>🏷 Zóny a limity</h3><button class="btn btn-primary btn-sm" onclick="zoneEdit()">+ Nová zóna</button></div><div style="overflow-x:auto"><table><thead><tr><th>Zóna</th><th>DC</th><th>Klient</th><th>Teplota</th><th>Vlhkost</th><th>Zpoždění alarmu</th><th>Offline po</th><th>Čidel</th><th></th></tr></thead><tbody id="z-body"></tbody></table></div></div>
+  <div class="card"><div class="card-header"><h3>📡 Čidla</h3><button class="btn btn-primary btn-sm" onclick="sensorEdit()">+ Nové čidlo</button></div><div style="overflow-x:auto"><table><thead><tr><th>Čidlo</th><th>DevEUI</th><th>Zóna</th><th>Umístění</th><th>Korekce</th><th>Kalibrace do</th><th>Naposledy</th><th></th></tr></thead><tbody id="s-body"></tbody></table></div></div>
+  <div class="card"><div class="card-header"><h3>⬆️ Import z dataloggeru (CSV / XLSX)</h3></div><div class="tt-form">
+    <div><label>Čidlo</label><select id="i-sensor"></select></div><div><label>Soubor</label><input type="file" id="i-file" accept=".csv,.xlsx,.xls,.txt"></div>
+    <div style="align-self:end"><button class="btn btn-primary btn-sm" onclick="importFile()">Importovat</button></div></div>
+    <div style="padding:0 16px 14px;font-size:12px;color:var(--muted)">Sloupce se poznají podle názvu: čas / datum / time, teplota / temp / °C, vlhkost / hum / %RH. Formát data 1.11.2026 10:00 i ISO.</div></div>
+  <div class="card"><div class="card-header"><h3>🔌 Napojení čidel (LoRaWAN webhook)</h3></div><div style="padding:14px 16px;font-size:13px;line-height:1.6" id="hook-info"></div></div>
+  <div class="card"><div class="card-header"><h3>🧪 Testovací data</h3></div><div class="tt-form"><div><label>Čidlo</label><select id="sim-sensor"></select></div><div><label>Hodin zpět</label><input type="number" id="sim-h" value="48" min="1" max="720"></div><div style="align-self:end"><button class="btn btn-secondary btn-sm" onclick="simulate()">Vygenerovat</button></div></div>
+    <div style="padding:0 16px 14px;font-size:12px;color:var(--muted)">Vytvoří měření po 10 minutách včetně jedné odchylky – pro vyzkoušení grafů, alarmů a reportů bez čidel.</div></div>
+  <div class="card"><div class="card-header"><h3>🕘 Audit trail</h3></div><div style="overflow-x:auto;max-height:360px"><table><thead><tr><th>Kdy</th><th>Kdo</th><th>Akce</th><th>Cíl</th><th>Detail</th></tr></thead><tbody id="au-body"></tbody></table></div></div>
+</div>
+</div>
+</div>
+</div>
+<div id="toast"></div>
+<script>
+var SUPA_URL="https://ujvqanqqhmnfxsfeqixc.supabase.co";var SUPA_KEY="sb_publishable_5o19BnZUEi8j-rU5DDAgBA_HwKB7V-v";
+var supa=supabase.createClient(SUPA_URL,SUPA_KEY);
+var currentUser=null,currentProfile=null;
+async function doLogin(){var email=document.getElementById('login-email').value.trim();var pass=document.getElementById('login-pass').value;if(!email||!pass){document.getElementById('auth-msg').textContent='Vyplňte pole';return;}document.getElementById('auth-msg').textContent='Přihlašování…';var res=await supa.auth.signInWithPassword({email,password:pass});if(res.error){document.getElementById('auth-msg').textContent='Chyba: '+res.error.message;return;}await onLoggedIn(res.data.user);}
+// idle logout
+var SESSION_IDLE_MS=2*60*60*1000;var sessionIdleTimer=null;function startSessionIdleWatch(){function reset(){clearTimeout(sessionIdleTimer);sessionIdleTimer=setTimeout(async function(){await supa.auth.signOut();alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');window.location.href='wms_dashboard.html';},SESSION_IDLE_MS);}['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){document.addEventListener(evt,reset,{passive:true});});reset();}
+async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}var allowed=currentProfile.allowed_apps;if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1&&allowed.indexOf('teploty')===-1){alert('Nemáš přístup do Monitoringu teplot. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';(async function(){try{if(window.PRG_DC)await PRG_DC.init(supa,currentProfile);}catch(e){console.warn('DC',e);}if(typeof afterLogin==='function')afterLogin();})();startSessionIdleWatch();}
+async function doLogout(){await supa.auth.signOut();window.location.href='wms_dashboard.html';}
+function go(u){window.location.href=u;}
+function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
+var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(_tt);_tt=setTimeout(function(){e.classList.remove('show');},2800);}
+function closeModal(id){document.getElementById(id).style.display='none';}
+function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
+supa.auth.getSession().then(function(res){if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}else{window.location.href='wms_dashboard.html';}});
+
+var Z=[],SE=[],AL=[],CL=[],WH=[],TOKEN='',chart=null,curTab='live',seenAlarm={},firstLoad=true,repRows=[],chartRows=[];
+var PROF={ambient:'Pokojová 15–25 °C',cold:'Chlazená 2–8 °C',frozen:'Mražená −30 až −18 °C',custom:'Vlastní limity'};
+var KIND={t_high:'🌡 Vysoká teplota',t_low:'❄ Nízká teplota',h_high:'💧 Vysoká vlhkost',h_low:'💧 Nízká vlhkost',offline:'📴 Výpadek čidla',battery:'🔋 Slabá baterie'};
+function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function nf(v,d){return v==null||v===''?'–':Number(v).toLocaleString('cs-CZ',{minimumFractionDigits:d||0,maximumFractionDigits:d==null?1:d});}
+function dt(v){return v?new Date(v).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'–';}
+function ago(v){if(!v)return 'nikdy';var m=Math.round((Date.now()-new Date(v))/60000);return m<1?'právě teď':m<60?'před '+m+' min':m<1440?'před '+Math.round(m/60)+' h':'před '+Math.round(m/1440)+' dny';}
+function dur(a,b){var m=Math.round(((b?new Date(b):new Date())-new Date(a))/60000);return m<60?m+' min':m<1440?Math.floor(m/60)+' h '+(m%60)+' min':Math.floor(m/1440)+' d '+Math.floor(m%1440/60)+' h';}
+function lim(z){if(!z)return [null,null,null,null];var d={cold:[2,8],frozen:[-30,-18],ambient:[15,25]}[z.profile]||[null,null];return [z.t_min!=null?Number(z.t_min):d[0],z.t_max!=null?Number(z.t_max):d[1],z.h_min!=null?Number(z.h_min):null,z.h_max!=null?Number(z.h_max):null];}
+function isAdmin(){return currentProfile&&currentProfile.role==='admin';}
+function zoneOf(s){return Z.find(function(z){return z.id===s.zone_id;});}
+function dcName(id){var w=WH.find(function(x){return String(x.id)===String(id);});return w?(w.code||w.name):'';}
+function clName(id){var c=CL.find(function(x){return x.id===id;});return c?c.name:'';}
+async function afterLogin(){
+  if(isAdmin())document.querySelectorAll('.admin-only').forEach(function(e){e.style.display='';});
+  var c=await supa.from('clients').select('id,name').order('name');CL=c.data||[];
+  WH=(window.PRG_DC&&PRG_DC.list().length)?PRG_DC.list():((await supa.from('warehouses').select('id,code,name')).data||[]);
+  try{var t=localStorage.getItem('prg_temp_tab');if(t)tab(t,true);}catch(e){}
+  await refresh();
+  document.getElementById('r-client').innerHTML='<option value="">Všichni klienti</option>'+CL.map(function(x){return '<option value="'+x.id+'">'+esc(x.name)+'</option>';}).join('');
+  repPeriod();
+  document.getElementById('c-range').addEventListener('change',function(){var c=this.value==='custom';document.getElementById('c-from').style.display=document.getElementById('c-to').style.display=c?'':'none';});
+  if(curTab==='chart')chartLoad();if(curTab==='setup')setupRender();
+}
+function tab(t,quiet){
+  curTab=t;try{localStorage.setItem('prg_temp_tab',t);}catch(e){}
+  ['live','chart','alarms','report','setup'].forEach(function(x){document.getElementById('tab-'+x).style.display=x===t?'':'none';});
+  document.querySelectorAll('.tt-tab').forEach(function(b){b.classList.toggle('on',b.getAttribute('data-t')===t);});
+  if(quiet)return;
+  if(t==='chart')chartLoad();if(t==='alarms')alarmsLoad();if(t==='setup')setupRender();
+}
+async function refresh(){
+  try{await supa.rpc('wms_temp_check_offline');}catch(e){}
+  var zq=supa.from('temp_zones').select('*').order('name');if(window.PRG_DC)zq=PRG_DC.apply(zq,'dc_id');
+  var zr=await zq;if(zr.error){document.getElementById('zones').innerHTML='<div class="card" style="padding:20px">'+esc(/temp_zones|schema cache/.test(zr.error.message)?'Chybí databázová část – spusť v Supabase temp_setup-01.sql':zr.error.message)+'</div>';return;}
+  Z=zr.data||[];
+  SE=(await supa.from('temp_sensors').select('*').order('name')).data||[];
+  var dcIds=window.PRG_DC&&PRG_DC.currentId()!=null?[String(PRG_DC.currentId())]:null;
+  if(dcIds)SE=SE.filter(function(s){var z=zoneOf(s);return z?true:(s.dc_id==null||dcIds.indexOf(String(s.dc_id))>=0);});
+  AL=(await supa.from('temp_alarms').select('*').or('status.eq.open,ack_at.is.null').order('started_at',{ascending:false}).limit(500)).data||[];
+  AL=AL.filter(function(a){return SE.some(function(s){return s.id===a.sensor_id;});});
+  live();fillSelects();
+  var crit=AL.filter(function(a){return a.status==='open'&&a.level==='critical';}),unack=AL.filter(function(a){return !a.ack_at&&a.kind!=='battery';});
+  document.getElementById('alarm-cnt').textContent=unack.length?'('+unack.length+')':'';
+  var b=document.getElementById('banner');
+  if(crit.length){b.style.display='block';b.textContent='🚨 '+crit.length+' aktivní'+(crit.length>1?'ch':'')+' alarm'+(crit.length>1?'ů':'')+': '+crit.slice(0,3).map(function(a){var s=SE.find(function(x){return x.id===a.sensor_id;});return (s?s.name||s.dev_eui:'?')+' – '+(KIND[a.kind]||a.kind).replace(/^\S+ /,'');}).join(', ')+(crit.length>3?'…':'')+' · klikni pro detail';}
+  else b.style.display='none';
+  crit.forEach(function(a){if(!seenAlarm[a.id]&&!firstLoad)notify(a);seenAlarm[a.id]=1;});firstLoad=false;
+  if(curTab==='alarms')alarmsLoad();
+}
+function sstate(s){
+  var z=zoneOf(s),L=lim(z),open=AL.filter(function(a){return a.sensor_id===s.id&&a.status==='open';});
+  if(open.some(function(a){return a.kind==='offline';})||(!s.last_seen))return ['off','OFFLINE'];
+  if(open.some(function(a){return a.level==='critical';}))return ['crit','ALARM'];
+  var t=Number(s.last_t),w=z?Number(z.t_warn||1):1;
+  if(s.last_t!=null&&((L[1]!=null&&t>L[1])||(L[0]!=null&&t<L[0])))return ['warn','MIMO LIMIT'];
+  if(s.last_t!=null&&((L[1]!=null&&t>L[1]-w)||(L[0]!=null&&t<L[0]+w)))return ['warn','U LIMITU'];
+  if(open.some(function(a){return a.kind==='battery';}))return ['warn','BATERIE'];
+  return ['ok','OK'];
+}
+function live(){
+  var on=SE.filter(function(s){return s.is_active!==false;}),states=on.map(sstate);
+  var k=function(l,v,c){return '<div class="tt-k"><span>'+l+'</span><b style="color:'+(c||'var(--text)')+'">'+v+'</b></div>';};
+  document.getElementById('kpi').innerHTML=k('Čidel',on.length)+k('V pořádku',states.filter(function(x){return x[0]==='ok';}).length,'var(--accent)')
+    +k('Alarm / mimo limit',states.filter(function(x){return x[0]==='crit'||x[1]==='MIMO LIMIT';}).length,'var(--danger)')+k('Offline',states.filter(function(x){return x[0]==='off';}).length,'#7a8090');
+  var groups=Z.filter(function(z){return z.is_active!==false;}).map(function(z){return {z:z,s:on.filter(function(s){return s.zone_id===z.id;})};});
+  var un=on.filter(function(s){return !zoneOf(s);});if(un.length)groups.push({z:null,s:un});
+  document.getElementById('zones').innerHTML=groups.length?groups.map(function(g){
+    var L=lim(g.z);
+    return '<div class="tt-zone"><div class="tt-zh">'+(g.z?esc(g.z.name):'⚠ Čidla bez zóny')+'<small>'+(g.z?(L[0]!=null||L[1]!=null?nf(L[0])+' – '+nf(L[1])+' °C':'bez limitu')+(L[2]!=null||L[3]!=null?' · '+nf(L[2])+'–'+nf(L[3])+' %RH':'')+(g.z.client_id?' · '+esc(clName(g.z.client_id)):'')+(g.z.dc_id?' · '+esc(dcName(g.z.dc_id)):''):'přiřaď je v Nastavení')+'</small></div>'
+      +'<div class="tt-grid">'+(g.s.length?g.s.map(function(s){var st=sstate(s);
+        return '<div class="tt-s tt-'+st[0]+'" onclick="openChart('+s.id+')"><span class="st">'+st[1]+'</span><div class="n">'+esc(s.name||s.dev_eui)+'</div><div class="t">'+(s.last_t!=null?nf(s.last_t,1)+'°':'–')+'</div>'
+          +'<div class="m">💧 '+(s.last_h!=null?nf(s.last_h,0)+' %':'–')+' · 🔋 '+(s.last_bat!=null?nf(s.last_bat,2)+' V':'–')+'<br>'+ago(s.last_seen)+(s.place?' · '+esc(s.place):'')+'</div></div>';}).join(''):'<div style="color:var(--muted);font-size:13px">Žádná čidla</div>')+'</div></div>';
+  }).join(''):'<div class="card" style="padding:24px;text-align:center;color:var(--muted)">Zatím nejsou žádné zóny ani čidla. '+(isAdmin()?'Založ je v záložce ⚙️ Nastavení.':'Požádej administrátora o nastavení.')+'</div>';
+}
+function fillSelects(){
+  var opts=SE.map(function(s){var z=zoneOf(s);return '<option value="'+s.id+'">'+esc((z?z.name+' · ':'')+(s.name||s.dev_eui))+'</option>';}).join('');
+  ['c-sensor','i-sensor','sim-sensor'].forEach(function(id){var e=document.getElementById(id),v=Array.from(e.selectedOptions||[]).map(function(o){return o.value;});e.innerHTML=opts;Array.from(e.options).forEach(function(o){o.selected=v.indexOf(o.value)>=0;});if(!v.length&&e.options.length)e.options[0].selected=true;});
+  var rz=document.getElementById('r-zone'),v=rz.value;rz.innerHTML='<option value="">Všechny zóny</option>'+Z.map(function(z){return '<option value="'+z.id+'">'+esc(z.name)+'</option>';}).join('');rz.value=v;
+}
+function openChart(id){tab('chart',true);var e=document.getElementById('c-sensor');Array.from(e.options).forEach(function(o){o.selected=o.value===String(id);});chartLoad();}
+function range(){var r=document.getElementById('c-range').value;if(r==='custom'){var f=document.getElementById('c-from').value,t=document.getElementById('c-to').value;return [f?new Date(f):new Date(Date.now()-864e5),t?new Date(t):new Date()];}return [new Date(Date.now()-Number(r)*36e5),new Date()];}
+var COLORS=['#0a7c4e','#2980b9','#8e44ad','#d35400','#16a085','#c0392b','#7f8c8d','#2c3e50'];
+async function chartLoad(){
+  var ids=Array.from(document.getElementById('c-sensor').selectedOptions).map(function(o){return Number(o.value);});if(!ids.length)return;
+  var rg=range(),hrs=(rg[1]-rg[0])/36e5,bucket=hrs>24*10?60:(hrs>48?20:0);
+  var ds=[],lines=[];chartRows=[];
+  for(var i=0;i<ids.length;i++){
+    var s=SE.find(function(x){return x.id===ids[i];});
+    var r=await supa.rpc('wms_temp_series',{p_sensor:ids[i],p_from:rg[0].toISOString(),p_to:rg[1].toISOString(),p_bucket_min:bucket});
+    var d=r.data||[];d.forEach(function(x){chartRows.push({'Čidlo':s?s.name||s.dev_eui:ids[i],'Čas':dt(x.ts),'Teplota °C':x.t!=null?Number(x.t):'','Min °C':x.t_min!=null?Number(x.t_min):'','Max °C':x.t_max!=null?Number(x.t_max):'','Vlhkost %':x.h!=null?Number(x.h):''});});
+    ds.push({label:(s?s.name||s.dev_eui:ids[i])+' °C',data:d.map(function(x){return {x:new Date(x.ts).getTime(),y:x.t==null?null:Number(x.t)};}),borderColor:COLORS[i%8],backgroundColor:COLORS[i%8],pointRadius:0,borderWidth:2,tension:.2,spanGaps:false,yAxisID:'y'});
+    if(ids.length===1)ds.push({label:'Vlhkost %',data:d.map(function(x){return {x:new Date(x.ts).getTime(),y:x.h==null?null:Number(x.h)};}),borderColor:'#9ec5e8',pointRadius:0,borderWidth:1.5,yAxisID:'y2',hidden:false});
+    var L=lim(s?zoneOf(s):null);if(i===0){if(L[0]!=null)lines.push(['Min '+L[0]+' °C',L[0]]);if(L[1]!=null)lines.push(['Max '+L[1]+' °C',L[1]]);}
+  }
+  lines.forEach(function(l){ds.push({label:l[0],data:[{x:rg[0].getTime(),y:l[1]},{x:rg[1].getTime(),y:l[1]}],borderColor:'#c0392b',borderDash:[6,5],borderWidth:1.5,pointRadius:0,yAxisID:'y'});});
+  document.getElementById('c-info').textContent=bucket?'průměry po '+bucket+' min':'všechna měření';
+  if(!window.Chart){document.getElementById('c-info').textContent='Knihovna grafů se nenačetla';return;}
+  if(chart)chart.destroy();
+  chart=new Chart(document.getElementById('c-canvas'),{type:'line',data:{datasets:ds},options:{responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'nearest',axis:'x',intersect:false},
+    scales:{x:{type:'linear',ticks:{callback:function(v){return new Date(v).toLocaleString('cs-CZ',hrs>48?{day:'numeric',month:'numeric'}:{hour:'2-digit',minute:'2-digit'});},maxTicksLimit:10}},y:{title:{display:true,text:'°C'}},y2:{position:'right',display:ids.length===1,grid:{drawOnChartArea:false},title:{display:true,text:'%RH'}}},
+    plugins:{tooltip:{callbacks:{title:function(i){return i.length?dt(i[0].parsed.x):'';}}},legend:{labels:{boxWidth:12}}}}});
+}
+function xlsx(rows,name){if(!window.XLSX){toast('Knihovna XLSX se nenačetla');return;}var ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Data');XLSX.writeFile(wb,name);}
+function chartXlsx(){if(!chartRows.length){toast('Nejdřív zobraz graf');return;}xlsx(chartRows,'teploty_'+new Date().toISOString().slice(0,10)+'.xlsx');}
+async function alarmsLoad(){
+  var f=document.getElementById('a-filter').value,k=document.getElementById('a-kind').value,q=supa.from('temp_alarms').select('*').order('started_at',{ascending:false}).limit(1000);
+  if(f==='open')q=q.or('status.eq.open,ack_at.is.null');else if(f!=='all')q=q.gte('started_at',new Date(Date.now()-Number(f)*864e5).toISOString());
+  var r=await q,d=(r.data||[]).filter(function(a){return SE.some(function(s){return s.id===a.sensor_id;});});
+  if(k)d=d.filter(function(a){return k==='temp'?/^t_/.test(a.kind):k==='hum'?/^h_/.test(a.kind):a.kind===k;});
+  document.getElementById('a-body').innerHTML=d.length?d.map(function(a){var s=SE.find(function(x){return x.id===a.sensor_id;})||{},z=zoneOf(s);
+    var u=/^h_/.test(a.kind)?' %':(a.kind==='battery'?' V':' °C');
+    return '<tr style="'+(a.status==='open'&&a.level==='critical'?'background:#fff4f2':'')+'"><td><b>'+esc(z?z.name:'–')+'</b><br><span style="font-size:12px;color:var(--muted)">'+esc(s.name||s.dev_eui||'')+'</span></td>'
+      +'<td>'+esc(KIND[a.kind]||a.kind)+(a.status==='open'?' <span class="badge badge-red">trvá</span>':'')+'</td><td style="font-size:12px">'+dt(a.started_at)+'</td><td style="font-size:12px">'+(a.ended_at?dt(a.ended_at):'–')+'</td><td style="font-size:12px">'+dur(a.started_at,a.ended_at)+'</td>'
+      +'<td>'+(a.peak!=null?'<b>'+nf(a.peak,1)+u+'</b>':'')+(a.limit_value!=null?' <span style="color:var(--muted);font-size:12px">/ '+nf(a.limit_value,1)+u+'</span>':'')+'</td>'
+      +'<td style="font-size:12px">'+(a.ack_at?'✅ '+esc(a.ack_name||'')+' '+dt(a.ack_at)+'<br><i>'+esc(a.ack_comment||'')+'</i>':'<button class="btn btn-primary btn-sm" onclick="ack('+a.id+')">Potvrdit</button>')+'</td></tr>';}).join(''):'<tr class="empty-row"><td colspan="7">'+(f==='open'?'✅ Žádné otevřené ani nepotvrzené alarmy':'Žádné alarmy v období')+'</td></tr>';
+}
+async function ack(id){var c=prompt('Potvrzení alarmu – popiš příčinu a provedená opatření (povinné, zapíše se do auditu):','');if(c===null)return;if(!c.trim()){toast('Komentář je povinný');return;}
+  var r=await supa.rpc('wms_temp_ack',{p_alarm:id,p_comment:c,p_user:currentUser.id});if(r.error){toast('❌ '+r.error.message);return;}toast('Alarm potvrzen');refresh();alarmsLoad();}
+function enableNotif(){if(!('Notification' in window)){toast('Prohlížeč upozornění nepodporuje');return;}Notification.requestPermission().then(function(p){toast(p==='granted'?'🔔 Upozornění zapnuta – nech stránku otevřenou':'Upozornění nejsou povolena');});}
+function notify(a){var s=SE.find(function(x){return x.id===a.sensor_id;})||{};var msg=(KIND[a.kind]||a.kind)+' – '+(s.name||s.dev_eui||'');
+  try{var c=new (window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator();o.frequency.value=880;o.connect(c.destination);o.start();setTimeout(function(){o.stop();},400);}catch(e){}
+  try{if(window.Notification&&Notification.permission==='granted')new Notification('PRG – alarm teploty',{body:msg});}catch(e){}toast('🚨 '+msg);}
+function repPeriod(){var p=document.getElementById('r-period').value,n=new Date(),f,t;
+  if(p==='lm'){f=new Date(n.getFullYear(),n.getMonth()-1,1);t=new Date(n.getFullYear(),n.getMonth(),0);}else if(p==='tm'){f=new Date(n.getFullYear(),n.getMonth(),1);t=n;}else if(p==='7'){f=new Date(Date.now()-6*864e5);t=n;}else return;
+  var d=function(x){return new Date(x.getTime()-x.getTimezoneOffset()*6e4).toISOString().slice(0,10);};document.getElementById('r-from').value=d(f);document.getElementById('r-to').value=d(t);}
+async function repLoad(){
+  var f=document.getElementById('r-from').value,t=document.getElementById('r-to').value;if(!f||!t){toast('Vyber období');return;}
+  var from=new Date(f+'T00:00:00'),to=new Date(new Date(t+'T00:00:00').getTime()+864e5),z=document.getElementById('r-zone').value,c=document.getElementById('r-client').value;
+  var dc=window.PRG_DC&&PRG_DC.currentId()!=null?Number(PRG_DC.currentId()):null;
+  var r=await supa.rpc('wms_temp_report',{p_from:from.toISOString(),p_to:to.toISOString(),p_zone:z?Number(z):null,p_client:c?Number(c):null,p_dc:dc});
+  if(r.error){toast('❌ '+r.error.message);return;}repRows=r.data||[];
+  var al=(await supa.from('temp_alarms').select('*').lt('started_at',to.toISOString()).or('ended_at.is.null,ended_at.gte.'+from.toISOString()).order('started_at')).data||[];
+  al=al.filter(function(a){return repRows.some(function(x){return x.sensor_id===a.sensor_id;})&&/^(t|h)_/.test(a.kind);});
+  var ok=repRows.every(function(x){return x.pct_in_range==null||Number(x.pct_in_range)>=100;});
+  var h='<div class="print-only" style="display:none;margin-bottom:12px"><h2 style="font-family:Barlow Condensed,sans-serif">PRG Systems – Report teplot</h2></div>'
+    +'<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px"><div><b style="font-size:17px">Report teplot '+esc(new Date(f).toLocaleDateString('cs-CZ'))+' – '+esc(new Date(t).toLocaleDateString('cs-CZ'))+'</b><br><span style="font-size:12px;color:var(--muted)">'
+    +(z?'Zóna: '+esc((Z.find(function(x){return String(x.id)===z;})||{}).name)+' · ':'')+(c?'Klient: '+esc(clName(Number(c)))+' · ':'')+'Vytvořil: '+esc(currentProfile.name||'')+' · '+dt(new Date())+'</span></div>'
+    +'<div style="font-size:15px;font-weight:700;color:'+(ok?'var(--accent)':'var(--danger)')+'">'+(ok?'✅ Celé období v limitech':'⚠ V období byly odchylky')+'</div></div>'
+    +'<div style="overflow-x:auto"><table><thead><tr><th>Zóna / čidlo</th><th>Limit</th><th>Měření</th><th>Min</th><th>Max</th><th>Průměr</th><th>MKT</th><th>Vlhkost min–max</th><th>V limitu</th><th>Mimo limit</th><th>Alarmy</th></tr></thead><tbody>'
+    +repRows.map(function(x){var bad=x.pct_in_range!=null&&Number(x.pct_in_range)<100;return '<tr><td><b>'+esc(x.zone||'–')+'</b><br><span style="font-size:12px;color:var(--muted)">'+esc(x.sensor||x.dev_eui)+(x.client?' · '+esc(x.client):'')+'</span></td><td>'+nf(x.t_min_lim)+'–'+nf(x.t_max_lim)+' °C</td><td>'+nf(x.readings,0)+'</td><td>'+nf(x.t_min,1)+'</td><td>'+nf(x.t_max,1)+'</td><td>'+nf(x.t_avg,2)+'</td><td><b>'+nf(x.mkt,2)+'</b></td><td>'+nf(x.h_min,0)+'–'+nf(x.h_max,0)+' %</td><td style="color:'+(bad?'var(--danger)':'var(--accent)')+';font-weight:700">'+nf(x.pct_in_range,1)+' %</td><td>'+(Number(x.minutes_out)?dur(0,Number(x.minutes_out)*6e4):'0')+'</td><td>'+nf(x.alarms,0)+'</td></tr>';}).join('')
+    +'</tbody></table></div>'
+    +(al.length?'<h4 style="margin:18px 0 6px">Odchylky v období</h4><table><thead><tr><th>Čidlo</th><th>Typ</th><th>Od</th><th>Do</th><th>Trvání</th><th>Extrém</th><th>Potvrzení / opatření</th></tr></thead><tbody>'+al.map(function(a){var s=SE.find(function(x){return x.id===a.sensor_id;})||{};return '<tr><td>'+esc(s.name||s.dev_eui||'')+'</td><td>'+esc(KIND[a.kind]||a.kind)+'</td><td>'+dt(a.started_at)+'</td><td>'+dt(a.ended_at)+'</td><td>'+dur(a.started_at,a.ended_at)+'</td><td>'+nf(a.peak,1)+'</td><td style="font-size:12px">'+(a.ack_at?esc(a.ack_name)+': '+esc(a.ack_comment):'<span style="color:var(--danger)">nepotvrzeno</span>')+'</td></tr>';}).join('')+'</tbody></table>':'<p style="margin-top:14px;color:var(--muted)">Žádné odchylky.</p>')
+    +'<p style="font-size:11px;color:var(--muted);margin-top:14px">MKT = střední kinetická teplota (ΔH/R = 10 000 K, 83,144 kJ/mol). Hodnoty jsou po korekci kalibrace čidel.</p>'
+    +'<div style="display:flex;gap:40px;margin-top:40px;font-size:12px"><div>Zkontroloval: ______________________</div><div>Datum a podpis: ______________________</div></div>';
+  document.getElementById('r-out').innerHTML=h;
+}
+function repXlsx(){if(!repRows.length){toast('Nejdřív vytvoř report');return;}xlsx(repRows.map(function(x){return {'Zóna':x.zone,'Čidlo':x.sensor,'DevEUI':x.dev_eui,'Klient':x.client,'Limit min':x.t_min_lim,'Limit max':x.t_max_lim,'Měření':x.readings,'Min °C':x.t_min,'Max °C':x.t_max,'Průměr °C':x.t_avg,'MKT °C':x.mkt,'Vlhkost min':x.h_min,'Vlhkost max':x.h_max,'V limitu %':x.pct_in_range,'Mimo limit min':x.minutes_out,'Alarmy':x.alarms};}),'report_teplot_'+document.getElementById('r-from').value+'_'+document.getElementById('r-to').value+'.xlsx');}
+// ---- nastavení ----
+async function setupRender(){
+  if(!isAdmin())return;
+  document.getElementById('z-body').innerHTML=Z.length?Z.map(function(z){var L=lim(z);return '<tr><td><b>'+esc(z.name)+'</b><br><span style="font-size:12px;color:var(--muted)">'+esc(PROF[z.profile]||z.profile)+(z.is_active===false?' · neaktivní':'')+'</span></td><td>'+esc(dcName(z.dc_id))+'</td><td>'+esc(clName(z.client_id))+'</td><td>'+nf(L[0])+' – '+nf(L[1])+' °C<br><span style="font-size:11px;color:var(--muted)">varování ±'+nf(z.t_warn)+' °C</span></td><td>'+(L[2]!=null||L[3]!=null?nf(L[2])+' – '+nf(L[3])+' %':'–')+'</td><td>'+z.alarm_delay_min+' min</td><td>'+z.offline_min+' min</td><td>'+SE.filter(function(s){return s.zone_id===z.id;}).length+'</td><td><button class="btn btn-secondary btn-sm" onclick="zoneEdit('+z.id+')">Upravit</button></td></tr>';}).join(''):'<tr class="empty-row"><td colspan="9">Zatím žádné zóny</td></tr>';
+  var td=new Date().toISOString().slice(0,10);
+  document.getElementById('s-body').innerHTML=SE.length?SE.map(function(s){var z=zoneOf(s);return '<tr style="'+(!z?'background:#fff8ec':'')+'"><td><b>'+esc(s.name||'')+'</b><br><span style="font-size:12px;color:var(--muted)">'+esc(s.model||'')+(s.is_active===false?' · neaktivní':'')+'</span></td><td style="font-family:JetBrains Mono,monospace;font-size:12px">'+esc(s.dev_eui)+'</td><td>'+(z?esc(z.name):'<span class="badge badge-orange">nepřiřazeno</span>')+'</td><td>'+esc(s.place||'')+'</td><td style="font-size:12px">'+(Number(s.offset_t)?nf(s.offset_t,2)+' °C ':'')+(Number(s.offset_h)?nf(s.offset_h,1)+' %':'')+'</td><td>'+(s.calib_due?'<span style="color:'+(s.calib_due<td?'var(--danger)':'inherit')+'">'+new Date(s.calib_due).toLocaleDateString('cs-CZ')+'</span>':'–')+'</td><td style="font-size:12px">'+ago(s.last_seen)+'</td><td><button class="btn btn-secondary btn-sm" onclick="sensorEdit('+s.id+')">Upravit</button></td></tr>';}).join(''):'<tr class="empty-row"><td colspan="8">Zatím žádná čidla – přidej je ručně, nebo se založí sama s první zprávou z webhooku</td></tr>';
+  var st=await supa.from('temp_settings').select('*').eq('key','ingest_token').maybeSingle();TOKEN=(st.data&&st.data.value)||'';
+  var url=SUPA_URL+'/rest/v1/rpc/wms_temp_hook';
+  document.getElementById('hook-info').innerHTML='Čidla posílají data přes síťový server LoRaWAN (TTN, ChirpStack, Tektelic KONA…) jako HTTP webhook. Nové čidlo se založí samo podle DevEUI a pak ho tady přiřadíš do zóny.<br><br>'
+    +'<b>URL:</b><div class="tt-code">'+esc(url)+'</div><b>Hlavičky:</b><div class="tt-code">apikey: '+esc(SUPA_KEY)+'\nContent-Type: application/json\nX-PRG-Token: '+esc(TOKEN)+'</div>'
+    +'<b>Podporované zprávy:</b> TTN v3 uplink (decoded_payload: TempC_SHT, Hum_SHT, BatV – výchozí dekodér Dragino LHT65N), ChirpStack v4 (object), nebo obecně <span class="tt-code" style="display:inline;padding:2px 6px">{"dev_eui":"…","temp":5.2,"hum":40,"bat":3.0,"ts":"…"}</span>.<br><span style="color:var(--muted);font-size:12px">Token drž v tajnosti – bez něj server data nepřijme.</span>';
+  var au=await supa.from('temp_audit').select('*').order('at',{ascending:false}).limit(200);
+  document.getElementById('au-body').innerHTML=(au.data||[]).map(function(a){return '<tr><td style="font-size:12px">'+dt(a.at)+'</td><td>'+esc(a.user_name||'')+'</td><td>'+esc(a.action)+'</td><td>'+esc(a.target||'')+'</td><td style="font-size:12px">'+esc(a.detail||'')+'</td></tr>';}).join('')||'<tr class="empty-row"><td colspan="5">Zatím nic</td></tr>';
+}
+function form(title,fields,onSave,onDel){
+  var w=document.createElement('div');w.className='modal-backdrop';w.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:300;padding:16px';
+  w.innerHTML='<div style="background:#fff;border-radius:14px;width:100%;max-width:560px;max-height:90vh;overflow:auto"><div style="padding:16px 20px;border-bottom:1px solid var(--border);font-family:Barlow Condensed,sans-serif;font-size:20px;font-weight:700">'+title+'</div><div class="tt-form">'
+    +fields.map(function(f){var inp=f.opts?'<select id="ff-'+f.k+'">'+f.opts.map(function(o){return '<option value="'+esc(o[0])+'"'+(String(o[0])===String(f.v==null?'':f.v)?' selected':'')+'>'+esc(o[1])+'</option>';}).join('')+'</select>':'<input id="ff-'+f.k+'" type="'+(f.type||'text')+'" value="'+esc(f.v==null?'':f.v)+'"'+(f.step?' step="'+f.step+'"':'')+(f.ph?' placeholder="'+esc(f.ph)+'"':'')+'>';
+      return '<div style="'+(f.wide?'grid-column:1/-1':'')+'"><label>'+esc(f.l)+'</label>'+inp+'</div>';}).join('')
+    +'</div><div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:8px">'+(onDel?'<button class="btn btn-danger btn-sm" id="ff-del">Smazat</button>':'<span></span>')+'<span style="display:flex;gap:8px"><button class="btn btn-secondary" id="ff-x">Zavřít</button><button class="btn btn-primary" id="ff-ok">Uložit</button></span></div></div>';
+  document.body.appendChild(w);
+  w.querySelector('#ff-x').onclick=function(){w.remove();};
+  if(onDel)w.querySelector('#ff-del').onclick=async function(){if(await onDel())w.remove();};
+  w.querySelector('#ff-ok').onclick=async function(){var v={};fields.forEach(function(f){var x=w.querySelector('#ff-'+f.k).value.trim();v[f.k]=x===''?null:(f.num?Number(x.replace(',','.')):x);});if(await onSave(v))w.remove();};
+}
+function zoneEdit(id){
+  var z=Z.find(function(x){return x.id===id;})||{profile:'ambient',t_warn:1,alarm_delay_min:15,offline_min:60,dc_id:window.PRG_DC&&PRG_DC.currentId(),is_active:true};
+  form(id?'Upravit zónu':'Nová zóna',[
+    {k:'name',l:'Název zóny *',v:z.name,wide:true,ph:'např. Chlazený box 1, Hala A'},
+    {k:'dc_id',l:'DC',v:z.dc_id,opts:[['','–']].concat(WH.map(function(w){return [w.id,w.code||w.name];}))},
+    {k:'client_id',l:'Klient (pro reporty)',v:z.client_id,opts:[['','– všichni –']].concat(CL.map(function(c){return [c.id,c.name];}))},
+    {k:'profile',l:'Profil',v:z.profile,opts:Object.keys(PROF).map(function(k){return [k,PROF[k]];})},
+    {k:'t_min',l:'Teplota min °C (prázdné = dle profilu)',v:z.t_min,num:1,type:'number',step:'0.1'},{k:'t_max',l:'Teplota max °C',v:z.t_max,num:1,type:'number',step:'0.1'},
+    {k:'t_warn',l:'Varování před limitem ± °C',v:z.t_warn,num:1,type:'number',step:'0.1'},
+    {k:'h_min',l:'Vlhkost min %',v:z.h_min,num:1,type:'number'},{k:'h_max',l:'Vlhkost max %',v:z.h_max,num:1,type:'number'},
+    {k:'alarm_delay_min',l:'Alarm po (min mimo limit)',v:z.alarm_delay_min,num:1,type:'number'},{k:'offline_min',l:'Offline po (min bez dat)',v:z.offline_min,num:1,type:'number'},
+    {k:'is_active',l:'Aktivní',v:z.is_active===false?'0':'1',opts:[['1','Ano'],['0','Ne']]}],
+    async function(v){if(!v.name){toast('Zadej název');return false;}v.is_active=v.is_active!=='0';v.t_warn=v.t_warn==null?1:v.t_warn;v.alarm_delay_min=v.alarm_delay_min==null?15:v.alarm_delay_min;v.offline_min=v.offline_min==null?60:v.offline_min;
+      ['dc_id','client_id'].forEach(function(k){if(v[k]!=null&&!isNaN(Number(v[k])))v[k]=Number(v[k]);});
+      var r=id?await supa.from('temp_zones').update(v).eq('id',id):await supa.from('temp_zones').insert(v);if(r.error){toast('❌ '+r.error.message);return false;}
+      await supa.rpc('wms_temp_audit',{p_user:currentUser.id,p_action:id?'zone_update':'zone_create',p_target:v.name,p_detail:JSON.stringify(v)});toast('Uloženo');await refresh();setupRender();return true;},
+    id?async function(){if(SE.some(function(s){return s.zone_id===id;})&&!confirm('Zóna má čidla – zůstanou bez zóny. Smazat?'))return false;var r=await supa.from('temp_zones').delete().eq('id',id);if(r.error){toast('❌ '+r.error.message);return false;}await supa.rpc('wms_temp_audit',{p_user:currentUser.id,p_action:'zone_delete',p_target:z.name,p_detail:''});await refresh();setupRender();return true;}:null);
+}
+function sensorEdit(id){
+  var s=SE.find(function(x){return x.id===id;})||{model:'Dragino LHT65N',offset_t:0,offset_h:0,is_active:true};
+  form(id?'Upravit čidlo':'Nové čidlo',[
+    {k:'name',l:'Název *',v:s.name,ph:'např. Lednice 1 – horní police'},{k:'dev_eui',l:'DevEUI *',v:s.dev_eui,ph:'A84041…'},
+    {k:'zone_id',l:'Zóna',v:s.zone_id,opts:[['','– bez zóny –']].concat(Z.map(function(z){return [z.id,z.name];}))},
+    {k:'place',l:'Umístění v zóně',v:s.place},{k:'model',l:'Model',v:s.model},
+    {k:'offset_t',l:'Korekce teploty °C',v:s.offset_t,num:1,type:'number',step:'0.01'},{k:'offset_h',l:'Korekce vlhkosti %',v:s.offset_h,num:1,type:'number',step:'0.1'},
+    {k:'calib_date',l:'Kalibrováno',v:s.calib_date,type:'date'},{k:'calib_due',l:'Další kalibrace',v:s.calib_due,type:'date'},{k:'calib_cert',l:'Číslo certifikátu',v:s.calib_cert},
+    {k:'is_active',l:'Aktivní',v:s.is_active===false?'0':'1',opts:[['1','Ano'],['0','Ne']]}],
+    async function(v){if(!v.name||!v.dev_eui){toast('Zadej název a DevEUI');return false;}v.dev_eui=v.dev_eui.toUpperCase();v.is_active=v.is_active!=='0';v.offset_t=v.offset_t||0;v.offset_h=v.offset_h||0;if(v.zone_id!=null)v.zone_id=Number(v.zone_id);
+      var z=Z.find(function(x){return x.id===v.zone_id;});if(z&&z.dc_id!=null)v.dc_id=z.dc_id;
+      var r=id?await supa.from('temp_sensors').update(v).eq('id',id):await supa.from('temp_sensors').insert(v);if(r.error){toast('❌ '+(/temp_sensors_eui_uk|duplicate/.test(r.error.message)?'Čidlo s tímto DevEUI už existuje':r.error.message));return false;}
+      await supa.rpc('wms_temp_audit',{p_user:currentUser.id,p_action:id?'sensor_update':'sensor_create',p_target:v.dev_eui,p_detail:JSON.stringify(v)});toast('Uloženo');await refresh();setupRender();return true;},
+    id?async function(){if(!confirm('Smazat čidlo včetně všech jeho měření a alarmů? Pro historii raději nastav Aktivní = Ne.'))return false;var r=await supa.from('temp_sensors').delete().eq('id',id);if(r.error){toast('❌ '+r.error.message);return false;}await supa.rpc('wms_temp_audit',{p_user:currentUser.id,p_action:'sensor_delete',p_target:s.dev_eui,p_detail:''});await refresh();setupRender();return true;}:null);
+}
+function parseTs(v){if(v instanceof Date)return v;if(typeof v==='number'){return new Date(Math.round((v-25569)*864e5)+new Date().getTimezoneOffset()*6e4);}var s=String(v||'').trim();if(!s)return null;
+  var m=s.match(/^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})[ T,]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);if(m)return new Date(+m[3],+m[2]-1,+m[1],+m[4],+m[5],+(m[6]||0));
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[ T,]+(\d{1,2}):(\d{2})(?::(\d{2}))?/);if(m)return new Date(+m[3],+m[1]-1,+m[2],+m[4],+m[5],+(m[6]||0));
+  var d=new Date(s.replace(' ','T'));return isNaN(d)?null:d;}
+async function importFile(){
+  var sid=Number(document.getElementById('i-sensor').value),f=document.getElementById('i-file').files[0];if(!sid||!f){toast('Vyber čidlo a soubor');return;}
+  var rows;
+  if(/\.(csv|txt)$/i.test(f.name)){
+    var txt=await f.text();txt=txt.replace(/^\ufeff/,'');var lines=txt.split(/\r?\n/).filter(function(l){return l.trim();});
+    var dl=[';','\t',','].sort(function(a,b){return lines[0].split(b).length-lines[0].split(a).length;})[0];
+    var hd=lines[0].split(dl).map(function(x){return x.trim().replace(/^"|"$/g,'');});
+    rows=lines.slice(1).map(function(l){var c=l.split(dl),o={};hd.forEach(function(h,i){o[h]=(c[i]||'').trim().replace(/^"|"$/g,'');});return o;});
+  }else{
+    if(!window.XLSX){toast('Knihovna XLSX se nenačetla');return;}
+    var buf=await f.arrayBuffer(),wb=XLSX.read(buf,{type:'array',cellDates:true});rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
+  }
+  if(!rows.length){toast('Soubor je prázdný');return;}
+  var keys=Object.keys(rows[0]),find=function(re){return keys.find(function(k){return re.test(k.toLowerCase());});};
+  var kt=find(/čas|cas|time|datum|date/),kT=find(/tepl|temp|°c|\bc\b/),kH=find(/vlh|hum|rh|%/);
+  if(!kt||!kT){toast('Nenašel jsem sloupec s časem a teplotou');return;}
+  var out=[];rows.forEach(function(r){var d=parseTs(r[kt]),t=String(r[kT]).replace(',','.');if(d&&t!==''&&!isNaN(Number(t)))out.push({ts:d.toISOString(),t:Number(t),h:kH&&r[kH]!==''?Number(String(r[kH]).replace(',','.')):null});});
+  if(!out.length){toast('Žádná platná měření');return;}
+  var n=0;for(var i=0;i<out.length;i+=500){var r=await supa.rpc('wms_temp_import',{p_sensor:sid,p_rows:out.slice(i,i+500),p_user:currentUser.id});if(r.error){toast('❌ '+r.error.message);return;}n+=r.data||0;}
+  toast('✅ Importováno '+n+' měření (duplicitní přeskočena)');refresh();
+}
+async function simulate(){var sid=Number(document.getElementById('sim-sensor').value),h=Number(document.getElementById('sim-h').value)||48;if(!sid){toast('Vyber čidlo');return;}
+  if(!confirm('Vygenerovat testovací měření za posledních '+h+' h pro vybrané čidlo?'))return;
+  var r=await supa.rpc('wms_temp_simulate',{p_sensor:sid,p_hours:h,p_user:currentUser.id});if(r.error){toast('❌ '+r.error.message);return;}toast('Vytvořeno '+r.data+' měření');refresh();}
+</script></body></html>
