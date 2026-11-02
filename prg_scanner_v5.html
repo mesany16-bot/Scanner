@@ -2352,22 +2352,22 @@ function wakeUp() {
 }
 
 function getAimCropRect() {
-  var containerW = video.clientWidth, containerH = video.clientHeight;
+  // Výřez přesně podle zeleného obdélníku (#aim) na obrazovce, přepočtený na pixely kamery.
+  // Kódy mimo obdélník se nečtou. Malá rezerva kolem, aby se neuřízl okraj kódu pod rámečkem.
   var videoW = video.videoWidth, videoH = video.videoHeight;
-  if (!videoW || !videoH || !containerW || !containerH) return null;
-  var scale = Math.max(containerW / videoW, containerH / videoH);
-  var offsetX = (videoW * scale - containerW) / 2;
-  var offsetY = (videoH * scale - containerH) / 2;
-  // #aim je 55% x 40% kontejneru, vystředěný — s velkorysou rezervou, ať se neuřízne okraj kódu
-  var boxW = containerW * 0.85, boxH = containerH * 0.65;
-  var boxX = (containerW - boxW) / 2, boxY = (containerH - boxH) / 2;
-  var sx = (boxX + offsetX) / scale;
-  var sy = (boxY + offsetY) / scale;
-  var sw = boxW / scale;
-  var sh = boxH / scale;
-  sx = Math.max(0, sx); sy = Math.max(0, sy);
-  sw = Math.min(sw, videoW - sx); sh = Math.min(sh, videoH - sy);
-  return { sx: sx, sy: sy, sw: sw, sh: sh };
+  var aimEl = document.getElementById('aim');
+  if (!videoW || !videoH || !aimEl) return null;
+  var vr = video.getBoundingClientRect(), ar = aimEl.getBoundingClientRect();
+  if (!vr.width || !vr.height || !ar.width || !ar.height) return null;
+  var fit = 'cover'; try { fit = getComputedStyle(video).objectFit || 'cover'; } catch (e) {}
+  var scale = fit === 'contain' ? Math.min(vr.width / videoW, vr.height / videoH) : Math.max(vr.width / videoW, vr.height / videoH);
+  var left = vr.left + (vr.width - videoW * scale) / 2, top = vr.top + (vr.height - videoH * scale) / 2;
+  var mx = ar.width * 0.04, my = ar.height * 0.06;
+  var x1 = (ar.left - mx - left) / scale, y1 = (ar.top - my - top) / scale;
+  var x2 = (ar.right + mx - left) / scale, y2 = (ar.bottom + my - top) / scale;
+  x1 = Math.max(0, x1); y1 = Math.max(0, y1); x2 = Math.min(videoW, x2); y2 = Math.min(videoH, y2);
+  if (x2 - x1 < 8 || y2 - y1 < 8) return null;
+  return { sx: x1, sy: y1, sw: x2 - x1, sh: y2 - y1 };
 }
 
 function grabAimCanvas() {
@@ -2610,7 +2610,7 @@ async function tryDecode(canvas) {
     return tryDecode(canvas);
   }
 }
-// Více pokusů na jedno stisknutí: několik snímků, zesílený kontrast, otočení o 90°, nakonec celý záběr
+// Více pokusů na jedno stisknutí: několik snímků, zesílený kontrast, otočení o 90° – vždy jen uvnitř obdélníku
 async function decodeWithRetries() {
   var deadline = Date.now() + 1600;
   for (var attempt = 0; attempt < 6; attempt++) {
@@ -2619,7 +2619,6 @@ async function decodeWithRetries() {
     var variants = [base];
     if (attempt >= 1) variants.push(enhanceCanvas(base));
     if (attempt >= 2) variants.push(rotateCanvas(base));
-    if (attempt >= 3) { var full = grabFullCanvas(); variants.push(full, enhanceCanvas(full)); }
     for (var v = 0; v < variants.length; v++) {
       var code = await tryDecode(variants[v]);
       if (code) return code;
