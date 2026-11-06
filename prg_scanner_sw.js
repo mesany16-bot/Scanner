@@ -1,7 +1,7 @@
 /* PRG Scanner - service worker: scanner se otevre i bez signalu.
    Stranka scanneru: nejdriv sit (aby se dostaly aktualizace), pri vypadku ulozena kopie.
    Knihovny z CDN: ulozena kopie, na pozadi se obnovi. Volani Supabase se nikdy neukladaji. */
-var CACHE = 'prg-scanner-v1';
+var CACHE = 'prg-scanner-v2';
 var PAGE = 'prg_scanner_v5.html';
 var CORE = [PAGE, 'prg_scanner.webmanifest', 'prg_icon_192.png', 'prg_icon_512.png'];
 var CDN = [
@@ -30,7 +30,8 @@ self.addEventListener('fetch', function (e) {
   if (req.method !== 'GET') return;
   var url = new URL(req.url);
   if (isPage(url)) {
-    e.respondWith(timeout(5000, fetch(req)).then(function (res) {
+    // vždy ověřit novou verzi na serveru (ne z mezipaměti prohlížeče)
+    e.respondWith(timeout(8000, fetch(new Request(req.url, { cache: 'no-cache', credentials: 'same-origin' }))).then(function (res) {
       if (res && res.ok) { var copy = res.clone(); caches.open(CACHE).then(function (c) { c.put(PAGE, copy); }); }
       return res;
     }).catch(function () {

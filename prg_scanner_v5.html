@@ -722,6 +722,7 @@
       <button id="net-relogin" onclick="obRelogin()" style="display:none;flex:1 1 100%;padding:11px;border:none;border-radius:9px;background:#c0392b;color:#fff;font-weight:700;font-size:14px">🔑 Přihlásit znovu a odeslat</button>
       <button onclick="netFlushNow()" style="flex:1;padding:11px;border:none;border-radius:9px;background:#0a7c4e;color:#fff;font-weight:700;font-size:14px">↻ Odeslat teď</button>
       <button onclick="netClearLog()" style="padding:11px;border:1.5px solid #e2e6ed;border-radius:9px;background:#fff;font-size:14px">Vymazat hlášení</button>
+      <button onclick="forceUpdate()" style="flex:1 1 100%;padding:11px;border:1.5px solid #2980b9;border-radius:9px;background:#fff;color:#2980b9;font-weight:700;font-size:14px">⬇️ Načíst nejnovější verzi scanneru</button>
     </div>
   </div>
 </div>
@@ -1042,7 +1043,7 @@ async function renderNetModal() {
   var all = await obAll(), by = {};
   all.forEach(function(o){ var l = OB_LABEL[o.kind] || o.kind; by[l] = (by[l] || 0) + 1; });
   var log = obLogGet();
-  var h = '<p>Stav: <b>' + (navigator.onLine ? '🟢 připojeno' : '🔴 bez připojení') + '</b></p>';
+  var h = '<p>Stav: <b>' + (navigator.onLine ? '🟢 připojeno' : '🔴 bez připojení') + '</b> · verze scanneru <b>' + APP_VERSION + '</b></p>';
   h += all.length ? ('<p>Čeká na odeslání: <b>' + all.length + '</b> (' + Object.keys(by).map(function(k){ return by[k] + '× ' + k; }).join(', ') + ').<br><span style="color:#7a8090;font-size:12.5px">Záznamy jsou uložené v tomto zařízení a odešlou se samy, jakmile bude signál. Nemaž data prohlížeče.</span></p>')
                   : '<p>✅ Vše je odesláno.</p>';
   if (log.length) h += '<p style="margin-top:10px"><b>Hlášení</b></p>' + log.slice(0, 15).map(function(l){ return '<div style="font-size:12.5px;padding:4px 0;border-top:1px solid #eef0f4;color:' + (l.kind === 'fail' ? '#c0392b' : '#b35a00') + '">' + new Date(l.t).toLocaleString('cs-CZ') + ' · ' + escHtml(l.msg) + '</div>'; }).join('');
@@ -1051,6 +1052,12 @@ async function renderNetModal() {
   document.getElementById('net-body').innerHTML = h;
 }
 function openNetModal() { document.getElementById('modal-net').style.display = 'flex'; renderNetModal(); var rb = document.getElementById('net-relogin'); if (rb) rb.style.display = OB.authLost ? 'block' : 'none'; }
+async function forceUpdate() {
+  if (OB.count && !confirm('V zařízení čeká ' + OB.count + ' neodeslaných záznamů. Zůstanou uložené a odešlou se po načtení. Pokračovat?')) return;
+  try { if (navigator.serviceWorker) { var regs = await navigator.serviceWorker.getRegistrations(); for (var i = 0; i < regs.length; i++) await regs[i].update(); } } catch(e) {}
+  try { var ks = await caches.keys(); for (var j = 0; j < ks.length; j++) if (ks[j].indexOf('prg-scanner-') === 0) { var c = await caches.open(ks[j]); await c.delete('prg_scanner_v5.html'); } } catch(e) {}
+  location.replace(location.pathname + '?v=' + Date.now());
+}
 function closeNetModal() { document.getElementById('modal-net').style.display = 'none'; }
 async function netFlushNow() { await obFlush(); renderNetModal(); }
 function netClearLog() { try { localStorage.removeItem('prg_outbox_log'); } catch(e) {} renderNetModal(); }
@@ -1150,6 +1157,7 @@ var currentUser = '';
 var useLocation = false;
 var eanIntl = false;
 var intlSeen = {}, intlFull = null; // Mezinárodka: už naskenované celé štítky (s +pořadím)    // Mezinárodka: z kódu se bere jen část před „+“ (číslo zásilky bez pořadí kusu)
+var APP_VERSION = '5-52';
 var eanCount = false;   // Inventory Tool: počítání EAN (s lokací nebo bez)
 var eanSession = null;  // session_uid volné inventury EAN – na serveru jako řádek inventory_lists (kind ean / ean_loc)
 var expectingLoc = false;
@@ -2698,7 +2706,7 @@ function intlSetQty(code, n, relative) {
     var cur = intlV.extra[code], tg = relative ? Math.max(0, cur + n) : n;
     if (tg === cur) return;
     if (tg > cur && !invRoom) { buzz(); setStatus('📍 Nejdřív naskenuj LOKACI'); openRoomModal(); return; }
-    intlV.extra[code] = tg; intlV.extraT[code] = Date.now();
+    intlV.extra[code] = tg; if (!intlV.extraT[code]) intlV.extraT[code] = 1;
     intlV.log = intlV.log.filter(function(x){ return !(x.item == null && x.base === code); });
     if (tg === 0) { Object.keys(intlV.seen).forEach(function(k){ if (k.split('+')[0] === code) delete intlV.seen[k]; }); }
     intlSyncRows(); renderTable(); refreshModeUI();
@@ -2713,7 +2721,7 @@ function intlSetQty(code, n, relative) {
   if (target === it.found) return;
   var loc = intlKey(invRoom) || (it.locs[0] || null);
   if (target > it.found && !invRoom) { buzz(); setStatus('📍 Nejdřív naskenuj LOKACI'); openRoomModal(); return; }
-  it.found = target; it.t = Date.now();
+  it.found = target;                         // ruční úprava – pořadí se nemění (nahoru jen skenem)
   if (target > 0 && loc) it.foundLocs[loc] = 1;
   if (target === 0) it.foundLocs = {};
   intlV.log = intlV.log.filter(function(x){ return x.item !== it; });
@@ -3235,6 +3243,7 @@ function nextFrame() {
 }
 
 // ── Vestavěná čtečka (Honeywell CN80 a podobné): kód přichází jako „klávesnice“ (wedge) ──
+var IS_READER_DEVICE = /CN80|CN85|CT30|CT40|CT45|CT47|CT60|CK65|CK67|EDA5\d|EDA6\d|EDA7\d|Honeywell|TC2\d|TC5\d|TC7\d|MC33|MC93|Zebra/i.test(navigator.userAgent);
 var inputMode = (function(){
   try { var v = localStorage.getItem('prg_scn_input'); if (v === 'camera' || v === 'reader') return v; } catch(e) {}
   return /CN80|CN85|CT30|CT40|CT45|CT47|CT60|CK65|CK67|EDA5\d|EDA6\d|EDA7\d|Honeywell|TC2\d|TC5\d|TC7\d|MC33|MC93|Zebra/i.test(navigator.userAgent) ? 'reader' : 'camera';
@@ -3261,7 +3270,8 @@ var itPress = null, itLong = false;
 })();
 function inputToggleClick() {
   if (itLong) { itLong = false; return; }      // dlouhé podržení už přepnulo režim
-  if (inputMode === 'reader') {
+  // čtečka (CN80…): klepnutí ji spustí, přepnutí na kameru podržením; mobil: klepnutí přepíná kamera ⇄ čtečka
+  if (IS_READER_DEVICE && inputMode === 'reader') {
     if (!cameraReady) { initCamera(); } else { focusWedge(); setStatus('🔫 Čtečka připravena – stiskni spoušť'); }
     return;
   }
@@ -4438,7 +4448,7 @@ function changeQty(idx, delta) {
   if (eanCount && eanSession) sendScan({ ean: rows[idx].ean, location: rows[idx].loc || null, quantity: delta, placement_mode: showLocCol() ? 'inv_ean_loc' : 'inv_ean', inv_session: eanSession });
   if (delta>0) rows[idx].timestamps.push(nowStr());
   if (rows[idx].qty<=0) { rows.splice(idx,1); setStatus('🗑 Řádek odstraněn'); renderTable(); }
-  else { setStatus('✏️ '+rows[idx].ean+' → '+rows[idx].qty+' ks'); renderTable(idx); }
+  else { setStatus('✏️ '+rows[idx].ean+' → '+rows[idx].qty+' ks'); renderTable(); }   // ruční úprava – bez přeřazení
 }
 
 // ── Export ────────────────────────────────────────────────
