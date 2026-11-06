@@ -504,11 +504,12 @@
 <div class="modal-backdrop" id="modal-hub-inv" style="display:none">
   <div class="modal">
     <h2 class="info">📋 Inventory Tool</h2>
-    <p>Právě máš rozjetou inventuru <b id="hub-inv-name"></b>. Co chceš udělat?</p>
+    <p id="hub-inv-text">Právě máš rozjetou inventuru <b id="hub-inv-name"></b>. Co chceš udělat?</p>
     <button class="modal-btn info" onclick="hubInvContinue()">▶️ Pokračovat v rozjeté</button>
     <button class="modal-btn" style="background:var(--danger)" onclick="hubInvEnd()">⏹ Ukončit rozjetou inventuru</button>
-    <button class="modal-btn" style="background:var(--accent)" onclick="hubInvOther()">📋 Vybrat jinou inventuru</button>
-    <button class="modal-btn secondary" onclick="closeModal('modal-hub-inv')">Zrušit</button>
+    <button class="modal-btn" id="hub-inv-other" style="background:var(--accent)" onclick="hubInvOther()">📋 Vybrat jiný seznam ze serveru</button>
+    <button class="modal-btn secondary" onclick="closeModal('modal-hub-inv');document.getElementById('modal-inv-source').style.display='flex';">⬅️ Zpět na výběr inventury</button>
+    <button class="modal-btn secondary" onclick="backToHub('modal-hub-inv')">⬅️ Zpět do hlavního rozcestníku</button>
   </div>
 </div>
 
@@ -527,7 +528,7 @@
     <button class="modal-btn info" onclick="tkStartInfo()">🔎 Info lokace / LPN · přesah</button>
     <button class="modal-btn info" onclick="closeModal('modal-wms-menu');openMyDevices()">📱 myDevices</button>
     <p style="font-size:12.5px;color:var(--muted);margin-top:4px">Inventury (seznam, EAN + lokace, jen EAN) najdeš v <b>Inventory Tool</b>.</p>
-    <button class="modal-btn secondary" onclick="closeModal('modal-wms-menu')">Zavřít</button>
+    <button class="modal-btn secondary" onclick="backToHub('modal-wms-menu')">⬅️ Zpět do hlavního rozcestníku</button>
   </div>
 </div>
 
@@ -612,13 +613,13 @@
     <h2 class="info">📋 Inventory Tool</h2>
     <p>Jakou inventuru chceš dělat?</p>
     <input type="file" id="inv-excel-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="loadInvExcelFile(this)">
-    <button class="modal-btn" style="background:var(--accent)" onclick="openInvServerPick()">☁️ Inventura ze serveru (seznam)</button>
-    <button class="modal-btn info" onclick="startEanCount(true)">📍 EAN + lokace</button>
-    <button class="modal-btn info" onclick="startEanCount(false, false, false, true)">🖨️ Printer + Flash + Doplněk <span style="font-weight:400;font-size:12px;opacity:.85">(3× S/N = 1 sada)</span></button>
-    <button class="modal-btn info" onclick="startEanCount(false)">🔢 Jen EAN</button>
-    <button class="modal-btn info" onclick="startEanCount(false, true)">🌍 Mezinárodka – volné počítání <span style="font-weight:400;font-size:12px;opacity:.85">(43M0007578+0001 → 43M0007578)</span></button>
-    <button class="modal-btn secondary" onclick="document.getElementById('inv-excel-input').click()">📂 Seznam z Excelu/CSV v zařízení</button>
-    <button class="modal-btn secondary" onclick="closeModal('modal-inv-source')">Zrušit</button>
+    <button class="modal-btn" data-inv="server" style="background:var(--accent)" onclick="invPick('server')">☁️ Inventura ze serveru (seznam)</button>
+    <button class="modal-btn info" data-inv="ean_loc" onclick="invPick('ean_loc')">📍 EAN + lokace</button>
+    <button class="modal-btn info" data-inv="kit" onclick="invPick('kit')">🖨️ Printer + Flash + Doplněk <span style="font-weight:400;font-size:12px;opacity:.85">(3× S/N = 1 sada)</span></button>
+    <button class="modal-btn info" data-inv="ean" onclick="invPick('ean')">🔢 Jen EAN</button>
+    <button class="modal-btn info" data-inv="intl" onclick="invPick('intl')">🌍 Mezinárodka – volné počítání <span style="font-weight:400;font-size:12px;opacity:.85">(43M0007578+0001 → 43M0007578)</span></button>
+    <button class="modal-btn secondary" data-inv="excel" onclick="invPick('excel')">📂 Seznam z Excelu/CSV v zařízení</button>
+    <button class="modal-btn secondary" onclick="backToHub('modal-inv-source')">⬅️ Zpět do hlavního rozcestníku</button>
   </div>
 </div>
 
@@ -1157,7 +1158,7 @@ var currentUser = '';
 var useLocation = false;
 var eanIntl = false;
 var intlSeen = {}, intlFull = null; // Mezinárodka: už naskenované celé štítky (s +pořadím)    // Mezinárodka: z kódu se bere jen část před „+“ (číslo zásilky bez pořadí kusu)
-var APP_VERSION = '5-52';
+var APP_VERSION = '5-54';
 var eanCount = false;   // Inventory Tool: počítání EAN (s lokací nebo bez)
 var eanSession = null;  // session_uid volné inventury EAN – na serveru jako řádek inventory_lists (kind ean / ean_loc)
 var expectingLoc = false;
@@ -1514,8 +1515,8 @@ function openHub() {
     parts.push('📋 Rozjetá inventura: <b>' + escHtml(invListMeta ? invListMeta.name : 'z Excelu v telefonu') + '</b> (' + f + '/' + invList.length + ')');
     parts.push(invListMeta && invListMeta.id ? 'Zůstane aktivní na serveru, můžeš se k ní vrátit i z jiného telefonu.' : '⚠️ Je jen v tomto telefonu, na serveru není.');
   }
-  hint.innerHTML = parts.join('<br>');
-  hint.style.display = parts.length ? 'block' : 'none';
+  hint.innerHTML = '';
+  hint.style.display = 'none';   // rozjetá inventura se hlásí až po klepnutí na danou položku
   document.getElementById('hub-exit').style.display = 'block';
   document.getElementById('mode-select-screen').style.display = 'flex';
 }
@@ -1525,17 +1526,53 @@ function hubClose() {
   closeModal('mode-select-screen');
 }
 function hubExit() { hubClose(); }
-function hubChoose(mode) {
-  if (!hubOpenedManually) { selectAppMode(mode); return; }   // první výběr po přihlášení
-  hubClose();
-  if (mode === 'wms') { if (appMode !== 'wms') switchAppMode('wms'); return; }
-  if (invList.length || intlV || (eanCount && rows.length)) {
-    document.getElementById('hub-inv-name').textContent = intlV ? ('Mezinárodka ' + intlV.name) : invList.length ? (invListMeta ? invListMeta.name : 'z Excelu v telefonu') : (eanIntl ? 'Mezinárodka' : (useLocation ? 'EAN + lokace' : 'jen EAN')) + ' (' + rows.length + ' řádků)';
+// Jaká inventura právě běží (pro hlášení až po klepnutí na danou položku)
+function invRunType() {
+  if (intlV) return 'server';
+  if (invMode && invList.length) return (invListMeta && invListMeta.id) ? 'server' : 'excel';
+  if (eanCount && rows.length) return kitMode ? 'kit' : snMode ? 'sn' : eanIntl ? 'intl' : useLocation ? 'ean_loc' : 'ean';
+  return null;
+}
+function invRunName() {
+  return intlV ? ('Mezinárodka ' + intlV.name) : invList.length ? (invListMeta ? invListMeta.name : 'z Excelu v telefonu') :
+    (kitMode ? 'Printer + Flash + Doplněk' : eanIntl ? 'Mezinárodka' : (useLocation ? 'EAN + lokace' : 'jen EAN')) + ' (' + rows.length + ' řádků)';
+}
+function markInvMenu() {
+  var rt = invRunType();
+  Array.prototype.forEach.call(document.querySelectorAll('#modal-inv-source [data-inv]'), function(b){
+    var m = b.querySelector('.inv-run'); if (m) m.remove();
+    if (rt && b.getAttribute('data-inv') === rt) { var sp = document.createElement('span'); sp.className = 'inv-run'; sp.textContent = ' ● rozjetá'; sp.style.cssText = 'font-size:12px;font-weight:700;color:#ffd54f'; b.appendChild(sp); }
+  });
+}
+function invPick(type) {
+  var rt = invRunType();
+  closeModal('modal-inv-source');
+  if (rt) {
+    var same = rt === type;
+    document.getElementById('hub-inv-text').innerHTML = same
+      ? 'Právě máš rozjetou inventuru <b>' + escHtml(invRunName()) + '</b>. Co chceš udělat?'
+      : 'Nejdřív dokonči nebo ukonči rozjetou inventuru <b>' + escHtml(invRunName()) + '</b> – pak můžeš začít jinou.';
+    document.getElementById('hub-inv-other').style.display = (same && rt === 'server') ? 'block' : 'none';
     document.getElementById('modal-hub-inv').style.display = 'flex';
     return;
   }
+  if (type === 'server') openInvServerPick();
+  else if (type === 'ean_loc') startEanCount(true);
+  else if (type === 'kit') startEanCount(false, false, false, true);
+  else if (type === 'ean') startEanCount(false);
+  else if (type === 'intl') startEanCount(false, true);
+  else if (type === 'excel') document.getElementById('inv-excel-input').click();
+}
+function showInvMenu() { markInvMenu(); document.getElementById('modal-inv-source').style.display = 'flex'; }
+function showWmsMenu() { document.getElementById('modal-wms-menu').style.display = 'flex'; try { tkCounts(); } catch(e) {} }
+function backToHub(modalId) { closeModal(modalId); openHub(); }
+function hubChoose(mode) {
+  if (!hubOpenedManually) { selectAppMode(mode); return; }   // první výběr po přihlášení
+  hubClose();
+  if (mode === 'wms') { if (appMode !== 'wms') switchAppMode('wms'); if (!task && !myDevMode) showWmsMenu(); return; }
+  // Inventory: vždy nejdřív nabídka; rozjetá inventura se ohlásí až po klepnutí na položku
   if (appMode !== 'inventura') switchAppMode('inventura');
-  else document.getElementById('modal-inv-source').style.display = 'flex';
+  closeModal('modal-inv-source'); showInvMenu();
 }
 function hubInvContinue() {
   closeModal('modal-hub-inv');
@@ -1559,17 +1596,15 @@ function hubInvOther() {
   if (eanCount) { eanSessionEnd(!rows.length); rows = []; eanCount = false; eanIntl = false; snMode = false; kitMode = false; expectingLoc = false; pendingEAN = null; locPill.style.display = 'none'; }
   appMode = 'inventura';
   renderInvTable(); refreshModeUI(); updateScanBtn();
-  document.getElementById('modal-inv-source').style.display = 'flex';
+  openInvServerPick();      // jiný seznam ze serveru
 }
 
 function selectAppMode(mode) {
   appMode = mode;
   closeModal('mode-select-screen');
   refreshModeUI();
-  if (mode === 'inventura' && !invList.length && !eanCount) {
-    document.getElementById('modal-inv-source').style.display = 'flex';
-  }
-  if (mode === 'wms') { renderWmsEmpty(); if (!myDevMode) setStatus('🏭 PRG WMS · klepni na Start a vyber činnost'); }
+  if (mode === 'inventura') showInvMenu();
+  if (mode === 'wms') { renderWmsEmpty(); if (!myDevMode) { setStatus('🏭 PRG WMS · vyber činnost'); if (!task) showWmsMenu(); } }
 }
 
 function refreshModeUI() {
@@ -1611,7 +1646,7 @@ function switchAppMode(target) {
     } else {
       invMode = false;
       setStatus('📋 Inventura · vyber zdroj seznamu');
-      document.getElementById('modal-inv-source').style.display = 'flex';
+      showInvMenu();
     }
   } else {
     invMode = false;
@@ -1629,7 +1664,7 @@ function renderWmsEmpty() {
 }
 function bottomModeBtn() {
   if (appMode === 'inventura' && !invMode && eanCount) { openInvEnd(); return; }
-  if (appMode === 'inventura' && !invMode) { document.getElementById('modal-inv-source').style.display = 'flex'; return; }
+  if (appMode === 'inventura' && !invMode) { showInvMenu(); return; }
   if (appMode === 'inventura') finishInventura();
   else openMyDevices();
 }
@@ -2487,7 +2522,7 @@ async function taskCode(code) {
 function startCam() {
   if (!currentUser) { document.getElementById('modal-login').style.display='flex'; return; }
   if (invMode || myDevMode || (appMode === 'inventura' && eanCount) || (appMode === 'wms' && task)) { initCamera(); return; }
-  if (appMode === 'inventura') { document.getElementById('modal-inv-source').style.display = 'flex'; return; }
+  if (appMode === 'inventura') { showInvMenu(); return; }
   document.getElementById('modal-wms-menu').style.display = 'flex';
   tkCounts();
 }
@@ -2829,17 +2864,17 @@ function invEndFinish() {
     if (!obDeferDrop(function(o){ return o.kind === 'inv_list_active' && String(o.list_id) === String(lid0); })) obSubmit({ kind: 'inv_complete', list_id: intlV.id, user: currentUser, at: new Date().toISOString() });
     intlStop(); stopCam(); renderTable(); refreshModeUI();
     setStatus('✅ Mezinárodka dokončena');
-    document.getElementById('modal-inv-source').style.display = 'flex';
+    showInvMenu();
     return;
   }
-  if (!rows.length) { eanSessionEnd(true); eanCount = false; eanIntl = false; snMode = false; kitMode = false; stopCam(); refreshModeUI(); document.getElementById('modal-inv-source').style.display = 'flex'; return; }
+  if (!rows.length) { eanSessionEnd(true); eanCount = false; eanIntl = false; snMode = false; kitMode = false; stopCam(); refreshModeUI(); showInvMenu(); return; }
   if (confirm('Stáhnout CSV s výsledkem?')) exportCSV();
   eanSessionEnd(false);
   rows = []; expectingLoc = false; pendingEAN = null; eanCount = false; eanIntl = false; snMode = false; kitMode = false;
   locPill.style.display = 'none';
   stopCam(); renderTable(); refreshModeUI();
   setStatus('✅ Inventura ukončena');
-  document.getElementById('modal-inv-source').style.display = 'flex';
+  showInvMenu();
 }
 function invEndCancel() {
   if (!confirm('Opravdu ZRUŠIT inventuru bez dokončení?\n\nVe webu bude vedená jako zrušená. Naskenovaná data zůstanou na serveru k nahlédnutí.')) return;
@@ -2858,7 +2893,7 @@ function invEndCancel() {
   }
   stopCam(); renderTable(); refreshModeUI();
   setStatus('🚫 Inventura zrušena');
-  document.getElementById('modal-inv-source').style.display = 'flex';
+  showInvMenu();
 }
 // Seznamová inventura (ze serveru): zrušit bez dokončení
 function cancelListInventura() {
@@ -2871,7 +2906,7 @@ function cancelListInventura() {
   try { saveInvCache(); } catch(e) {}
   renderInvTable(); refreshModeUI(); updateScanBtn();
   setStatus('🚫 Inventura zrušena');
-  document.getElementById('modal-inv-source').style.display = 'flex';
+  showInvMenu();
 }
 
 function freeIntl() { return (eanCount && eanIntl && !intlV) || (eanCount && snMode && !intlV); }
@@ -3151,7 +3186,7 @@ function eanSessionEnd(empty) {
   obSubmit(op).catch(function(){});
 }
 function finishEanCount() {
-  if (!rows.length) { eanSessionEnd(true); eanCount = false; snMode = false; kitMode = false; stopCam(); refreshModeUI(); document.getElementById('modal-inv-source').style.display = 'flex'; return; }
+  if (!rows.length) { eanSessionEnd(true); eanCount = false; snMode = false; kitMode = false; stopCam(); refreshModeUI(); showInvMenu(); return; }
   var pcs = rows.reduce(function(a, r){ return a + r.qty; }, 0);
   if (!confirm('Ukončit inventuru? Naskenováno ' + rows.length + ' řádků, ' + pcs + ' ks. Skeny jsou uložené na serveru (WMS → Skeny)' + (OB.count ? ', ' + OB.count + ' čeká na odeslání.' : '.'))) return;
   if (confirm('Stáhnout CSV s výsledkem?')) exportCSV();
@@ -3160,7 +3195,7 @@ function finishEanCount() {
   locPill.style.display = 'none';
   stopCam(); renderTable(); refreshModeUI();
   setStatus('✅ Inventura ukončena');
-  document.getElementById('modal-inv-source').style.display = 'flex';
+  showInvMenu();
 }
 
 function startWithLoc(withLoc) {
