@@ -201,6 +201,7 @@
     #sn-pill { position: absolute; top: 40px; right: 8px; display: none; z-index: 6; background: rgba(39,174,96,0.92); color: #fff; font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 20px; cursor: pointer; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #sn-pill.empty { background: rgba(230,126,34,0.92); }
     #cam-wrap.reader #sn-pill { top: 7px; right: 8px; font-size: 15px; padding: 5px 14px; }
+    #sn-pill.kit { left: 8px; right: 8px; max-width: none; text-align: center; font-size: 15px; }
     #cam-wrap.reader video, #cam-wrap.reader #aim, #cam-wrap.reader #focus-ring { display: none; }
     #reader-panel { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; flex-direction: column; color: #fff; text-align: center; padding: 10px; }
     #cam-wrap.reader #reader-panel { display: none; }
@@ -612,7 +613,7 @@
     <input type="file" id="inv-excel-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="loadInvExcelFile(this)">
     <button class="modal-btn" style="background:var(--accent)" onclick="openInvServerPick()">☁️ Inventura ze serveru (seznam)</button>
     <button class="modal-btn info" onclick="startEanCount(true)">📍 EAN + lokace</button>
-    <button class="modal-btn info" onclick="startEanCount(true, false, true)">🏷️ EAN + lokace + S/N <span style="font-weight:400;font-size:12px;opacity:.85">(lokace → EAN → sériová čísla)</span></button>
+    <button class="modal-btn info" onclick="startEanCount(false, false, false, true)">🖨️ Printer + Flash + Doplněk <span style="font-weight:400;font-size:12px;opacity:.85">(3× S/N = 1 sada)</span></button>
     <button class="modal-btn info" onclick="startEanCount(false)">🔢 Jen EAN</button>
     <button class="modal-btn info" onclick="startEanCount(false, true)">🌍 Mezinárodka – volné počítání <span style="font-weight:400;font-size:12px;opacity:.85">(43M0007578+0001 → 43M0007578)</span></button>
     <button class="modal-btn secondary" onclick="document.getElementById('inv-excel-input').click()">📂 Seznam z Excelu/CSV v zařízení</button>
@@ -1460,7 +1461,7 @@ function hubInvOther() {
   stopCam();
   invMode = false; invList = []; invExtra = []; invListMeta = null;
   if (intlV) intlStop();
-  if (eanCount) { eanSessionEnd(!rows.length); rows = []; eanCount = false; eanIntl = false; snMode = false; expectingLoc = false; pendingEAN = null; locPill.style.display = 'none'; }
+  if (eanCount) { eanSessionEnd(!rows.length); rows = []; eanCount = false; eanIntl = false; snMode = false; kitMode = false; expectingLoc = false; pendingEAN = null; locPill.style.display = 'none'; }
   appMode = 'inventura';
   renderInvTable(); refreshModeUI(); updateScanBtn();
   document.getElementById('modal-inv-source').style.display = 'flex';
@@ -2412,7 +2413,7 @@ function intlLabel() { return '🌍 ' + intlDone() + '/' + intlV.items.length + 
 function intlStop() {
   clearInterval(intlPollTimer); intlPollTimer = null;
   if (!intlV) return;
-  intlV = null; eanCount = false; eanIntl = false; snMode = false; rows = [];
+  intlV = null; eanCount = false; eanIntl = false; snMode = false; kitMode = false; rows = [];
 }
 
 async function selectIntlList(listId, listName) {
@@ -2681,6 +2682,9 @@ function openInvEnd() {
     html = '<b>' + escHtml(intlV.name) + '</b><br>' + s.ok + ' HB v pořádku · ' + s.part + ' neúplných · ' + s.miss + ' chybí' +
       (s.over ? ' · ' + s.over + ' s kusy navíc' : '') + (s.loc ? ' · ' + s.loc + ' na jiné lokaci' : '') + (s.extra ? ' · ' + s.extra + ' mimo export' : '') +
       '<br>Kusy: <b>' + s.pcs + ' / ' + s.pcsExp + '</b>';
+  } else if (kitOn()) {
+    var full = kitSets.filter(function(x){ return Object.keys(x.parts).length === 3; }).length;
+    html = '🖨️ Printer + Flash + Doplněk<br><b>' + full + '</b> kompletních sad' + (kitSets.length > full ? '<br>⚠️ <b>' + (kitSets.length - full) + '</b> neúplná sada – chybí díl' : '');
   } else {
     var pcs = rows.reduce(function(a, r){ return a + r.qty; }, 0);
     html = eanLabel() + '<br>Naskenováno <b>' + rows.length + '</b> řádků, <b>' + pcs + '</b> ks.';
@@ -2701,10 +2705,10 @@ function invEndFinish() {
     document.getElementById('modal-inv-source').style.display = 'flex';
     return;
   }
-  if (!rows.length) { eanSessionEnd(true); eanCount = false; eanIntl = false; snMode = false; stopCam(); refreshModeUI(); document.getElementById('modal-inv-source').style.display = 'flex'; return; }
+  if (!rows.length) { eanSessionEnd(true); eanCount = false; eanIntl = false; snMode = false; kitMode = false; stopCam(); refreshModeUI(); document.getElementById('modal-inv-source').style.display = 'flex'; return; }
   if (confirm('Stáhnout CSV s výsledkem?')) exportCSV();
   eanSessionEnd(false);
-  rows = []; expectingLoc = false; pendingEAN = null; eanCount = false; eanIntl = false; snMode = false;
+  rows = []; expectingLoc = false; pendingEAN = null; eanCount = false; eanIntl = false; snMode = false; kitMode = false;
   locPill.style.display = 'none';
   stopCam(); renderTable(); refreshModeUI();
   setStatus('✅ Inventura ukončena');
@@ -2722,7 +2726,7 @@ function invEndCancel() {
     var sid1 = eanSession;
     if (eanSession && !obDeferDrop(function(o){ return o.kind === 'inv_ean_start' && o.row.session_uid === sid1; })) obSubmit({ kind: 'inv_ean_cancel', session_uid: eanSession, user: currentUser, at: at });
     eanSession = null;
-    rows = []; expectingLoc = false; pendingEAN = null; eanCount = false; eanIntl = false; snMode = false;
+    rows = []; expectingLoc = false; pendingEAN = null; eanCount = false; eanIntl = false; snMode = false; kitMode = false;
     locPill.style.display = 'none';
   }
   stopCam(); renderTable(); refreshModeUI();
@@ -2782,6 +2786,8 @@ function snSetProduct(c) {
 }
 function updateSnPill() {
   var p = document.getElementById('sn-pill'); if (!p) return;
+  if (kitOn()) { updateKitPill(); return; }
+  p.classList.remove('kit');
   p.style.display = (appMode === 'inventura' && snOn()) ? 'block' : 'none';
   p.textContent = '📦 ' + (snProduct || 'Produkt: naskenuj EAN');
   p.classList.toggle('empty', !snProduct);
@@ -2885,14 +2891,97 @@ function exportSnCSV() {
   setStatus('📥 S/N CSV exportováno');
 }
 
-function eanLabel() { if (intlV) return intlLabel(); if (snOn()) return '🏷️ EAN + lok. + S/N'; return eanIntl ? '🌍 Mezinárodka' : (useLocation ? '📍 EAN + lokace' : '🔢 Jen EAN'); }
+// ── 🖨️ Printer + Flash + Doplněk (bez lokace) ──
+// 3 skeny za sebou = 1 sada: S/N tiskárny → S/N flash → S/N doplňku. Každé S/N smí být jen jednou.
+var KIT_PARTS = [ { k: 'PRINTER', t: 'Printer', i: '🖨️' }, { k: 'FLASH', t: 'Flash', i: '💾' }, { k: 'DOPLNEK', t: 'Doplněk', i: '🧩' } ];
+var kitMode = false, kitCur = null, kitSets = [], kitSeen = {};
+function kitOn() { return eanCount && kitMode && !intlV; }
+function kitStep() { return kitCur ? KIT_PARTS.filter(function(p){ return kitCur.parts[p.k]; }).length : 0; }
+function kitSyncRows() { rows = kitSets.map(function(s){ return { ean: s.parts.PRINTER || '', loc: '', qty: Object.keys(s.parts).length, user: currentUser, timestamps: [] }; }); }
+function updateKitPill() {
+  var p = document.getElementById('sn-pill'); if (!p) return;
+  if (!(appMode === 'inventura' && kitOn())) return;
+  var nx = KIT_PARTS[kitStep()];
+  p.style.display = 'block';
+  p.textContent = 'Další: ' + nx.i + ' ' + nx.t.toUpperCase() + (kitCur ? '  (sada #' + kitCur.no + ')' : '');
+  p.classList.add('kit');
+  document.getElementById('cam-wrap').classList.add('haspill');
+  p.classList.toggle('empty', kitStep() > 0);
+}
+function kitSend(set, part, sn, qty) {
+  sendScan({ ean: sn, location: part, serial_no: set.id, quantity: qty, placement_mode: 'inv_kit3', inv_session: eanSession });
+}
+async function handleKitCode(code) {
+  var c = String(code || '').trim().toUpperCase();
+  if (!c) return;
+  if (kitSeen[c]) { buzz(); setStatus('⚠️ S/N ' + c + ' už je v sadě #' + kitSeen[c].no + ' (' + kitSeen[c].t + ') – nepočítá se znovu'); return; }
+  if (!kitCur) { kitCur = { id: obUid(), no: kitSets.length ? kitSets[kitSets.length - 1].no + 1 : 1, parts: {}, _t: Date.now() }; kitSets.push(kitCur); }
+  var part = KIT_PARTS[kitStep()];
+  kitCur.parts[part.k] = c; kitCur._t = Date.now();
+  kitSeen[c] = { no: kitCur.no, t: part.t };
+  kitSend(kitCur, part.k, c, 1);
+  if (kitStep() === KIT_PARTS.length) {
+    beepOk(); setStatus('✅ Sada #' + kitCur.no + ' kompletní · naskenuj další 🖨️ PRINTER');
+    kitCur = null;
+  } else {
+    setStatus(part.i + ' ' + part.t + ': ' + c + ' · teď naskenuj ' + KIT_PARTS[kitStep()].i + ' ' + KIT_PARTS[kitStep()].t.toUpperCase());
+  }
+  kitSyncRows(); renderTable(); refreshModeUI();
+}
+function kitUndo() {
+  var set = kitCur || kitSets[kitSets.length - 1];
+  if (!set) { setStatus('Není co vrátit'); return; }
+  var last = null; KIT_PARTS.forEach(function(p){ if (set.parts[p.k]) last = p; });
+  if (!last) return;
+  if (!confirm('Vrátit poslední sken: ' + last.t + ' ' + set.parts[last.k] + ' (sada #' + set.no + ')?')) return;
+  var sn = set.parts[last.k];
+  delete set.parts[last.k]; delete kitSeen[sn];
+  kitSend(set, last.k, sn, -1);
+  if (!Object.keys(set.parts).length) { kitSets.splice(kitSets.indexOf(set), 1); kitCur = null; }
+  else kitCur = set;                      // neúplná sada – pokračuje se jejím dalším dílem
+  kitSyncRows(); renderTable(); refreshModeUI();
+  setStatus('↩️ Vráceno: ' + last.t + ' ' + sn + (kitCur ? ' · teď naskenuj ' + KIT_PARTS[kitStep()].t.toUpperCase() : ''));
+}
+function kitDelete(no) {
+  var set = kitSets.find(function(s){ return s.no === no; }); if (!set) return;
+  if (!confirm('Smazat celou sadu #' + no + '?')) return;
+  KIT_PARTS.forEach(function(p){ var sn = set.parts[p.k]; if (sn) { delete kitSeen[sn]; kitSend(set, p.k, sn, -1); } });
+  kitSets.splice(kitSets.indexOf(set), 1);
+  if (kitCur === set) kitCur = null;
+  kitSyncRows(); renderTable(); refreshModeUI();
+  setStatus('🗑 Sada #' + no + ' smazána');
+}
+function renderKitTable() {
+  var empty = document.getElementById('empty-state'), table = document.getElementById('main-table'), tbody = document.getElementById('tableBody');
+  document.getElementById('table-head-row').innerHTML = '<th>#</th><th>Printer / Flash / Doplněk</th><th style="text-align:right"><button class="qty-btn" title="Vrátit poslední sken" onclick="kitUndo()">↩️</button></th>';
+  if (!kitSets.length) { empty.style.display = 'block'; table.style.display = 'none'; updateKitPill(); return; }
+  empty.style.display = 'none'; table.style.display = 'table';
+  tbody.innerHTML = kitSets.slice().sort(function(a, b){ return b._t - a._t; }).map(function(s){
+    var done = Object.keys(s.parts).length === KIT_PARTS.length;
+    var lines = KIT_PARTS.map(function(p){ return '<div style="white-space:nowrap">' + p.i + ' ' + (s.parts[p.k] ? escHtml(s.parts[p.k]) : '<span style="color:var(--warning)">— chybí —</span>') + '</div>'; }).join('');
+    return '<tr style="background:' + (done ? '#e8f6ef' : '#fff8e6') + '"><td class="qty-cell">' + s.no + '</td><td class="ean-cell" style="font-size:13px;line-height:1.5">' + lines + '</td>' +
+      '<td class="acts-cell"><button class="qty-btn minus" onclick="kitDelete(' + s.no + ')">−</button></td></tr>';
+  }).join('');
+  document.getElementById('table-area').scrollTop = 0;
+  updateKitPill();
+}
+function exportKitCSV() {
+  if (!kitSets.length) { setStatus('⚠️ Žádná data k exportu'); return; }
+  var q = function(v){ return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
+  var csv = 'Sada,Printer,Flash,Doplnek,Kompletni,Uzivatel\n';
+  kitSets.forEach(function(s){ csv += [s.no, q(s.parts.PRINTER), q(s.parts.FLASH), q(s.parts.DOPLNEK), Object.keys(s.parts).length === 3 ? 'ano' : 'ne', q(currentUser)].join(',') + '\n'; });
+  downloadCSV('﻿' + csv, 'printer_flash_doplnek');
+  setStatus('📥 CSV exportováno (' + kitSets.length + ' sad)');
+}
+
+function eanLabel() { if (intlV) return intlLabel(); if (snOn()) return '🏷️ EAN + lok. + S/N'; if (kitOn()) return '🖨️ ' + kitSets.filter(function(x){ return Object.keys(x.parts).length === 3; }).length + ' sad'; return eanIntl ? '🌍 Mezinárodka' : (useLocation ? '📍 EAN + lokace' : '🔢 Jen EAN'); }
 // Mezinárodka: 43M0007578+0001 -> 43M0007578. Kód začínající „+“ se nemění.
 function intlCode(code) {
   code = String(code == null ? '' : code).trim();
   var i = code.indexOf('+');
   return i > 0 ? code.slice(0, i).trim() : code;
 }
-function startEanCount(withLoc, intl, sn) {
+function startEanCount(withLoc, intl, sn, kit) {
   closeModal('modal-inv-source');
   stopCam();
   intlStop();
@@ -2902,6 +2991,8 @@ function startEanCount(withLoc, intl, sn) {
   useLocation = withLoc;
   eanIntl = !!intl; intlSeen = {}; intlFull = null;
   snMode = !!sn; snProduct = ''; snSeen = {}; snLog = [];
+  kitMode = !!kit; kitCur = null; kitSets = []; kitSeen = {};
+  if (kitMode) { useLocation = false; rows = []; }
   if (snMode) useLocation = false;
   expectingLoc = false; pendingEAN = null;
   locPill.style.display = 'none';
@@ -2909,14 +3000,14 @@ function startEanCount(withLoc, intl, sn) {
   if (snMode) { setRoom(''); loadFreeLocs(); loadSnProducts(); updateSnPill(); setTimeout(function(){ openRoomModal(); }, 300); }
   if (intl) { setRoom(''); loadFreeLocs(); loadFreeExport(); setTimeout(function(){ openRoomModal(); }, 300); }
   renderTableHead(); renderTable(); refreshModeUI(); updateScanBtn();
-  setStatus((snMode ? '🏷️ EAN + lokace + S/N · naskenuj LOKACI, pak EAN a sériová čísla' : eanIntl ? '🌍 Mezinárodka · naskenuj LOKACI, pak jen zásilky' : (withLoc ? '📍 Inventura EAN + lokace' : '🔢 Inventura – jen EAN')) + ' · spouštím kameru');
+  setStatus((kitMode ? '🖨️ Printer + Flash + Doplněk · naskenuj S/N tiskárny' : snMode ? '🏷️ EAN + lokace + S/N · naskenuj LOKACI, pak EAN a sériová čísla' : eanIntl ? '🌍 Mezinárodka · naskenuj LOKACI, pak jen zásilky' : (withLoc ? '📍 Inventura EAN + lokace' : '🔢 Inventura – jen EAN')) + ' · spouštím kameru');
   initCamera();
 }
 function eanSessionStart(withLoc) {
   eanSession = obUid();
   var d = new Date();
-  var row = { session_uid: eanSession, kind: snMode ? 'ean_loc_sn' : (withLoc ? 'ean_loc' : 'ean'), status: 'active',
-    name: (snMode ? 'EAN + lokace + S/N' : eanIntl ? 'Mezinárodka' : (withLoc ? 'EAN + lokace' : 'Jen EAN')) + ' · ' + currentUser + ' · ' + d.toLocaleString('cs-CZ', { day:'numeric', month:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+  var row = { session_uid: eanSession, kind: kitMode ? 'kit3' : snMode ? 'ean_loc_sn' : (withLoc ? 'ean_loc' : 'ean'), status: 'active',
+    name: (kitMode ? 'Printer + Flash + Doplněk' : snMode ? 'EAN + lokace + S/N' : eanIntl ? 'Mezinárodka' : (withLoc ? 'EAN + lokace' : 'Jen EAN')) + ' · ' + currentUser + ' · ' + d.toLocaleString('cs-CZ', { day:'numeric', month:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
     started_by: currentUser, started_at: d.toISOString() };
   if (currentDcId != null) row.dc_id = currentDcId;
   var sid = eanSession;
@@ -2933,12 +3024,12 @@ function eanSessionEnd(empty) {
   obSubmit(op).catch(function(){});
 }
 function finishEanCount() {
-  if (!rows.length) { eanSessionEnd(true); eanCount = false; snMode = false; stopCam(); refreshModeUI(); document.getElementById('modal-inv-source').style.display = 'flex'; return; }
+  if (!rows.length) { eanSessionEnd(true); eanCount = false; snMode = false; kitMode = false; stopCam(); refreshModeUI(); document.getElementById('modal-inv-source').style.display = 'flex'; return; }
   var pcs = rows.reduce(function(a, r){ return a + r.qty; }, 0);
   if (!confirm('Ukončit inventuru? Naskenováno ' + rows.length + ' řádků, ' + pcs + ' ks. Skeny jsou uložené na serveru (WMS → Skeny)' + (OB.count ? ', ' + OB.count + ' čeká na odeslání.' : '.'))) return;
   if (confirm('Stáhnout CSV s výsledkem?')) exportCSV();
   eanSessionEnd(false);
-  rows = []; expectingLoc = false; pendingEAN = null; eanCount = false; eanIntl = false; snMode = false;
+  rows = []; expectingLoc = false; pendingEAN = null; eanCount = false; eanIntl = false; snMode = false; kitMode = false;
   locPill.style.display = 'none';
   stopCam(); renderTable(); refreshModeUI();
   setStatus('✅ Inventura ukončena');
@@ -3323,6 +3414,7 @@ async function loadFreeExport() {
   } catch(e) {}
 }
 async function handleScannedCode(code) {
+  if (appMode === 'inventura' && kitOn() && !invMode && !myDevMode) { await handleKitCode(code); return; }
   if (appMode === 'inventura' && snOn() && !invMode && !myDevMode) { await handleSnCode(code); return; }
   if (appMode === 'inventura' && eanCount && eanIntl && isDestCode(code)) { buzz(); setStatus('↷ ' + String(code).trim() + ' je kód DESTINACE (spodní část štítku) – naskenuj horní kód zásilky'); return; }
   if (intlV && appMode === 'inventura' && !myDevMode) { document.getElementById('manual-btn').style.display = 'none'; await handleIntlVerify(code); return; }
@@ -3833,7 +3925,7 @@ async function selectInvList(listId, listName) {
 function startInvScanning(list, meta) {
   intlStop();
   if (eanCount) eanSessionEnd(!rows.length);
-  eanCount = false; snMode = false;
+  eanCount = false; snMode = false; kitMode = false;
   invMode = true;
   invList = list;
   invExtra = [];
@@ -4047,7 +4139,8 @@ function updateRoomPill() {
   try { updateSnPill(); } catch(e) {}
   var pill = document.getElementById('room-pill'); if (!pill) return;
   pill.style.display = (appMode === 'inventura' && (invMode || intlV || freeIntl())) ? 'block' : 'none';
-  document.getElementById('cam-wrap').classList.toggle('haspill', pill.style.display === 'block');
+  var snp = document.getElementById('sn-pill');
+  document.getElementById('cam-wrap').classList.toggle('haspill', pill.style.display === 'block' || (snp && snp.style.display === 'block'));
   pill.textContent = ((intlV || freeIntl()) ? '📍 Lokace: ' : '📍 Místnost: ') + (invRoom || 'nenastavena');
 }
 function setRoom(v) {
@@ -4178,7 +4271,7 @@ function exportInvCSV() {
 
 function renderTableHead() {
   var tr = document.getElementById('table-head-row');
-  if (intlV || snOn()) return;
+  if (intlV || snOn() || kitOn()) return;
   tr.innerHTML = showLocCol()
     ? '<th>EAN</th><th>Lokace</th><th style="text-align:center">Ks</th><th style="text-align:right">±</th>'
     : '<th>EAN</th><th style="text-align:center">Ks</th><th style="text-align:right">±</th>';
@@ -4188,6 +4281,7 @@ function renderTable(highlightIdx) {
   if (myDevMode) { renderMyDevTable(); return; }
   if (appMode === 'wms') { renderWmsEmpty(); return; }
   if (intlV) { renderIntlTable(); return; }
+  if (kitOn()) { renderKitTable(); return; }
   if (snOn()) { if (highlightIdx != null && rows[highlightIdx]) rows[highlightIdx]._t = Date.now(); renderSnTable(); return; }
   var empty = document.getElementById('empty-state');
   var table = document.getElementById('main-table');
@@ -4218,6 +4312,7 @@ function renderTable(highlightIdx) {
 }
 
 function changeQty(idx, delta) {
+  if (kitOn()) return;
   if (snOn()) { snChangeQty(idx, delta); return; }
   if (freeIntl() && delta > 0 && !invRoom && !rows[idx].loc) { openRoomModal(); return; }
   rows[idx].qty += delta;
@@ -4231,6 +4326,7 @@ function changeQty(idx, delta) {
 function exportCSV() {
   if (intlV) { exportIntlCSV(); setStatus('📥 Mezinárodka CSV exportováno'); return; }
   if (invMode) { exportInvCSV(); setStatus('📥 Inventura CSV exportováno'); return; }
+  if (kitOn()) { exportKitCSV(); return; }
   if (snOn()) { exportSnCSV(); return; }
   if (myDevMode) {
     if (!devScanResults.length) { setStatus('⚠️ Žádná data k exportu'); return; }

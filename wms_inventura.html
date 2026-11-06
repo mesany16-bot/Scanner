@@ -303,9 +303,12 @@ async function loadInvPage(quiet){
   var sess=all.filter(isEanInv).map(function(l){return l.session_uid;}).filter(Boolean);
   var scanCnt={}, scanPcs={};
   if(sess.length){
-    var sr=await supa.from('scans').select('inv_session,quantity').in('inv_session',sess);
-    (sr.data||[]).forEach(function(r){scanCnt[r.inv_session]=(scanCnt[r.inv_session]||0)+1;scanPcs[r.inv_session]=(scanPcs[r.inv_session]||0)+(Number(r.quantity)||1);});
+    var sr=await supa.from('scans').select('inv_session,quantity,location,placement_mode').in('inv_session',sess);
+    KIT_SETS={};
+    (sr.data||[]).forEach(function(r){scanCnt[r.inv_session]=(scanCnt[r.inv_session]||0)+1;scanPcs[r.inv_session]=(scanPcs[r.inv_session]||0)+(Number(r.quantity)||1);
+      if(r.placement_mode==='inv_kit3'&&r.location==='PRINTER')KIT_SETS[r.inv_session]=(KIT_SETS[r.inv_session]||0)+(Number(r.quantity)||1);});
   }
+  SCAN_PCS=scanPcs;
   var uploaded=all.filter(function(l){return l.status==='uploaded'||!l.status;});
   var active=all.filter(function(l){return l.status==='active';});
   var completed=all.filter(function(l){return l.status==='completed'||l.status==='cancelled';});
@@ -330,7 +333,7 @@ async function loadInvPage(quiet){
   at.innerHTML=active.length?active.map(function(l){
     if(isEanInv(l)){
       return '<tr><td>'+invKindBadge(l)+'<b>'+l.name+'</b></td><td>'+(l.started_by||'–')+'</td>'+
-        '<td>'+(scanPcs[l.session_uid]||0)+' ks <span style="font-size:12px;color:var(--muted)">('+(scanCnt[l.session_uid]||0)+' skenů)</span></td>'+
+        '<td>'+pcsLabel(l)+' <span style="font-size:12px;color:var(--muted)">('+(scanCnt[l.session_uid]||0)+' skenů)</span></td>'+
         '<td><span class="badge badge-gray">–</span></td>'+
         '<td style="font-size:12px;color:var(--muted)">'+(l.started_at?new Date(l.started_at).toLocaleString('cs-CZ'):'–')+'</td>'+
         '<td style="text-align:right;white-space:nowrap">'+
@@ -361,7 +364,7 @@ async function loadInvPage(quiet){
   ct.innerHTML=completed.length?completed.map(function(l){
     if(isEanInv(l)){
       return '<tr><td>'+cancelBadge(l)+invKindBadge(l)+'<b>'+l.name+'</b></td><td>'+whoDone(l)+'</td>'+
-        '<td><span class="badge badge-green">'+(scanPcs[l.session_uid]||0)+' ks</span></td>'+
+        '<td><span class="badge badge-green">'+pcsLabel(l)+'</span></td>'+
         '<td><span class="badge badge-gray">–</span></td><td><span class="badge badge-gray">–</span></td>'+
         '<td style="font-size:12px;color:var(--muted)">'+whenDone(l)+'</td>'+
         '<td style="text-align:right;white-space:nowrap"><button class="btn btn-danger btn-sm" onclick="deleteInvList('+l.id+',\''+esc(l.name)+'\')">🗑 Smazat</button></td>'+
@@ -385,11 +388,29 @@ async function loadInvPage(quiet){
 }
 
 var INV_BY_ID={};
-function isEanInv(l){ return !!l && (l.kind==='ean'||l.kind==='ean_loc'||l.kind==='ean_loc_sn'); }
+function isEanInv(l){ return !!l && (l.kind==='ean'||l.kind==='ean_loc'||l.kind==='ean_loc_sn'||l.kind==='kit3'); }
+function isKitInv(l){ return !!l && l.kind==='kit3'; }
+function pcsLabel(l){ return isKitInv(l)?(KIT_SETS[l.session_uid]||0)+' sad':(SCAN_PCS[l.session_uid]||0)+' ks'; }
+var KIT_SETS={}, SCAN_PCS={};
 function isSnInv(l){ return !!l && l.kind==='ean_loc_sn'; }
 function isIntl(l){ return !!l && l.kind==='intl'; }
-function invKindBadge(l){ if(l.kind==='ean_loc_sn')return '<span class="badge badge-gray" style="margin-right:6px">🏷️ EAN + lokace + S/N</span>'; if(l.kind==='intl')return '<span class="badge badge-orange" style="margin-right:6px">🌍 Mezinárodka</span>'; if((l.kind==='ean'||l.kind==='ean_loc')&&/^Mezinárodka/.test(l.name||''))return '<span class="badge badge-orange" style="margin-right:6px">🌍 Mezinárodka (volná)</span>'; return l.kind==='ean_loc'?'<span class="badge badge-gray" style="margin-right:6px">📍 EAN + lokace</span>':(l.kind==='ean'?'<span class="badge badge-gray" style="margin-right:6px">🔢 Jen EAN</span>':''); }
+function invKindBadge(l){ if(l.kind==='kit3')return '<span class="badge badge-gray" style="margin-right:6px">🖨️ Printer + Flash + Doplněk</span>'; if(l.kind==='ean_loc_sn')return '<span class="badge badge-gray" style="margin-right:6px">🏷️ EAN + lokace + S/N</span>'; if(l.kind==='intl')return '<span class="badge badge-orange" style="margin-right:6px">🌍 Mezinárodka</span>'; if((l.kind==='ean'||l.kind==='ean_loc')&&/^Mezinárodka/.test(l.name||''))return '<span class="badge badge-orange" style="margin-right:6px">🌍 Mezinárodka (volná)</span>'; return l.kind==='ean_loc'?'<span class="badge badge-gray" style="margin-right:6px">📍 EAN + lokace</span>':(l.kind==='ean'?'<span class="badge badge-gray" style="margin-right:6px">🔢 Jen EAN</span>':''); }
 var EAN_COLS=['EAN','Lokace','Množství','Skenů','Uživatelé','První sken','Poslední sken'];
+var KIT_COLS=['Sada','Printer','Flash','Doplněk','Kompletní','Uživatel','Čas'];
+async function fetchKitExportRows(l){
+  var r=await supa.from('scans').select('ean,location,quantity,serial_no,scanned_at,profiles(name)').eq('inv_session',l.session_uid).order('scanned_at',{ascending:true});
+  var g={}, order=[], net={};
+  (r.data||[]).forEach(function(x){
+    var k=x.serial_no||'?', p=x.location||'', key=k+'|'+p+'|'+(x.ean||'');
+    net[key]=(net[key]||0)+(Number(x.quantity)||1);
+    if(!g[k]){g[k]={parts:{},u:'',t:''};order.push(k);}
+    if((Number(x.quantity)||1)>0){g[k].u=(x.profiles&&x.profiles.name)||g[k].u;g[k].t=fmtTsDash(x.scanned_at);}
+  });
+  Object.keys(net).forEach(function(key){ if(net[key]>0){var a=key.split('|');g[a[0]].parts[a[1]]=a.slice(2).join('|');} });
+  var n=0;
+  return order.filter(function(k){return Object.keys(g[k].parts).length;}).map(function(k){var o=g[k];n++;
+    return {'Sada':n,'Printer':o.parts.PRINTER||'','Flash':o.parts.FLASH||'','Doplněk':o.parts.DOPLNEK||'','Kompletní':(o.parts.PRINTER&&o.parts.FLASH&&o.parts.DOPLNEK)?'ano':'NE','Uživatel':o.u,'Čas':o.t};});
+}
 var SN_COLS=['EAN','Lokace','S/N','Množství','Uživatel','Čas skenu'];
 async function fetchSnExportRows(l){
   var r=await supa.from('scans').select('ean,location,quantity,serial_no,scanned_at,profiles(name)').eq('inv_session',l.session_uid).order('scanned_at',{ascending:true});
@@ -458,8 +479,8 @@ async function fetchIntlExportRows(listId){
 async function downloadInvCsv(listId, listName){
   var L=INV_BY_ID[listId], ean=isEanInv(L);
   if(isIntl(L)){var x=await fetchIntlExportRows(listId);var rows=x.rows,cols=x.cols;}else{
-  var rows=isSnInv(L)?await fetchSnExportRows(L):ean?await fetchEanExportRows(L):await fetchInvExportRows(listId);
-  var cols=isSnInv(L)?SN_COLS:ean?EAN_COLS:['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];}
+  var rows=isKitInv(L)?await fetchKitExportRows(L):isSnInv(L)?await fetchSnExportRows(L):ean?await fetchEanExportRows(L):await fetchInvExportRows(listId);
+  var cols=isKitInv(L)?KIT_COLS:isSnInv(L)?SN_COLS:ean?EAN_COLS:['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];}
   var q=function(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; };
   var csv=cols.join(',')+'\n';
   rows.forEach(function(r){ csv+=cols.map(function(k){return q(r[k]);}).join(',')+'\n'; });
@@ -474,8 +495,8 @@ async function downloadInvCsv(listId, listName){
 async function downloadInvXlsx(listId, listName){
   var L=INV_BY_ID[listId], ean=isEanInv(L);
   if(isIntl(L)){var x=await fetchIntlExportRows(listId);var ws0=XLSX.utils.json_to_sheet(x.rows,{header:x.cols});ws0['!cols']=x.cols.map(function(c){return {wch:Math.max(10,c.length+2)};});var wb0=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb0,ws0,'Mezinárodka');XLSX.writeFile(wb0,'mezinarodka_'+listName.replace(/[^a-z0-9_-]/gi,'_')+'.xlsx');return;}
-  var rows=isSnInv(L)?await fetchSnExportRows(L):ean?await fetchEanExportRows(L):await fetchInvExportRows(listId);
-  var cols=isSnInv(L)?SN_COLS:ean?EAN_COLS:['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];
+  var rows=isKitInv(L)?await fetchKitExportRows(L):isSnInv(L)?await fetchSnExportRows(L):ean?await fetchEanExportRows(L):await fetchInvExportRows(listId);
+  var cols=isKitInv(L)?KIT_COLS:isSnInv(L)?SN_COLS:ean?EAN_COLS:['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];
   var ws=XLSX.utils.json_to_sheet(rows,{header:cols});
   ws['!cols']=ean?[{wch:16},{wch:14},{wch:10},{wch:8},{wch:24},{wch:20},{wch:20}]:[{wch:16},{wch:30},{wch:14},{wch:16},{wch:12},{wch:20},{wch:16}];
   var wb=XLSX.utils.book_new();
