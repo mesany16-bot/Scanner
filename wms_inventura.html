@@ -385,10 +385,23 @@ async function loadInvPage(quiet){
 }
 
 var INV_BY_ID={};
-function isEanInv(l){ return !!l && (l.kind==='ean'||l.kind==='ean_loc'); }
+function isEanInv(l){ return !!l && (l.kind==='ean'||l.kind==='ean_loc'||l.kind==='ean_loc_sn'); }
+function isSnInv(l){ return !!l && l.kind==='ean_loc_sn'; }
 function isIntl(l){ return !!l && l.kind==='intl'; }
-function invKindBadge(l){ if(l.kind==='intl')return '<span class="badge badge-orange" style="margin-right:6px">🌍 Mezinárodka</span>'; if((l.kind==='ean'||l.kind==='ean_loc')&&/^Mezinárodka/.test(l.name||''))return '<span class="badge badge-orange" style="margin-right:6px">🌍 Mezinárodka (volná)</span>'; return l.kind==='ean_loc'?'<span class="badge badge-gray" style="margin-right:6px">📍 EAN + lokace</span>':(l.kind==='ean'?'<span class="badge badge-gray" style="margin-right:6px">🔢 Jen EAN</span>':''); }
+function invKindBadge(l){ if(l.kind==='ean_loc_sn')return '<span class="badge badge-gray" style="margin-right:6px">🏷️ EAN + lokace + S/N</span>'; if(l.kind==='intl')return '<span class="badge badge-orange" style="margin-right:6px">🌍 Mezinárodka</span>'; if((l.kind==='ean'||l.kind==='ean_loc')&&/^Mezinárodka/.test(l.name||''))return '<span class="badge badge-orange" style="margin-right:6px">🌍 Mezinárodka (volná)</span>'; return l.kind==='ean_loc'?'<span class="badge badge-gray" style="margin-right:6px">📍 EAN + lokace</span>':(l.kind==='ean'?'<span class="badge badge-gray" style="margin-right:6px">🔢 Jen EAN</span>':''); }
 var EAN_COLS=['EAN','Lokace','Množství','Skenů','Uživatelé','První sken','Poslední sken'];
+var SN_COLS=['EAN','Lokace','S/N','Množství','Uživatel','Čas skenu'];
+async function fetchSnExportRows(l){
+  var r=await supa.from('scans').select('ean,location,quantity,serial_no,scanned_at,profiles(name)').eq('inv_session',l.session_uid).order('scanned_at',{ascending:true});
+  var g={}, order=[];
+  (r.data||[]).forEach(function(x){
+    var sn=(x.serial_no||'').toUpperCase(), k=(x.ean||'')+'|'+(x.location||'')+'|'+(sn||'#'+'bez');
+    if(!g[k]){g[k]={'EAN':x.ean||'','Lokace':x.location||'','S/N':sn,'Množství':0,'Uživatel':'','Čas skenu':''};order.push(k);}
+    var o=g[k]; o['Množství']+=Number(x.quantity)||1;
+    if((Number(x.quantity)||1)>0){o['Čas skenu']=fmtTsDash(x.scanned_at); var u=(x.profiles&&x.profiles.name)||''; if(u)o['Uživatel']=u;}
+  });
+  return order.map(function(k){return g[k];}).filter(function(o){return o['Množství']>0;});
+}
 async function fetchEanExportRows(l){
   var r=await supa.from('scans').select('ean,location,quantity,scanned_at,profiles(name)').eq('inv_session',l.session_uid).order('scanned_at',{ascending:true});
   var g={}, order=[];
@@ -445,8 +458,8 @@ async function fetchIntlExportRows(listId){
 async function downloadInvCsv(listId, listName){
   var L=INV_BY_ID[listId], ean=isEanInv(L);
   if(isIntl(L)){var x=await fetchIntlExportRows(listId);var rows=x.rows,cols=x.cols;}else{
-  var rows=ean?await fetchEanExportRows(L):await fetchInvExportRows(listId);
-  var cols=ean?EAN_COLS:['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];}
+  var rows=isSnInv(L)?await fetchSnExportRows(L):ean?await fetchEanExportRows(L):await fetchInvExportRows(listId);
+  var cols=isSnInv(L)?SN_COLS:ean?EAN_COLS:['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];}
   var q=function(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; };
   var csv=cols.join(',')+'\n';
   rows.forEach(function(r){ csv+=cols.map(function(k){return q(r[k]);}).join(',')+'\n'; });
@@ -461,8 +474,8 @@ async function downloadInvCsv(listId, listName){
 async function downloadInvXlsx(listId, listName){
   var L=INV_BY_ID[listId], ean=isEanInv(L);
   if(isIntl(L)){var x=await fetchIntlExportRows(listId);var ws0=XLSX.utils.json_to_sheet(x.rows,{header:x.cols});ws0['!cols']=x.cols.map(function(c){return {wch:Math.max(10,c.length+2)};});var wb0=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb0,ws0,'Mezinárodka');XLSX.writeFile(wb0,'mezinarodka_'+listName.replace(/[^a-z0-9_-]/gi,'_')+'.xlsx');return;}
-  var rows=ean?await fetchEanExportRows(L):await fetchInvExportRows(listId);
-  var cols=ean?EAN_COLS:['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];
+  var rows=isSnInv(L)?await fetchSnExportRows(L):ean?await fetchEanExportRows(L):await fetchInvExportRows(listId);
+  var cols=isSnInv(L)?SN_COLS:ean?EAN_COLS:['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];
   var ws=XLSX.utils.json_to_sheet(rows,{header:cols});
   ws['!cols']=ean?[{wch:16},{wch:14},{wch:10},{wch:8},{wch:24},{wch:20},{wch:20}]:[{wch:16},{wch:30},{wch:14},{wch:16},{wch:12},{wch:20},{wch:16}];
   var wb=XLSX.utils.book_new();
