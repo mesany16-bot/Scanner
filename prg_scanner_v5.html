@@ -418,6 +418,7 @@
     <input id="login-password" type="password" placeholder="Heslo" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
     <button class="modal-btn" onclick="doLogin()">🔐 Přihlásit se</button>
     <button class="modal-btn secondary" onclick="showForgot()">🔑 Zapomenuté heslo?</button>
+    <button class="modal-btn secondary" id="login-cancel" style="display:none" onclick="closeModal('modal-login')">Zpět – přihlásím se později</button>
   </div>
 </div>
 
@@ -718,6 +719,7 @@
     <div style="display:flex;align-items:center;margin-bottom:10px"><b style="flex:1;font-size:17px">Připojení a odesílání</b><button onclick="closeNetModal()" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button></div>
     <div id="net-body" style="font-size:14px;line-height:1.5"></div>
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+      <button id="net-relogin" onclick="obRelogin()" style="display:none;flex:1 1 100%;padding:11px;border:none;border-radius:9px;background:#c0392b;color:#fff;font-weight:700;font-size:14px">🔑 Přihlásit znovu a odeslat</button>
       <button onclick="netFlushNow()" style="flex:1;padding:11px;border:none;border-radius:9px;background:#0a7c4e;color:#fff;font-weight:700;font-size:14px">↻ Odeslat teď</button>
       <button onclick="netClearLog()" style="padding:11px;border:1.5px solid #e2e6ed;border-radius:9px;background:#fff;font-size:14px">Vymazat hlášení</button>
     </div>
@@ -857,6 +859,32 @@ function obIsAuth(err) {
   var m = String((err && (err.message || err.details || err.code)) || err || '') + ' ' + String((err && err.code) || '');
   return /row-level security|JWT|jwt|PGRST301|PGRST302|42501|not authenticated|permission denied|Invalid Refresh Token/i.test(m);
 }
+// Obnova přihlášení: 'ok' = obnoveno, 'net' = teď bez spojení (zkusí se později), 'invalid' = je potřeba se přihlásit znovu
+async function obTryRefresh() {
+  for (var a = 0; a < 3; a++) {
+    try {
+      var r = await supa.auth.refreshSession();
+      if (r && r.data && r.data.session) return 'ok';
+      var e = r && r.error, m = String((e && (e.message || e.name)) || ''), st = e && e.status;
+      var netLike = !e || obIsNet(e) || /fetch|network|timeout|Retryable|Load failed/i.test(m) || !st || st >= 500;
+      if (!netLike) return 'invalid';
+    } catch (ex) {}
+    if (!navigator.onLine) return 'net';
+    await new Promise(function(res){ setTimeout(res, 1500 * (a + 1)); });
+  }
+  return 'net';
+}
+function obAuthLostNotice() {
+  if (!OB.authLost) { buzz(); }
+  OB.authLost = true;
+  setStatus('🔒 Pro odeslání na server se znovu přihlas – klepni na červený štítek 🔒 nahoře. Skenovat můžeš dál, nic se neztratí.');
+}
+function obRelogin() {
+  closeNetModal();
+  var m = document.getElementById('login-msg'); if (m) m.textContent = '🔒 Přihlášení vypršelo. Zadej heslo – neodeslané skeny se pak odešlou, rozpracovaná inventura zůstane.';
+  var b = document.getElementById('login-cancel'); if (b) b.style.display = currentUserId ? 'block' : 'none';
+  document.getElementById('modal-login').style.display = 'flex';
+}
 function obRes(err) { if (!err) return { s: 'done' }; if (obIsNet(err)) return { s: 'net' }; if (obIsAuth(err)) return { s: 'auth', msg: err.message || String(err) }; return { s: 'fail', msg: err.message || String(err) }; }
 function obLogGet() { try { return JSON.parse(localStorage.getItem('prg_outbox_log') || '[]'); } catch(e) { return []; } }
 function obLog(kind, msg) { var l = obLogGet(); l.unshift({ t: new Date().toISOString(), kind: kind, msg: msg }); try { localStorage.setItem('prg_outbox_log', JSON.stringify(l.slice(0, 50))); } catch(e) {} }
@@ -943,24 +971,22 @@ async function obDoFlush() {
     var op = all[i], r = await obExec(op);
     if (r.s === 'fail' && obIsAuth(r.msg)) r = { s: 'auth', msg: r.msg };
     if (r.s === 'auth') {
-      // přihlášení vypršelo (typicky po delší době offline) – zkus obnovit, jinak nech ve frontě a vyžádej přihlášení
-      var ref = null; try { ref = await supa.auth.refreshSession(); } catch(e) {}
-      if (ref && ref.data && ref.data.session) { r = await obExec(op); if (r.s === 'auth') r = { s: 'fail', msg: r.msg + ' (oprávnění v databázi – kontaktuj admina)' }; }
+      // přihlášení vypršelo (typicky po delší době offline) – zkus ho obnovit; při slabém signálu jen počkej, neodhlašuj
+      var rf = await obTryRefresh();
+      if (rf === 'ok') { r = await obExec(op); if (r.s === 'fail' && obIsAuth(r.msg)) r = { s: 'auth', msg: r.msg }; if (r.s === 'auth') r = { s: 'fail', msg: r.msg + ' (oprávnění v databázi – kontaktuj admina)' }; }
+      else if (rf === 'net') r = { s: 'net' };
     }
     if (r.s === 'auth') {
       for (var j2 = i; j2 < all.length; j2++) results[all[j2].k] = { s: 'queued' };
-      OB.authLost = true; obSchedule();
-      try {
-        setStatus('🔒 Přihlášení vypršelo – přihlas se znovu, neodeslané záznamy (' + all.length + ') se pak odešlou. Nic se neztratilo.');
-        if (document.getElementById('modal-login').style.display !== 'flex') { buzz(); document.getElementById('modal-login').style.display = 'flex'; }
-      } catch(e) {}
+      obSchedule();
+      try { obAuthLostNotice(); } catch(e) {}
       break;
     }
     OB.authLost = false;
     if (r.s === 'net') { for (var j = i; j < all.length; j++) results[all[j].k] = { s: 'queued' }; obSchedule(); break; }
     await obDel(op.k);
     results[op.k] = r;
-    if (r.s === 'fail') obLog('fail', (op.label || OB_LABEL[op.kind] || op.kind) + ': ' + r.msg);
+    if (r.s === 'fail') { obLog('fail', (op.label || OB_LABEL[op.kind] || op.kind) + ': ' + r.msg); obFailKeep(op, r.msg); }
     if (r.s === 'conflict') {
       obLog('conflict', r.msg);
       if (op.kind === 'inv_found' && typeof invList !== 'undefined') {
@@ -997,7 +1023,20 @@ function obBadge(n) {
   else if (n && OB.authLost) { b.textContent = '🔒 ' + n; b.style.background = 'rgba(192,57,43,0.85)'; }
   else if (n) { b.textContent = '⏳ ' + n; b.style.background = 'rgba(230,126,34,0.9)'; }
   else { b.textContent = '🟢'; b.style.background = 'rgba(255,255,255,0.18)'; }
-  if (document.getElementById('modal-net') && document.getElementById('modal-net').style.display === 'flex') renderNetModal();
+  if (document.getElementById('modal-net') && document.getElementById('modal-net').style.display === 'flex') { renderNetModal(); var rb = document.getElementById('net-relogin'); if (rb) rb.style.display = OB.authLost ? 'block' : 'none'; }
+}
+// Záznamy, které server odmítl, se nemažou – dají se po opravě znovu odeslat
+var OB_FAIL_KEY = 'prg_outbox_failed';
+function obFailGet() { try { return JSON.parse(localStorage.getItem(OB_FAIL_KEY) || '[]'); } catch(e) { return []; } }
+function obFailKeep(op, msg) {
+  try { var a = obFailGet(); var c = JSON.parse(JSON.stringify(op)); delete c.k; c._err = msg; c._at = Date.now(); a.push(c); if (a.length > 500) a = a.slice(-500); localStorage.setItem(OB_FAIL_KEY, JSON.stringify(a)); } catch(e) {}
+}
+async function netRetryFailed() {
+  var a = obFailGet(); if (!a.length) return;
+  if (!confirm('Znovu odeslat ' + a.length + ' záznamů, které server dřív odmítl?')) return;
+  try { localStorage.removeItem(OB_FAIL_KEY); } catch(e) {}
+  for (var i = 0; i < a.length; i++) { var o = a[i]; delete o._err; delete o._at; await obAdd(o); }
+  await obBadgeRefresh(); await obFlush(); renderNetModal();
 }
 async function renderNetModal() {
   var all = await obAll(), by = {};
@@ -1007,9 +1046,11 @@ async function renderNetModal() {
   h += all.length ? ('<p>Čeká na odeslání: <b>' + all.length + '</b> (' + Object.keys(by).map(function(k){ return by[k] + '× ' + k; }).join(', ') + ').<br><span style="color:#7a8090;font-size:12.5px">Záznamy jsou uložené v tomto zařízení a odešlou se samy, jakmile bude signál. Nemaž data prohlížeče.</span></p>')
                   : '<p>✅ Vše je odesláno.</p>';
   if (log.length) h += '<p style="margin-top:10px"><b>Hlášení</b></p>' + log.slice(0, 15).map(function(l){ return '<div style="font-size:12.5px;padding:4px 0;border-top:1px solid #eef0f4;color:' + (l.kind === 'fail' ? '#c0392b' : '#b35a00') + '">' + new Date(l.t).toLocaleString('cs-CZ') + ' · ' + escHtml(l.msg) + '</div>'; }).join('');
+  var fl = obFailGet();
+  if (fl.length) h += '<p style="margin-top:10px;color:#c0392b"><b>Odmítnuto serverem: ' + fl.length + '</b> – záznamy jsou schované v zařízení.</p><button onclick="netRetryFailed()" style="width:100%;padding:10px;border:none;border-radius:9px;background:#e67e22;color:#fff;font-weight:700;font-size:14px">🔁 Znovu odeslat odmítnuté (' + fl.length + ')</button>';
   document.getElementById('net-body').innerHTML = h;
 }
-function openNetModal() { document.getElementById('modal-net').style.display = 'flex'; renderNetModal(); }
+function openNetModal() { document.getElementById('modal-net').style.display = 'flex'; renderNetModal(); var rb = document.getElementById('net-relogin'); if (rb) rb.style.display = OB.authLost ? 'block' : 'none'; }
 function closeNetModal() { document.getElementById('modal-net').style.display = 'none'; }
 async function netFlushNow() { await obFlush(); renderNetModal(); }
 function netClearLog() { try { localStorage.removeItem('prg_outbox_log'); } catch(e) {} renderNetModal(); }
@@ -1072,6 +1113,34 @@ function buzz() {
 ['pointerdown','keydown','touchstart'].forEach(function(ev){
   document.addEventListener(ev, function(){ try { if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)(); if (audioCtx.state === 'suspended') audioCtx.resume(); } catch(e) {} }, { capture: true, passive: true });
 });
+// „Není v seznamu“ – tři rychlé vysoké tóny
+function soundNotInList() {
+  try { if (navigator.vibrate) navigator.vibrate([90, 60, 90, 60, 90]); } catch(e) {}
+  if (!soundOn()) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    [0, 0.14, 0.28].forEach(function(t0){
+      var o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = audioCtx.currentTime + t0;
+      o.type = 'square'; o.frequency.setValueAtTime(1320, t);
+      g.gain.setValueAtTime(0.35, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+      o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + 0.11);
+    });
+  } catch(e) {}
+}
+// „Špatný kód“ (neznámý formát, kód destinace) – dlouhý hluboký tón
+function soundBadCode() {
+  try { if (navigator.vibrate) navigator.vibrate([700]); } catch(e) {}
+  if (!soundOn()) return;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    var o = audioCtx.createOscillator(), g = audioCtx.createGain(), t = audioCtx.currentTime;
+    o.type = 'square'; o.frequency.setValueAtTime(110, t); o.frequency.linearRampToValueAtTime(80, t + 0.7);
+    g.gain.setValueAtTime(0.6, t); g.gain.setValueAtTime(0.6, t + 0.62); g.gain.exponentialRampToValueAtTime(0.001, t + 0.72);
+    o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + 0.74);
+  } catch(e) {}
+}
 function beepWarn()  { beep(600,0.18); }
 function beepError() { beep(300,0.25); setTimeout(function(){beep(300,0.25);},320); }
 function beepOk()    { beep(1480,0.08); setTimeout(function(){beep(1760,0.1);},110); }
@@ -1138,6 +1207,15 @@ async function doLogin() {
   var res = await supa.auth.signInWithPassword({ email: email, password: pass });
   if (res.error) { document.getElementById('login-msg').textContent = '❌ '+res.error.message; return; }
   clearLoginForm();
+  if (currentUserId && res.data.user && res.data.user.id === currentUserId) {
+    // jen obnovené přihlášení – rozpracovaná práce zůstává, pošli frontu
+    document.getElementById('modal-login').style.display = 'none';
+    var lc = document.getElementById('login-cancel'); if (lc) lc.style.display = 'none';
+    OB.authLost = false; markActivity(true); obBadge(OB.count);
+    setStatus('✅ Znovu přihlášen – odesílám neodeslané záznamy');
+    obFlush();
+    return;
+  }
   await onLoggedIn(res.data.user);
 }
 
@@ -1329,6 +1407,15 @@ async function onLoggedIn(user) {
   // Get profile name
   var prof = await supa.from('profiles').select('name,username,role,is_active,allowed_apps').eq('id', user.id).single();
   var profKey = 'prg_scn_prof_' + user.id;
+  if (prof.error && !obIsNet(prof.error) && obIsAuth(prof.error)) {
+    // vypršelé přihlášení po návratu signálu – zkus obnovit, jinak pokračuj s uloženým profilem (neodhlašovat)
+    var rf0 = await obTryRefresh();
+    if (rf0 === 'ok') prof = await supa.from('profiles').select('name,username,role,is_active,allowed_apps').eq('id', user.id).single();
+    if (prof.error) {
+      var cached0 = null; try { cached0 = JSON.parse(localStorage.getItem(profKey) || 'null'); } catch(e) {}
+      if (cached0) { prof = { data: cached0 }; if (rf0 === 'invalid') setTimeout(obAuthLostNotice, 300); }
+    }
+  }
   if (prof.error && obIsNet(prof.error)) {
     var cached = null; try { cached = JSON.parse(localStorage.getItem(profKey) || 'null'); } catch(e) {}
     if (cached) { prof = { data: cached }; setTimeout(function(){ setStatus('📴 Offline režim – skeny se ukládají do zařízení a odešlou se po připojení'); }, 50); }
@@ -2432,12 +2519,12 @@ async function selectIntlList(listId, listName) {
     if (!items.length) { alert('Seznam "' + listName + '" neobsahuje žádné položky.'); return; }
     var byKey = {}, byId = {};
     items.forEach(function(i){ byKey[i.code] = i; i.refs.forEach(function(r){ if (!byKey[r]) byKey[r] = i; }); byId[String(i.id)] = i; });
-    var seen = {}, extra = {}, last = '';
+    var seen = {}, extra = {}, extraT = {}, last = '';
     (ps.data || []).forEach(function(p){
       if (p.code && p.code.indexOf('+') > 0) seen[intlKey(p.code)] = 1;
       var it = p.item_id != null ? byId[String(p.item_id)] : null;
       if (it) { if (p.location) it.foundLocs[intlKey(p.location)] = 1; }
-      else extra[intlKey(p.base_code)] = (extra[intlKey(p.base_code)] || 0) + 1;
+      else { extra[intlKey(p.base_code)] = (extra[intlKey(p.base_code)] || 0) + 1; extraT[intlKey(p.base_code)] = Math.max(extraT[intlKey(p.base_code)] || 0, Date.parse(p.found_at) || 0); }
       if (p.found_at > last) last = p.found_at;
     });
     closeModal('modal-inv-server-pick');
@@ -2452,8 +2539,8 @@ async function selectIntlList(listId, listName) {
     appMode = 'inventura';
     eanCount = true; eanIntl = true; useLocation = false; eanSession = null; intlSeen = {};
     expectingLoc = false; pendingEAN = null; locPill.style.display = 'none';
-    intlV = { id: listId, name: listName, items: items, byKey: byKey, seen: seen, extra: extra, log: [], lastPoll: last || new Date().toISOString() };
-    setRoom('');
+    intlV = { id: listId, name: listName, items: items, byKey: byKey, seen: seen, extra: extra, extraT: extraT, log: [], lastPoll: last || new Date().toISOString() };
+    setRoom(''); loadFreeLocs();
     intlSyncRows();
     renderTableHead(); renderTable(); refreshModeUI(); updateScanBtn();
     setStatus('🌍 ' + listName + ' · ' + items.length + ' HB · nejdřív naskenuj LOKACI');
@@ -2479,7 +2566,7 @@ async function handleIntlVerify(code) {
   var it = intlFind(base);
   // štítek lokace (kód z PUT lokací seznamu, který není HB)
   if (!hasSfx && !it) {
-    var isLoc = intlV.items.some(function(i){ return i.locs.indexOf(full) >= 0; });
+    var isLoc = intlV.items.some(function(i){ return i.locs.indexOf(full) >= 0; }) || freeLocSet[full] || /^[A-Z]{1,3}\d{1,3}$/.test(full);
     if (isLoc) { closeModal('modal-inv-room'); setRoom(full); beepOk(); setStatus('📍 Lokace nastavena: ' + full); return; }
   }
   if (hasSfx && intlV.seen[full]) {
@@ -2525,7 +2612,7 @@ function intlCommit(full, base, it, loc, hasSfx) {
   var entry = { full: full, base: base, item: it, loc: loc, uid: uid };
   intlV.log.push(entry);
   if (it) { it.found++; it.t = Date.now(); if (loc) it.foundLocs[loc] = 1; }
-  else intlV.extra[base] = (intlV.extra[base] || 0) + 1;
+  else { intlV.extra[base] = (intlV.extra[base] || 0) + 1; intlV.extraT[base] = Date.now(); }
   intlFeedback(entry);
   intlSyncRows(); renderTable(); refreshModeUI();
   var myV = intlV;
@@ -2543,7 +2630,7 @@ function intlCommit(full, base, it, loc, hasSfx) {
 }
 function intlFeedback(e) {
   var it = e.item;
-  if (!it) { buzz(); setStatus('➕ ' + e.base + ' NENÍ v exportu – zapsáno jako přebývající'); return; }
+  if (!it) { soundNotInList(); setStatus('➕ ' + e.base + ' NENÍ v seznamu – zapsáno jako přebývající (' + (intlV.extra[e.base] || 1) + ' ks)'); return; }
   var tail = ' · ' + it.found + '/' + it.exp + ' ks';
   var locBad = e.loc && it.locs.length && it.locs.indexOf(e.loc) < 0;
   if (it.found > it.exp) { buzz(); setStatus('⚠️ ' + it.code + tail + ' – KUS NAVÍC'); }
@@ -2590,7 +2677,14 @@ async function intlPoll() {
 }
 
 function intlEditQty(code) {
-  var it = intlFind(code); if (!it) return;
+  var it = intlFind(code);
+  if (!it && intlV && intlV.extra[code] != null) {
+    var ve = prompt('Počet kusů pro ' + code + ' (není v seznamu):', String(intlV.extra[code]));
+    if (ve == null) return; var ne = parseInt(String(ve).trim(), 10);
+    if (isNaN(ne) || ne < 0 || ne > 9999) { setStatus('⚠️ Neplatný počet'); return; }
+    intlSetQty(code, ne, false); return;
+  }
+  if (!it) return;
   var v = prompt('Počet kusů pro ' + it.code + ' (v exportu ' + it.exp + ' ks):', String(it.found));
   if (v == null) return;
   var n = parseInt(String(v).trim(), 10);
@@ -2598,7 +2692,23 @@ function intlEditQty(code) {
   intlSetQty(code, n, false);
 }
 function intlSetQty(code, n, relative) {
-  var it = intlFind(code); if (!it || !intlV) return;
+  if (!intlV) return;
+  var it = intlFind(code);
+  if (!it && intlV.extra[code] != null) {          // přebývající zásilka
+    var cur = intlV.extra[code], tg = relative ? Math.max(0, cur + n) : n;
+    if (tg === cur) return;
+    if (tg > cur && !invRoom) { buzz(); setStatus('📍 Nejdřív naskenuj LOKACI'); openRoomModal(); return; }
+    intlV.extra[code] = tg; intlV.extraT[code] = Date.now();
+    intlV.log = intlV.log.filter(function(x){ return !(x.item == null && x.base === code); });
+    if (tg === 0) { Object.keys(intlV.seen).forEach(function(k){ if (k.split('+')[0] === code) delete intlV.seen[k]; }); }
+    intlSyncRows(); renderTable(); refreshModeUI();
+    setStatus('✏️ ' + code + ' · ručně ' + tg + ' ks (není v seznamu)');
+    var myV0 = intlV;
+    obSubmit({ kind: 'rpc', fn: 'wms_inv_set_qty', args: { p_list: intlV.id, p_code: code, p_qty: tg, p_loc: intlKey(invRoom) || null, p_user: currentUser }, label: 'Ruční počet ' + code })
+      .then(function(r){ if (r && r.s === 'done' && intlV === myV0) intlReloadSeen(); if (r && r.s === 'fail') setStatus('⚠️ Server ruční počet nepřijal: ' + (r.msg || '')); }).catch(function(){});
+    return;
+  }
+  if (!it) return;
   var target = relative ? Math.max(0, it.found + n) : n;
   if (target === it.found) return;
   var loc = intlKey(invRoom) || (it.locs[0] || null);
@@ -2636,11 +2746,20 @@ function renderIntlTable() {
     var ad = a.found >= a.exp ? 1 : 0, bd = b.found >= b.exp ? 1 : 0;
     return ad - bd;                                          // hotové na konec
   });
+  // jeden společný seznam: naposledy skenované nahoře (položky ze seznamu i přebývající), pak nenaskenované
+  var ent = list.map(function(i){ return { t: i.t || 0, item: i }; });
+  Object.keys(intlV.extra).forEach(function(k){ if (intlV.extra[k] > 0) ent.push({ t: (intlV.extraT && intlV.extraT[k]) || 1, extra: k }); });
+  ent.sort(function(a, b){ return b.t - a.t; });
   var html = '';
-  Object.keys(intlV.extra).forEach(function(k){
-    if (intlV.extra[k] > 0) html += '<tr style="background:#fdecea"><td class="ean-cell">➕ ' + escHtml(k) + '</td><td class="loc-cell">není v exportu</td><td class="qty-cell" style="color:var(--danger)">' + intlV.extra[k] + '</td><td></td></tr>';
-  });
-  list.forEach(function(i){
+  ent.forEach(function(e){
+    if (e.extra) {
+      var k = e.extra, ck = escHtml(k).replace(/'/g, '');
+      html += '<tr style="background:#fdecea"><td class="ean-cell">➕ ' + escHtml(k) + '</td><td class="loc-cell" style="color:var(--danger)">není v seznamu</td>' +
+        '<td class="qty-cell" onclick="intlEditQty(\'' + ck + '\')" style="cursor:pointer;text-decoration:underline dotted;color:var(--danger)">' + intlV.extra[k] + '</td>' +
+        '<td class="acts-cell"><button class="qty-btn" onclick="intlSetQty(\'' + ck + '\',1,true)">+</button><button class="qty-btn minus" onclick="intlSetQty(\'' + ck + '\',-1,true)">−</button></td></tr>';
+      return;
+    }
+    var i = e.item;
     var fl = Object.keys(i.foundLocs), bad = fl.some(function(l){ return i.locs.length && i.locs.indexOf(l) < 0; });
     var bg = i.found === 0 ? '' : (i.found > i.exp ? '#fdecea' : (i.found === i.exp ? (bad ? '#fff4e0' : '#e8f6ef') : '#fff8e6'));
     var ic = i.found === 0 ? '⬜' : (i.found > i.exp ? '🔴' : (i.found === i.exp ? (bad ? '🟠' : '✅') : '🟡'));
@@ -3387,7 +3506,7 @@ var SHIP_FORMATS = [
 function shipFormat(code) { code = String(code || '').trim().toUpperCase(); for (var i = 0; i < SHIP_FORMATS.length; i++) if (SHIP_FORMATS[i].re.test(code)) return SHIP_FORMATS[i].t; return null; }
 var fmtResolve = null;
 function askShipFormat(raw) {
-  buzz();
+  soundBadCode();
   document.getElementById('intl-fmt-code').textContent = raw;
   document.getElementById('modal-intl-fmt').style.display = 'flex';
   return new Promise(function(res){ fmtResolve = res; });
@@ -3416,7 +3535,7 @@ async function loadFreeExport() {
 async function handleScannedCode(code) {
   if (appMode === 'inventura' && kitOn() && !invMode && !myDevMode) { await handleKitCode(code); return; }
   if (appMode === 'inventura' && snOn() && !invMode && !myDevMode) { await handleSnCode(code); return; }
-  if (appMode === 'inventura' && eanCount && eanIntl && isDestCode(code)) { buzz(); setStatus('↷ ' + String(code).trim() + ' je kód DESTINACE (spodní část štítku) – naskenuj horní kód zásilky'); return; }
+  if (appMode === 'inventura' && eanCount && eanIntl && isDestCode(code)) { soundBadCode(); setStatus('↷ ' + String(code).trim() + ' je kód DESTINACE (spodní část štítku) – naskenuj horní kód zásilky'); return; }
   if (intlV && appMode === 'inventura' && !myDevMode) { document.getElementById('manual-btn').style.display = 'none'; await handleIntlVerify(code); return; }
   if (appMode === 'inventura' && eanCount && eanIntl && !invMode && !myDevMode && !(task && appMode === 'wms')) {
     var raw = String(code).trim();
@@ -3425,7 +3544,7 @@ async function handleScannedCode(code) {
     intlFull = raw; code = intlCode(code);
     if (!shipFormat(code) && !(await askShipFormat(raw))) { setStatus('✖ ' + raw + ' nezapočteno'); return; }
     await processEAN(code, invRoom.toUpperCase());
-    if (freeExp && !freeExp.set[intlKey(code)]) { beepWarn(); setStatus('⚠️ ' + code + ' · ' + invRoom + ' – započteno, ale NENÍ v exportu „' + freeExp.name + '“'); }
+    if (freeExp && !freeExp.set[intlKey(code)]) { soundNotInList(); setStatus('⚠️ ' + code + ' · ' + invRoom + ' – započteno, ale NENÍ v exportu „' + freeExp.name + '“'); }
     return;
   } else intlFull = null;
   document.getElementById('manual-btn').style.display = 'none';
