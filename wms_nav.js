@@ -213,3 +213,87 @@
     document.addEventListener('visibilitychange',function(){if(!document.hidden)setTimeout(tick,300);});
   }
 })();
+
+// ===== Záložky místo dlouhého scrollování: sekce (karty s nadpisem) pod sebou -> tlačítková lišta nahoře =====
+(function(){
+  var CFG={
+    'wms_inventura.html':{},
+    'wms_settings.html':{},
+    'wms_billing.html':{untitled:'🧾 Vyúčtování'},
+    'wms_kpi.html':{},
+    'wms_temp.html':{}
+  };
+  var page=(location.pathname.split('/').pop()||'').toLowerCase();
+  var cfg=CFG[page]; if(!cfg) return;
+  function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
+  function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
+  function css(){
+    if(document.getElementById('prg-tabs-css')) return;
+    var st=document.createElement('style'); st.id='prg-tabs-css';
+    st.textContent='.prg-tabbar{position:sticky;top:0;z-index:40;display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:8px 2px 10px;margin:0 0 6px;background:var(--bg,#f4f6f9)}'
+      +'.prg-tabbar::-webkit-scrollbar{display:none}'
+      +'.prg-tabbar button{flex:0 0 auto;padding:9px 14px;border:1.5px solid var(--border,#e2e6ed);background:#fff;color:#4a5060;border-radius:999px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}'
+      +'.prg-tabbar button.on{background:#0a7c4e;border-color:#0a7c4e;color:#fff}'
+      +'.prg-tab-off{display:none!important}';
+    document.head.appendChild(st);
+  }
+  function titleOf(card){
+    var h=card.querySelector(':scope > .card-header'); if(!h) return '';
+    var t=h.querySelector('h1,h2,h3,h4,.card-title');
+    var src=t||h; var c=src.cloneNode(true);
+    c.querySelectorAll('button,select,input,.btn,.badge').forEach(function(x){x.remove();});
+    return (c.textContent||'').replace(/\s+/g,' ').trim();
+  }
+  function hiddenByPage(card){ return card.style.display==='none'||card.hidden; }
+  function build(parent,cards){
+    css();
+    var key='prg_tab_'+page+'_'+(parent.id||'main');
+    var bar=document.createElement('div'); bar.className='prg-tabbar'; bar.setAttribute('role','tablist');
+    parent.insertBefore(bar,cards[0].el);
+    var cur=null;
+    function show(i,remember){
+      cur=i;
+      cards.forEach(function(c,j){ c.el.classList.toggle('prg-tab-off',j!==i); c.btn.classList.toggle('on',j===i); c.btn.setAttribute('aria-selected',j===i?'true':'false'); });
+      if(remember) lsSet(key,cards[i].label);
+      var b=cards[i].btn; if(b.scrollIntoView) try{b.scrollIntoView({block:'nearest',inline:'nearest'});}catch(e){}
+    }
+    function stick(){ var tb=document.querySelector('.topbar'); var h=0; if(tb){ var cs=getComputedStyle(tb); if(cs.position==='sticky'||cs.position==='fixed') h=tb.offsetHeight; } bar.style.top=h+'px'; }
+    window.addEventListener('resize',stick); setTimeout(stick,0); setTimeout(stick,800);
+    function sync(){
+      var vis=[];
+      cards.forEach(function(c,j){ var h=hiddenByPage(c.el); c.btn.style.display=h?'none':''; if(!h) vis.push(j); });
+      bar.style.display=vis.length>1?'':'none';
+      if(vis.length<=1){ cards.forEach(function(c){c.el.classList.remove('prg-tab-off');}); cur=null; return; }
+      if(cur==null||vis.indexOf(cur)<0){ var want=lsGet(key),k=-1; cards.forEach(function(c,j){ if(c.label===want&&vis.indexOf(j)>=0) k=j; }); show(k>=0?k:vis[0],false); }
+    }
+    cards.forEach(function(c,j){
+      var b=document.createElement('button'); b.type='button'; b.setAttribute('role','tab'); b.textContent=c.label;
+      b.onclick=function(){ show(j,true); var top=bar.getBoundingClientRect().top; if(top<0) window.scrollBy(0,top-4); };
+      bar.appendChild(b); c.btn=b;
+    });
+    var mo=new MutationObserver(sync);
+    cards.forEach(function(c){ mo.observe(c.el,{attributes:true,attributeFilter:['style','hidden']}); });
+    // odkaz na prvek uvnitř karty (#kotva) otevře její záložku
+    function fromHash(){ var id=decodeURIComponent((location.hash||'').slice(1)); if(!id) return; var el=document.getElementById(id); if(!el) return; cards.forEach(function(c,j){ if(c.el.contains(el)&&!hiddenByPage(c.el)) show(j,false); }); }
+    window.addEventListener('hashchange',fromHash);
+    sync(); fromHash();
+    (window.PRG_TABS=window.PRG_TABS||[]).push({show:function(el){ cards.forEach(function(c,j){ if(c.el===el||c.el.contains(el)) show(j,true); }); }});
+  }
+  function init(){
+    var groups=new Map();
+    document.querySelectorAll('.card').forEach(function(card){
+      if(card.closest('.modal,.modal-overlay,[id^=modal]')) return;
+      var p=card.parentElement; if(!p||p.closest('.card')) return;
+      if(!groups.has(p)) groups.set(p,[]); groups.get(p).push(card);
+    });
+    groups.forEach(function(list,parent){
+      var cards=[],untitled=[];
+      list.forEach(function(card){ var t=titleOf(card); if(t) cards.push({el:card,label:t}); else untitled.push(card); });
+      if(cfg.untitled&&untitled.length===1&&cards.length){ var u=untitled[0]; var idx=list.indexOf(u); cards.splice(list.filter(function(c,i){return i<idx&&cards.some(function(x){return x.el===c;});}).length,0,{el:u,label:cfg.untitled}); }
+      if(cards.length<2) return;
+      cards.forEach(function(c){ c.label=c.label.replace(/\s*\([^)]*\)?\s*$/,'').replace(/\s*–.*$/,'').trim()||c.label; c.label=c.label.length>34?c.label.slice(0,32).replace(/[\s(–-]+$/,'')+'…':c.label; });
+      build(parent,cards);
+    });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
+})();
