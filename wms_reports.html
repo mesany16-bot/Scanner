@@ -148,6 +148,20 @@ var REPORTS=[
  {g:'Výkon a SLA',c:'scan_err',t:'❌ Chybné skeny',d:'Špatná lokace, neznámý kód… po pracovnících',p:['period']},
  {g:'Výkon a SLA',c:'exceptions',t:'🚨 Výjimky',d:'Poškození, rozdíly a další výjimky za období',p:['client','period']},
  {g:'Výkon a SLA',c:'counts',t:'🎯 Cyklické inventury',d:'Napočítané lokace, rozdíly, schválení',p:['period']},
+ {g:'Zásoby',c:'below_min',t:'📉 Pod minimem – doplnit',d:'SKU s nastaveným minimem, kterých je na skladě méně',p:['client']},
+ {g:'Zásoby',c:'slow_moving',t:'🐢 Neobrátkové zásoby',d:'Zboží, které se X dní nevydalo (kandidát na vrácení / likvidaci)',p:['client','days'],daysLabel:'Bez pohybu aspoň (dní)',daysDef:90},
+ {g:'Zásoby',c:'abc',t:'🔤 ABC analýza',d:'SKU podle počtu vychystaných řádků: A 80 %, B 15 %, C 5 %',p:['client','period']},
+ {g:'Zásoby',c:'trace',t:'🔎 Dohledání LOT / S/N / LPN',d:'Kde se šarže nebo sériové číslo přijalo, kde je a komu se vydalo (recall)',p:['client','q']},
+ {g:'Zásoby',c:'adjustments',t:'🔧 Úpravy zásob',d:'Ruční změny množství a parametrů s důvodem a jménem',p:['client','period']},
+ {g:'Příjmy a výdeje',c:'open_orders',t:'📋 Otevřené doklady (backlog)',d:'Nedokončené příjmy a výdeje, stáří, po termínu',p:['client']},
+ {g:'Příjmy a výdeje',c:'dock_to_stock',t:'🚪 Dock-to-stock',d:'Doba od příjezdu kamionu po zaskladnění poslední palety',p:['client','period'],chart:{x:'Prijemka',y:['Dock to stock h']}},
+ {g:'Příjmy a výdeje',c:'supplier',t:'🏭 Dodavatelé',d:'Včasnost příjezdů, rozdíly proti avízu, problémy',p:['client','period']},
+ {g:'Výkon a SLA',c:'otif',t:'🎯 OTIF – včas a kompletně',d:'Podíl výdejů odeslaných včas a v plném množství',p:['client','period'],chart:{x:'Klient',y:['OTIF %']}},
+ {g:'Výkon a SLA',c:'labor_hours',t:'⏲️ Produktivita za hodinu',d:'Pracovník a den: první a poslední sken, hodiny, akce za hodinu',p:['period']},
+ {g:'Doprava a yard',c:'carrier',t:'🚛 Dopravci',d:'Zásilky, balíky, hmotnost, doba a včasnost po dopravcích',p:['client','period'],chart:{x:'Dopravce',y:['Odeslano vydeju']}},
+ {g:'Doprava a yard',c:'yard',t:'🅿️ Yard – příjezdy a čekání',d:'Rezervace, příjezd, čekání na rampu, doba v areálu',p:['client','period']},
+ {g:'Management',c:'billing_detail',t:'🧾 Fakturační podklad klienta',d:'Položky fakturace za období (billing backup pro klienta)',p:['client','period'],needClient:true},
+ {g:'Kontrola a audit',c:'user_audit',t:'🕵️ Audit – kdo co udělal',d:'Všechny změny stavů dokladů, kontroly a ruční zásahy',p:['period']},
  {g:'Management',c:'mgmt_clients',t:'💼 Klienti – objem a fakturace',d:'Příjmy, výdeje, palety, vyfakturováno a odhad za období',p:['client','period'],chart:{x:'Klient',y:['Fakturace odhad']}},
  {g:'Management',c:'occupancy',t:'🗺️ Obsazenost skladu',d:'Lokace obsazené / volné / blokované po zónách',p:[]},
  {g:'Management',c:'trend',t:'📈 Trend 12 měsíců',d:'Příjmy, výdeje, kusy a průměr palet po měsících',p:['client'],chart:{x:'Mesic',y:['Prijato ks','Vychystano ks']}}
@@ -164,6 +178,11 @@ var LBL={Mnozstvi:'Množství',Volne:'Volné',Rezervovano:'Rezervováno',Prijato
  Vyreseno:'Vyřešeno',Slepa:'Slepá','Rozdil radku':'Rozdíl řádků',Napocital:'Napočítal',Napocitano:'Napočítáno',Schvalil:'Schválil',Schvaleno:'Schváleno',Zona:'Zóna','Blokovano presahem':'Blokováno přesahem',
  'Obsazenost %':'Obsazenost %','Odeslanych vydeju':'Odeslaných výdejů','Prumer palet':'Průměr palet','Max palet':'Max palet',Vyfakturovano:'Vyfakturováno','Fakturace odhad':'Fakturace (odhad)',Mesic:'Měsíc',
  'Odeslano vydeju':'Odesláno výdejů',Dodavatel:'Dodavatel',Reference:'Reference'};
+Object.assign(LBL,{Typ:'Typ',Termin:'Termín','Po terminu':'Po termínu','Kompletne %':'Kompletně %','OTIF %':'OTIF %',Nekompletnich:'Nekompletních','Prvni sken':'První sken',Zaskladneno:'Zaskladněno','Dock to stock h':'Dock-to-stock (h)',
+ 'Prum zpozdeni h':'Prům. zpoždění (h)','S rozdilem':'S rozdílem','Hmotnost kg':'Hmotnost (kg)','S trackingem':'S trackingem',Pole:'Pole',Puvodne:'Původně',Nove:'Nově',Pred:'Před','Posledni vydej':'Poslední výdej','Dni bez pohybu':'Dní bez pohybu',
+ 'Kumulativne %':'Kumulativně %',Trida:'Třída','Chybi do minima':'Chybí do minima',Smer:'Směr','Dodavatel / prijemce':'Dodavatel / příjemce',Akci:'Akcí',Prvni:'První',Posledni:'Poslední',Hodin:'Hodin','Akci za hodinu':'Akcí za hodinu',
+ Rezervace:'Rezervace',SPZ:'SPZ',Kontejner:'Kontejner',Rampa:'Rampa','Na rampe':'Na rampě',Odjezd:'Odjezd','Cekani min':'Čekání (min)','Celkem v arealu min':'V areálu (min)','Prijel vcas':'Přijel včas','Rezervace pres':'Rezervace přes',
+ Polozka:'Položka',Jednotka:'Jednotka',Cena:'Cena',Castka:'Částka','Doklad typ':'Typ dokladu',Udalost:'Událost','Ze stavu':'Ze stavu','Do stavu':'Do stavu'});
 function L(k){return LBL[k]||k;}
 var CUR=null,DATA=[],COLS=[],VIS=null,SORT=null,SDESC=false,LAYOUTS=[],CLIENTS=[];
 function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -195,7 +214,8 @@ function pick(code){
   var h='';
   if(CUR.p.indexOf('client')>=0)h+='<label>Klient<select id="p-client"><option value="">Všichni klienti</option>'+CLIENTS.map(function(c){return '<option value="'+c.id+'">'+esc(c.name)+'</option>';}).join('')+'</select></label>';
   if(CUR.p.indexOf('period')>=0)h+='<label>Období<select id="p-preset" onchange="preset(this.value)"><option value="month">Tento měsíc</option><option value="lmonth">Minulý měsíc</option><option value="week">Tento týden</option><option value="lweek">Minulý týden</option><option value="yesterday">Včera</option><option value="today">Dnes</option><option value="year">Tento rok</option><option value="">Vlastní…</option></select></label><label>Od<input type="date" id="p-from" onchange="document.getElementById(\'p-preset\').value=\'\'"></label><label>Do<input type="date" id="p-to" onchange="document.getElementById(\'p-preset\').value=\'\'"></label>';
-  if(CUR.p.indexOf('days')>=0)h+='<label>Expirace do (dní)<input type="number" id="p-days" value="90" min="0" style="width:100px"></label>';
+  if(CUR.p.indexOf('days')>=0)h+='<label>'+esc(CUR.daysLabel||'Expirace do (dní)')+'<input type="number" id="p-days" value="'+(CUR.daysDef||90)+'" min="0" style="width:110px"></label>';
+  if(CUR.p.indexOf('q')>=0)h+='<label>LOT / S/N / LPN / SKU<input id="p-q" placeholder="např. LOT2410" style="min-width:200px" onkeydown="if(event.key===\'Enter\')run()"></label>';
   var dc=window.PRG_DC&&PRG_DC.currentDc();h+='<span style="font-size:12px;color:var(--muted);padding-bottom:9px">DC: <b>'+esc(dc?dc.code:'všechna')+'</b></span>';
   h+='<button class="btn btn-primary" onclick="run()">▶ Spustit</button>';
   document.getElementById('rp-par').innerHTML=h;
@@ -208,10 +228,13 @@ function pick(code){
 function catOpen(o){document.getElementById('rp-list').style.display=o?'':'none';document.getElementById('rp-change').style.display=o?'none':'';document.getElementById('rp-hint').style.display=o?'':'none';if(o)document.getElementById('rp-catalog').scrollIntoView({behavior:'smooth'});}
 function params(){var p={};var g=function(id){var e=document.getElementById(id);return e?e.value:'';};
   if(g('p-client')){p.client=g('p-client');lsSet('prg_rep_client',p.client);}else if(document.getElementById('p-client'))lsSet('prg_rep_client','');
-  if(g('p-from'))p.from=g('p-from');if(g('p-to'))p.to=g('p-to');if(g('p-days'))p.days=g('p-days');
+  if(g('p-from'))p.from=g('p-from');if(g('p-to'))p.to=g('p-to');if(g('p-days'))p.days=g('p-days');if(g('p-q'))p.q=g('p-q');
   var dc=window.PRG_DC&&PRG_DC.currentId();if(dc!=null)p.dc=dc;return p;}
 async function run(){
-  if(!CUR)return;document.getElementById('rp-body').innerHTML='<tr><td style="padding:20px;color:var(--muted)">Načítám…</td></tr>';
+  if(!CUR)return;
+  if(CUR.needClient&&!(document.getElementById('p-client')||{}).value){toast('Vyber klienta');return;}
+  if(CUR.p.indexOf('q')>=0&&!(document.getElementById('p-q')||{}).value.trim()){toast('Zadej LOT, S/N, LPN nebo SKU');return;}
+  document.getElementById('rp-body').innerHTML='<tr><td style="padding:20px;color:var(--muted)">Načítám…</td></tr>';
   var r=await supa.rpc('wms_report',{p_code:CUR.c,p:params()});
   if(r.error){document.getElementById('rp-body').innerHTML='<tr><td style="padding:20px;color:var(--danger)">❌ '+esc(r.error.message)+'</td></tr>';return;}
   DATA=r.data||[];COLS=DATA.length?Object.keys(DATA[0]):[];

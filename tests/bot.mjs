@@ -88,9 +88,9 @@ function watch(page, bag) {
     }, web);
   }
 
-  await step('Web: reporty (všech 17 přehledů)', async () => {
+  await step('Web: reporty (všech 31 přehledů) a log skenů', async () => {
     await web.goto(BASE + 'wms_reports.html', { waitUntil: 'domcontentloaded' }); await sleep(3000);
-    const bad = await web.evaluate(async () => { const out = []; for (const r of REPORTS) { const x = await supa.rpc('wms_report', { p_code: r.c, p: { from: '2026-01-01' } }); if (x.error) out.push(r.c + ': ' + x.error.message); } return out; });
+    const bad = await web.evaluate(async () => { const out = []; const cl = await supa.from('clients').select('id').eq('name', 'TEST robot').limit(1); const cid = cl.data && cl.data[0] && cl.data[0].id; for (const r of REPORTS) { const p = { from: '2026-01-01', q: 'LPN', days: 0 }; if (r.needClient) p.client = cid; const x = await supa.rpc('wms_report', { p_code: r.c, p }); if (x.error) out.push(r.c + ': ' + x.error.message); } const sl = await supa.rpc('wms_scan_log', { p: { from: '2026-01-01', limit: 50 } }); if (sl.error) out.push('skeny: ' + sl.error.message); return out; });
     must(!bad.length, bad.slice(0, 4).join(' | '));
   }, web);
 
@@ -178,6 +178,12 @@ function watch(page, bag) {
     must(bal.length === 2 && bal.every(b => /^BOT-/.test(b.location_code)), 'zásoby nejsou na lokacích: ' + JSON.stringify(bal));
   }, s);
 
+  await step('Příjem: kontrola dokladu a jména na dokladu', async () => {
+    const r = await db(id => supa.rpc('wms_doc_check', { p_type: 'receipt', p_id: id }).then(x => x.error ? { e: x.error.message } : x.data), rc.id);
+    must(r && !r.e, 'kontrolu nelze potvrdit: ' + (r && r.e));
+    must(r.checked && r.received && r.putaway, 'chybí jména: ' + JSON.stringify(r));
+  }, s);
+
   // ---- výdej ----
   let dl = null;
   await step('Výdej: založení a uvolnění (jako z webu)', async () => {
@@ -213,6 +219,12 @@ function watch(page, bag) {
     await s.evaluate(() => tkShip()); await sleep(2500);
     const st = await db(id => supa.from('deliveries').select('status').eq('id', id).single().then(r => r.data && r.data.status), dl.id);
     must(st === 'shipped', 'stav výdeje: ' + st + ' (flow ' + JSON.stringify(flow) + ') · ' + await status());
+  }, s);
+
+  await step('Výdej: kontrola dokladu a jména na dokladu', async () => {
+    const r = await db(id => supa.rpc('wms_doc_check', { p_type: 'delivery', p_id: id }).then(x => x.error ? { e: x.error.message } : x.data), dl.id);
+    must(r && !r.e, 'kontrolu nelze potvrdit: ' + (r && r.e));
+    must(r.checked && r.picked && r.shipped, 'chybí jména: ' + JSON.stringify(r));
   }, s);
 
   await step('Scanner: bez chyb v prohlížeči', async () => { must(!serr.length, serr.slice(0, 4).join(' | ')); }, s);

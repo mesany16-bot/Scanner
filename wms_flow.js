@@ -79,9 +79,34 @@
     if(c==='BELOW_AVAILABLE')return 'Na lokaci '+a+' je dostupných jen '+b+'.';
     return m;
   }
-  var EV={status:'Status',pick:'Vychystáno',short:'Short',putaway:'Zaskladněno',override:'Ruční zásah',problem:'Problém',note:'Poznámka',scan:'Sken'};
+  var EV={status:'Status',pick:'Vychystáno',short:'Short',putaway:'Zaskladněno',override:'Ruční zásah',problem:'Problém',note:'Poznámka',scan:'Sken',check:'✔ Zkontrolováno',uncheck:'Kontrola zrušena'};
+  /* kdo doklad zpracoval + potvrzeni kontroly */
+  function dt(v){return v?new Date(v).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'}):'';}
+  async function people(supa,type,id,el){
+    var box=document.getElementById('prg-people-'+id);
+    if(!box){box=document.createElement('div');box.id='prg-people-'+id;el.parentNode.insertBefore(box,el);}
+    var r=await supa.rpc('wms_doc_people',{p_type:type,p_id:id});
+    if(r.error){box.innerHTML='';return;}
+    var p=r.data||{};
+    var rows=type==='receipt'?[['Založil',p.created,''],['Přijal (skenoval)',p.received,p.received_at],['Dokončil příjem',p.finished,''],['Zaskladnil',p.putaway,p.putaway_at]]
+      :[['Založil',p.created,''],['Vychystal',p.picked,p.picked_at],['Zabalil',p.packed,''],['Naložil',p.loaded,''],['Vydal (odeslal)',p.shipped,p.shipped_at]];
+    var html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-bottom:12px">'
+      +rows.map(function(x){return '<div style="border:1px solid var(--border);border-radius:9px;padding:8px 10px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:600">'+esc(x[0])+'</div><div style="font-size:13.5px;font-weight:600;margin-top:2px">'+esc(x[1]||'–')+'</div>'+(x[2]?'<div style="font-size:11.5px;color:var(--muted)">'+dt(x[2])+'</div>':'')+'</div>';}).join('')
+      +'<div style="border:1.5px solid '+(p.checked?'var(--accent)':'var(--border)')+';background:'+(p.checked?'var(--accent-light)':'#fff')+';border-radius:9px;padding:8px 10px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:600">Zkontroloval</div>'
+      +(p.checked?'<div style="font-size:13.5px;font-weight:700;margin-top:2px;color:var(--accent)">✔ '+esc(p.checked)+'</div><div style="font-size:11.5px;color:var(--muted)">'+dt(p.checked_at)+' · <a href="#" style="color:var(--muted)" onclick="PRG_FLOW.docCheck(\''+type+'\','+id+',true);return false">zrušit</a></div>'
+        :'<button class="btn btn-primary btn-sm" style="margin-top:4px" onclick="PRG_FLOW.docCheck(\''+type+'\','+id+',false)">✔ Potvrdit kontrolu</button>')+'</div></div>';
+    box.innerHTML=html;
+  }
+  async function docCheck(type,id,undo){
+    var supa=window.supa;if(!supa)return;
+    if(undo&&!confirm('Zrušit potvrzení kontroly?'))return;
+    var r=await supa.rpc('wms_doc_check',{p_type:type,p_id:id,p_undo:!!undo});
+    if(r.error){alert('❌ '+errMsg(r.error));return;}
+    var el=document.getElementById('prg-people-'+id);if(el&&el.nextSibling)timeline(supa,type,id,el.nextSibling);
+  }
   async function timeline(supa,type,id,el){
     if(!el)return;
+    try{await people(supa,type,id,el);}catch(e){}
     var r=await supa.from('doc_events').select('*').eq('doc_type',type).eq('doc_id',id).order('created_at',{ascending:false}).limit(300);
     if(r.error){el.innerHTML='<div style="color:var(--muted);font-size:13px">'+esc(errMsg(r.error))+'</div>';return;}
     var d=r.data||[];
@@ -155,5 +180,5 @@
   }
   function isOpen(type,s){s=norm(type,s);return type==='receipt'?(s!=='done'&&s!=='cancelled'):(s!=='shipped'&&s!=='cancelled');}
   window.PRG_FLOW={S:S,ORDER:ORDER,norm:norm,meta:meta,badge:badge,problemIcon:problemIcon,progress:progress,fetchProgress:fetchProgress,
-    errMsg:errMsg,timeline:timeline,overrideDialog:overrideDialog,problemDialog:problemDialog,statusOptions:statusOptions,isOpen:isOpen,esc:esc,overlay:overlay};
+    errMsg:errMsg,timeline:timeline,docCheck:docCheck,people:people,overrideDialog:overrideDialog,problemDialog:problemDialog,statusOptions:statusOptions,isOpen:isOpen,esc:esc,overlay:overlay};
 })();

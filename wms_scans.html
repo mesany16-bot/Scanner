@@ -130,36 +130,33 @@ th.sortable:hover{color:var(--accent);}
       <button onclick="quickRange(1)">Včera</button>
       <button onclick="quickRange(7)">7 dní</button>
       <button onclick="quickRange(30)">30 dní</button>
-      <button onclick="quickRange(-1)">Vše</button>
     </div>
     <div class="sf-grid">
-      <div><label>Hledat</label><input id="search" type="text" placeholder="EAN, IoT ID, box, lokace…" oninput="applyFilters()"></div>
-      <div><label>Od</label><input id="f-from" type="date" onchange="reloadRange()"></div>
-      <div><label>Do</label><input id="f-to" type="date" onchange="reloadRange()"></div>
-      <div><label>Uživatel</label><select id="f-user" onchange="applyFilters()"><option value="">Všichni</option></select></div>
-      <div><label>Režim</label><select id="f-mode" onchange="applyFilters()"><option value="">Všechny</option><option value="outer">Outer</option><option value="inner">Inner</option><option value="inv_ean">Inventura – jen EAN</option><option value="inv_ean_loc">Inventura – EAN + lokace</option><option value="none">Bez režimu</option></select></div>
-      <div><label>Ověřeno</label><select id="f-ver" onchange="applyFilters()"><option value="">Vše</option><option value="1">Ověřeno</option><option value="0">Neověřeno</option></select></div>
-      <div><label>Lokace</label><select id="f-loc" onchange="applyFilters()"><option value="">Všechny</option></select></div>
-      <div><label>Typ kódu</label><select id="f-kind" onchange="applyFilters()"><option value="">Vše</option><option value="ean">EAN</option><option value="iot">IoT ID</option></select></div>
-      <div><label>Čas od</label><input id="f-tfrom" type="time" onchange="applyFilters()"></div>
-      <div><label>Čas do</label><input id="f-tto" type="time" onchange="applyFilters()"></div>
+      <div><label>Hledat</label><input id="search" type="text" placeholder="SKU, LPN, lokace, doklad…" oninput="applyFilters()"></div>
+      <div><label>Od</label><input id="f-from" type="date" onchange="load()"></div>
+      <div><label>Do</label><input id="f-to" type="date" onchange="load()"></div>
+      <div><label>Činnost</label><select id="f-kind" onchange="applyFilters()"><option value="">Všechny</option></select></div>
+      <div><label>Pracovník</label><select id="f-user" onchange="applyFilters()"><option value="">Všichni</option></select></div>
     </div>
     <div class="sf-bar">
       <span class="sf-info" id="sf-info">Načítám…</span>
+      <span style="font-size:12px;color:var(--muted)">Jen skeny z WMS operací – skeny z Inventory Tool jsou v Inventory Tool.</span>
       <button class="btn btn-secondary" onclick="resetFilters()">Zrušit filtry</button>
       <button class="btn btn-primary" onclick="exportScansXlsx()">📊 Export XLSX</button>
     </div>
     <div style="overflow-x:auto;">
     <table><thead><tr>
-      <th class="sortable" onclick="sortBy('code')">EAN / IoT ID <span id="s-code"></span></th>
-      <th class="sortable" onclick="sortBy('box')">Box <span id="s-box"></span></th>
+      <th class="sortable" onclick="sortBy('at_')">Čas <span id="s-at_">▼</span></th>
+      <th class="sortable" onclick="sortBy('kind')">Činnost <span id="s-kind"></span></th>
+      <th class="sortable" onclick="sortBy('doc')">Doklad <span id="s-doc"></span></th>
+      <th class="sortable" onclick="sortBy('sku')">SKU <span id="s-sku"></span></th>
+      <th class="sortable" onclick="sortBy('lpn')">LPN / obal <span id="s-lpn"></span></th>
       <th class="sortable" onclick="sortBy('loc')">Lokace <span id="s-loc"></span></th>
-      <th>Režim</th><th>Ověřeno</th>
       <th class="sortable" onclick="sortBy('qty')">Množství <span id="s-qty"></span></th>
-      <th class="sortable" onclick="sortBy('user')">Uživatel <span id="s-user"></span></th>
-      <th class="sortable" onclick="sortBy('time')">Čas <span id="s-time">▼</span></th>
+      <th class="sortable" onclick="sortBy('name')">Pracovník <span id="s-name"></span></th>
+      <th>DC</th><th>Pozn.</th>
     </tr></thead>
-    <tbody id="tbody"><tr class="empty-row"><td colspan="8">Načítám…</td></tr></tbody></table>
+    <tbody id="tbody"><tr class="empty-row"><td colspan="10">Načítám…</td></tr></tbody></table>
     </div>
   </div>
 </div>
@@ -188,129 +185,50 @@ supa.auth.getSession().then(function(res){
   else{window.location.href='wms_dashboard.html';}
 });
 
-var data=[],shown=[],truncated=false,sortKey='time',sortDir=-1;
-var MAX_ROWS=10000,PAGE=1000;
+var data=[],shown=[],sortKey='at_',sortDir=-1;
+var KIND={receipt:'📥 Příjem',putaway:'📍 Zaskladnění',move:'🔁 Přesun',pick:'📤 Vychystání',pack:'📦 Balení',load:'🚚 Nakládka',count:'🎯 Inventura lokace',error:'❌ Chybný sken'};
 function escH(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function pad(n){return (n<10?'0':'')+n;}
 function dstr(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
 async function afterLogin(){
-  var t=new Date(),f=new Date();f.setDate(f.getDate()-7);
-  document.getElementById('f-from').value=dstr(f);document.getElementById('f-to').value=dstr(t);
-  await load();
+  var ks=document.getElementById('f-kind');Object.keys(KIND).forEach(function(k){ks.insertAdjacentHTML('beforeend','<option value="'+k+'">'+KIND[k]+'</option>');});
+  quickRange(7);
 }
-function quickRange(days){
-  var t=new Date(),f=new Date(),to=document.getElementById('f-to'),from=document.getElementById('f-from');
-  if(days===-1){from.value='';to.value='';}
-  else if(days===0){from.value=dstr(t);to.value=dstr(t);}
-  else if(days===1){f.setDate(f.getDate()-1);from.value=dstr(f);to.value=dstr(f);}
-  else{f.setDate(f.getDate()-days);from.value=dstr(f);to.value=dstr(t);}
-  load();
-}
-function reloadRange(){load();}
+function quickRange(days){var t=new Date(),f=new Date(t);f.setDate(f.getDate()-days);var to=new Date(t);if(days===1)to=new Date(f);
+  document.getElementById('f-from').value=dstr(f);document.getElementById('f-to').value=dstr(to);load();}
 async function load(){
-  var info=document.getElementById('sf-info');info.textContent='Načítám…';
-  var from=document.getElementById('f-from').value,to=document.getElementById('f-to').value;
-  var rows=[],off=0;truncated=false;
-  while(off<MAX_ROWS){
-    var q=supa.from('scans').select('*,profiles(name)').order('scanned_at',{ascending:false})
-    .range(off,off+PAGE-1);if(window.PRG_DC)q=PRG_DC.apply(q,'dc_id');
-    if(from)q=q.gte('scanned_at',new Date(from+'T00:00:00').toISOString());
-    if(to){var e=new Date(to+'T00:00:00');e.setDate(e.getDate()+1);q=q.lt('scanned_at',e.toISOString());}
-    var res=await q;
-    if(res.error){info.textContent='❌ '+res.error.message;return;}
-    var got=res.data||[];rows=rows.concat(got);
-    if(got.length<PAGE)break;
-    off+=PAGE;
-    if(off>=MAX_ROWS){truncated=true;}
-  }
-  data=rows;
-  fillSelects();
+  document.getElementById('sf-info').textContent='Načítám…';
+  var p={from:document.getElementById('f-from').value,to:document.getElementById('f-to').value,limit:20000};
+  var dc=window.PRG_DC&&PRG_DC.currentId();if(dc!=null)p.dc=dc;
+  var r=await supa.rpc('wms_scan_log',{p:p});
+  if(r.error){document.getElementById('tbody').innerHTML='<tr class="empty-row"><td colspan="10">❌ '+escH(r.error.message)+'</td></tr>';return;}
+  data=r.data||[];
+  var us={};data.forEach(function(s){if(s.name)us[s.name]=1;});var sel=document.getElementById('f-user'),cur=sel.value;
+  sel.innerHTML='<option value="">Všichni</option>'+Object.keys(us).sort().map(function(u){return '<option'+(u===cur?' selected':'')+'>'+escH(u)+'</option>';}).join('');
   applyFilters();
 }
-function fillSelects(){
-  var us={},lc={};
-  data.forEach(function(s){var u=(s.profiles&&s.profiles.name)||'–';us[u]=1;if(s.location)lc[s.location]=1;});
-  var cu=document.getElementById('f-user').value,cl=document.getElementById('f-loc').value;
-  document.getElementById('f-user').innerHTML='<option value="">Všichni</option>'+Object.keys(us).sort().map(function(k){return '<option value="'+escH(k)+'">'+escH(k)+'</option>';}).join('');
-  document.getElementById('f-loc').innerHTML='<option value="">Všechny</option>'+Object.keys(lc).sort().map(function(k){return '<option value="'+escH(k)+'">'+escH(k)+'</option>';}).join('');
-  document.getElementById('f-user').value=cu;document.getElementById('f-loc').value=cl;
-}
-function hhmm(iso){var d=new Date(iso);return pad(d.getHours())+':'+pad(d.getMinutes());}
-function currentFilters(){
-  return {q:document.getElementById('search').value.trim(),from:document.getElementById('f-from').value,to:document.getElementById('f-to').value,
-    user:document.getElementById('f-user').value,mode:document.getElementById('f-mode').value,ver:document.getElementById('f-ver').value,
-    loc:document.getElementById('f-loc').value,kind:document.getElementById('f-kind').value,tfrom:document.getElementById('f-tfrom').value,tto:document.getElementById('f-tto').value};
-}
 function applyFilters(){
-  var f=currentFilters(),q=f.q.toLowerCase();
-  shown=data.filter(function(s){
-    var uname=(s.profiles&&s.profiles.name)||'–';
-    if(q){var hay=((s.ean||'')+' '+(s.iot_id||'')+' '+(s.box_number||'')+' '+(s.location||'')).toLowerCase();if(hay.indexOf(q)===-1)return false;}
-    if(f.user&&uname!==f.user)return false;
-    if(f.mode){var m=s.placement_mode||'none';if(m!==f.mode)return false;}
-    if(f.ver){if((f.ver==='1')!==!!s.verified)return false;}
-    if(f.loc&&s.location!==f.loc)return false;
-    if(f.kind==='ean'&&!s.ean)return false;
-    if(f.kind==='iot'&&!s.iot_id)return false;
-    if(f.tfrom||f.tto){var h=hhmm(s.scanned_at);if(f.tfrom&&h<f.tfrom)return false;if(f.tto&&h>f.tto)return false;}
-    return true;
-  });
+  var q=(document.getElementById('search').value||'').toLowerCase().trim(),k=document.getElementById('f-kind').value,u=document.getElementById('f-user').value;
+  shown=data.filter(function(s){if(k&&s.kind!==k)return false;if(u&&s.name!==u)return false;
+    if(q){var hay=[s.sku,s.lpn,s.loc,s.doc,s.note,s.name].join(' ').toLowerCase();if(hay.indexOf(q)<0)return false;}return true;});
   sortRows();render();
 }
-function sortVal(s,k){
-  if(k==='code')return (s.ean||s.iot_id||'').toLowerCase();
-  if(k==='box')return String(s.box_number||'').toLowerCase();
-  if(k==='loc')return (s.location||'').toLowerCase();
-  if(k==='qty')return Number(s.quantity)||0;
-  if(k==='user')return ((s.profiles&&s.profiles.name)||'').toLowerCase();
-  return new Date(s.scanned_at).getTime();
-}
-function sortRows(){shown.sort(function(a,b){var x=sortVal(a,sortKey),y=sortVal(b,sortKey);return x<y?-sortDir:x>y?sortDir:0;});}
-function sortBy(k){if(sortKey===k)sortDir=-sortDir;else{sortKey=k;sortDir=(k==='time'||k==='qty')?-1:1;}
-  ['code','box','loc','qty','user','time'].forEach(function(x){var el=document.getElementById('s-'+x);if(el)el.textContent=x===sortKey?(sortDir===1?'▲':'▼'):'';});
-  sortRows();render();}
-function resetFilters(){
-  ['search','f-user','f-mode','f-ver','f-loc','f-kind','f-tfrom','f-tto'].forEach(function(id){document.getElementById(id).value='';});
-  var t=new Date(),f=new Date();f.setDate(f.getDate()-7);
-  document.getElementById('f-from').value=dstr(f);document.getElementById('f-to').value=dstr(t);
-  load();
-}
+function sortRows(){shown.sort(function(a,b){var x=a[sortKey],y=b[sortKey];if(x==null)x='';if(y==null)y='';if(typeof x==='number'&&typeof y==='number')return (x-y)*sortDir;return String(x).localeCompare(String(y),'cs')*sortDir;});}
+function sortBy(k){if(sortKey===k)sortDir=-sortDir;else{sortKey=k;sortDir=(k==='at_'||k==='qty')?-1:1;}
+  document.querySelectorAll('th span[id^="s-"]').forEach(function(e){e.textContent='';});var e=document.getElementById('s-'+k);if(e)e.textContent=sortDir<0?'▼':'▲';sortRows();render();}
+function resetFilters(){document.getElementById('search').value='';document.getElementById('f-kind').value='';document.getElementById('f-user').value='';applyFilters();}
+function docLink(s){if(!s.doc)return '';if(s.doc_id&&s.doc_type)return '<a href="wms_'+s.doc_type+'.html?id='+s.doc_id+'" style="color:var(--accent);font-weight:600;text-decoration:none">'+escH(s.doc)+'</a>';return escH(s.doc);}
 function render(){
-  var tb=document.getElementById('tbody');
-  var totalQty=shown.reduce(function(a,s){return a+(Number(s.quantity)||0);},0);
-  document.getElementById('sf-info').textContent='Zobrazeno '+shown.length+' z '+data.length+' načtených skenů · množství celkem '+totalQty+(truncated?' · ⚠️ načteno max '+MAX_ROWS+' řádků, zúž období':'');
-  var visible=shown.slice(0,1000);
-  if(!shown.length){tb.innerHTML='<tr class="empty-row"><td colspan="8">Žádné skeny</td></tr>';return;}
-  tb.innerHTML=visible.map(function(s){
-    var code=s.ean||s.iot_id||'–';
-    var uname=(s.profiles&&s.profiles.name)||'–';
-    var mode=s.placement_mode==='outer'?'<span class="badge badge-blue">Outer</span>':s.placement_mode==='inner'?'<span class="badge badge-orange">Inner</span>':s.placement_mode==='inv_ean'?'<span class="badge badge-green">Inv. EAN</span>':s.placement_mode==='inv_ean_loc'?'<span class="badge badge-green">Inv. EAN + lok.</span>':'–';
-    var verified=s.verified?'<span class="badge badge-green">✅</span>':'<span class="badge badge-gray">–</span>';
-    return '<tr><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+escH(code)+'</td><td>'+escH(s.box_number||'–')+'</td><td>'+escH(s.location||'–')+'</td><td>'+mode+'</td><td>'+verified+'</td><td>'+escH(s.quantity==null?'–':s.quantity)+'</td><td>'+escH(uname)+'</td><td style="font-size:11px;color:var(--muted)">'+escH(fmt(s.scanned_at))+'</td></tr>';
-  }).join('')+(shown.length>1000?'<tr class="empty-row"><td colspan="8">Zobrazeno prvních 1000 řádků, export obsahuje všech '+shown.length+'.</td></tr>':'');
+  var cnt={};shown.forEach(function(s){cnt[s.kind]=(cnt[s.kind]||0)+1;});
+  document.getElementById('sf-info').innerHTML='<b>'+shown.length.toLocaleString('cs-CZ')+'</b> skenů'+(Object.keys(cnt).length?' · '+Object.keys(cnt).map(function(k){return escH((KIND[k]||k).replace(/^\S+\s/,''))+' '+cnt[k];}).join(' · '):'');
+  var rows=shown.slice(0,3000);
+  document.getElementById('tbody').innerHTML=rows.length?rows.map(function(s){var d=new Date(s.at_);
+    return '<tr'+(s.kind==='error'?' style="background:#fff5f4"':'')+'><td style="white-space:nowrap">'+d.toLocaleDateString('cs-CZ')+' '+pad(d.getHours())+':'+pad(d.getMinutes())+'</td><td style="white-space:nowrap">'+escH(KIND[s.kind]||s.kind)+'</td><td>'+docLink(s)+'</td><td><b>'+escH(s.sku||'')+'</b></td><td style="font-family:\'JetBrains Mono\',monospace;font-size:12px">'+escH(s.lpn||'')+'</td><td>'+escH(s.loc||'')+'</td><td style="text-align:right">'+(s.qty==null?'':Number(s.qty).toLocaleString('cs-CZ'))+'</td><td>'+escH(s.name||'')+'</td><td>'+escH(s.code||'')+'</td><td style="color:var(--muted);font-size:12px">'+escH(s.note||'')+'</td></tr>';}).join('')
+    +(shown.length>3000?'<tr class="empty-row"><td colspan="10">Zobrazeno 3 000 z '+shown.length.toLocaleString('cs-CZ')+' – export obsahuje vše.</td></tr>':'')
+    :'<tr class="empty-row"><td colspan="10">Žádné skeny za zvolené období.</td></tr>';
 }
-function exportScansXlsx(){
-  if(!shown.length){toast('Není co exportovat');return;}
-  if(typeof XLSX==='undefined'){toast('Knihovna XLSX se nenačetla');return;}
-  var rows=shown.map(function(s){return {
-    'Čas':new Date(s.scanned_at),'EAN':s.ean||'','IoT ID':s.iot_id||'','Box':s.box_number||'','Lokace':s.location||'',
-    'Režim':s.placement_mode==='outer'?'Outer':s.placement_mode==='inner'?'Inner':s.placement_mode==='inv_ean'?'Inventura – jen EAN':s.placement_mode==='inv_ean_loc'?'Inventura – EAN + lokace':'','Ověřeno':s.verified?'Ano':'Ne',
-    'Množství':Number(s.quantity)||0,'Uživatel':(s.profiles&&s.profiles.name)||''};});
-  var cols=['Čas','EAN','IoT ID','Box','Lokace','Režim','Ověřeno','Množství','Uživatel'];
-  var ws=XLSX.utils.json_to_sheet(rows,{header:cols,cellDates:true});
-  ws['!cols']=[{wch:19},{wch:18},{wch:18},{wch:10},{wch:14},{wch:9},{wch:9},{wch:10},{wch:20}];
-  ws['!autofilter']={ref:ws['!ref']};
-  for(var r=2;r<=rows.length+1;r++){var c=ws['A'+r];if(c){c.t='d';c.z='dd.mm.yyyy hh:mm:ss';}}
-  var f=currentFilters(),sum=[['Export skenů – PRG WMS'],['Vytvořeno',new Date().toLocaleString('cs-CZ')],['Vytvořil',(currentProfile&&currentProfile.name)||''],[],
-    ['Použité filtry'],['Hledat',f.q||'–'],['Období od',f.from||'–'],['Období do',f.to||'–'],['Čas od',f.tfrom||'–'],['Čas do',f.tto||'–'],
-    ['Uživatel',f.user||'Všichni'],['Režim',f.mode||'Všechny'],['Ověřeno',f.ver===''?'Vše':f.ver==='1'?'Ověřeno':'Neověřeno'],['Lokace',f.loc||'Všechny'],['Typ kódu',f.kind||'Vše'],[],
-    ['Počet skenů',shown.length],['Množství celkem',shown.reduce(function(a,s){return a+(Number(s.quantity)||0);},0)],[],['Podle uživatele','Skenů','Množství']];
-  var by={};shown.forEach(function(s){var u=(s.profiles&&s.profiles.name)||'–';by[u]=by[u]||[0,0];by[u][0]++;by[u][1]+=Number(s.quantity)||0;});
-  Object.keys(by).sort().forEach(function(u){sum.push([u,by[u][0],by[u][1]]);});
-  var ws2=XLSX.utils.aoa_to_sheet(sum);ws2['!cols']=[{wch:22},{wch:26},{wch:12}];
-  var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Skeny');XLSX.utils.book_append_sheet(wb,ws2,'Filtry a souhrn');
-  XLSX.writeFile(wb,'skeny_'+dstr(new Date())+'.xlsx');
-  toast('Export hotov ('+shown.length+' řádků)');
-}
+function exportScansXlsx(){if(!window.XLSX||!shown.length){toast('Nic k exportu');return;}
+  var ws=XLSX.utils.json_to_sheet(shown.map(function(s){return {'Čas':new Date(s.at_),'Činnost':(KIND[s.kind]||s.kind).replace(/^\S+\s/,''),'Doklad':s.doc||'','SKU':s.sku||'','LPN / obal':s.lpn||'','Lokace':s.loc||'','Množství':s.qty==null?'':Number(s.qty),'Pracovník':s.name||'','DC':s.code||'','Poznámka':s.note||''};}),{cellDates:true,dateNF:'d.m.yyyy hh:mm'});
+  var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Skeny');XLSX.writeFile(wb,'skeny_WMS_'+document.getElementById('f-from').value+'_'+document.getElementById('f-to').value+'.xlsx');}
 </script>
 </body></html>

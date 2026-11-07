@@ -187,7 +187,7 @@ setTimeout(function(){
       <div class="stat-grid">
         <div class="stat-card"><div class="label">SKU</div><div class="value" id="stat-stock">–</div><div class="sub">v SKU Setupu</div></div>
         <div class="stat-card"><div class="label">Klienti</div><div class="value" id="stat-clients">–</div><div class="sub">registrovaných</div></div>
-        <div class="stat-card"><div class="label">Skeny dnes</div><div class="value" id="stat-scans">–</div><div class="sub">naskenováno</div></div>
+        <div class="stat-card"><div class="label">Skeny dnes</div><div class="value" id="stat-scans">–</div><div class="sub">skenů ve WMS</div></div>
         <div class="stat-card"><div class="label">Nízký stav</div><div class="value" id="stat-low" style="color:var(--warning)">–</div><div class="sub">pod minimem</div></div>
       </div>
       <div class="two-col">
@@ -201,7 +201,7 @@ setTimeout(function(){
           <div class="card"><div class="card-header"><h3>📤 Poslední výdeje</h3><a href="wms_deliveries.html" class="btn btn-secondary btn-sm">Všechny →</a></div>
           <div style="overflow-x:auto;"><table><thead><tr><th>Číslo</th><th>Klient</th><th>Stav</th><th>Datum</th></tr></thead><tbody id="t-deliveries"><tr class="empty-row"><td colspan="4">Načítám…</td></tr></tbody></table></div></div>
           <div class="card"><div class="card-header"><h3>📱 Poslední skeny</h3><a href="wms_scans.html" class="btn btn-secondary btn-sm">Všechny →</a></div>
-          <div style="overflow-x:auto;"><table><thead><tr><th>EAN/IoT</th><th>Kdo</th><th>Kdy</th></tr></thead><tbody id="t-scans"><tr class="empty-row"><td colspan="3">Načítám…</td></tr></tbody></table></div></div>
+          <div style="overflow-x:auto;"><table><thead><tr><th>Činnost</th><th>Kdo</th><th>Kdy</th></tr></thead><tbody id="t-scans"><tr class="empty-row"><td colspan="3">Načítám…</td></tr></tbody></table></div></div>
         </div>
       </div>
     </div>
@@ -409,20 +409,23 @@ function go(u){window.location.href=u;}
 function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
 var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(_tt);_tt=setTimeout(function(){e.classList.remove('show');},2800);}
 
+function escH0(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function dcq(q,c){return window.PRG_DC?PRG_DC.apply(q,c):q;}
 async function loadDashboard(){
   var today=new Date().toISOString().slice(0,10);
   var [sr,cr,scr,lr,rr,dr]=await Promise.all([
     dcq(supa.from('stock_items').select('id',{count:'exact'}),'warehouse_id'),
     supa.from('clients').select('id',{count:'exact'}),
-    dcq(supa.from('scans').select('id',{count:'exact'}).gte('scanned_at',today),'dc_id'),
+    Promise.resolve({count:0}),
     dcq(supa.from('stock_items').select('id,sku,min_stock,warehouse_id').gt('min_stock',0),'warehouse_id'),
     dcq(supa.from('receipts').select('*').order('created_at',{ascending:false}).limit(5),'warehouse_id'),
     dcq(supa.from('deliveries').select('*,clients(name)').order('created_at',{ascending:false}).limit(5),'warehouse_id')
   ]);
   document.getElementById('stat-stock').textContent=sr.count||0;
   document.getElementById('stat-clients').textContent=cr.count||0;
-  document.getElementById('stat-scans').textContent=scr.count||0;
+  // skeny jen z WMS operací (ne Inventory Tool)
+  var WSC=[];try{var wp={from:today,to:today,limit:20000};if(window.PRG_DC&&PRG_DC.currentId()!=null)wp.dc=PRG_DC.currentId();var wr=await supa.rpc('wms_scan_log',{p:wp});WSC=wr.data||[];}catch(e){}
+  document.getElementById('stat-scans').textContent=WSC.filter(function(x){return x.kind!=='error';}).length;
   var low=[];
   try{
     var sums={},from=0;
@@ -443,10 +446,10 @@ async function loadDashboard(){
   var ddata=dr.data||[];
   det.innerHTML=ddata.length?ddata.map(function(d){var st=window.PRG_FLOW?PRG_FLOW.badge('delivery',d.status)+PRG_FLOW.problemIcon(d):d.status;var cn=(d.clients&&d.clients.name)||'–';return '<tr><td><a href="wms_delivery.html?id='+d.id+'" style="color:var(--accent);font-weight:600">'+d.delivery_number+'</a></td><td>'+cn+'</td><td>'+st+'</td><td style="font-size:11px;color:var(--muted)">'+new Date(d.created_at).toLocaleDateString('cs-CZ')+'</td></tr>';}).join(''):'<tr class="empty-row"><td colspan="4">Žádné výdeje</td></tr>';
   // Recent scans
-  var sc=await supa.from('scans').select('ean,iot_id,scanned_at,profiles(name)').order('scanned_at',{ascending:false}).limit(6);
+  var KIND={receipt:'📥 Příjem',putaway:'📍 Zaskladnění',move:'🔁 Přesun',pick:'📤 Vychystání',pack:'📦 Balení',load:'🚚 Nakládka',count:'🎯 Inventura',error:'❌ Chyba'};
   var st=document.getElementById('t-scans');
-  var sd=sc.data||[];
-  st.innerHTML=sd.length?sd.map(function(s){return '<tr><td style="font-family:\'JetBrains Mono\',monospace;font-size:11px">'+(s.ean||s.iot_id||'–')+'</td><td>'+((s.profiles&&s.profiles.name)||'–')+'</td><td style="font-size:11px;color:var(--muted)">'+new Date(s.scanned_at).toLocaleString('cs-CZ')+'</td></tr>';}).join(''):'<tr class="empty-row"><td colspan="3">Žádné skeny</td></tr>';
+  var sd=WSC.slice(0,6);if(!sd.length){try{var wp2={from:new Date(Date.now()-30*864e5).toISOString().slice(0,10),limit:6};if(window.PRG_DC&&PRG_DC.currentId()!=null)wp2.dc=PRG_DC.currentId();var w2=await supa.rpc('wms_scan_log',{p:wp2});sd=w2.data||[];}catch(e){}}
+  st.innerHTML=sd.length?sd.map(function(s){return '<tr><td style="font-size:12px">'+(KIND[s.kind]||s.kind)+'<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:var(--muted)">'+escH0(s.sku||s.lpn||s.loc||s.note||'')+'</div></td><td>'+escH0(s.name||'–')+'</td><td style="font-size:11px;color:var(--muted)">'+new Date(s.at_).toLocaleString('cs-CZ')+'</td></tr>';}).join(''):'<tr class="empty-row"><td colspan="3">Žádné skeny</td></tr>';
   document.getElementById('last-refresh').textContent='Obnoveno: '+new Date().toLocaleTimeString('cs-CZ');
 }
 

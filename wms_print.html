@@ -148,7 +148,7 @@ body{overflow-x:hidden;}
       <div><label>Aktivní</label><select id="ed-active"><option value="1">Ano</option><option value="0">Ne</option></select></div>
     </div>
     <div class="pz" style="padding-top:0">
-      <div><div class="hint" style="margin-bottom:6px">Šablona (HTML + CSS). Proměnné: <code>{{doc.number}}</code>, <code>{{#each items}}…{{/each}}</code>, <code>{{barcode doc.number h=45}}</code>, <code>{{gs1 sscc}}</code>, <code>{{qr value}}</code>, <code>{{date now}}</code>, <code>{{#if x}}…{{else}}…{{/if}}</code></div>
+      <div><div class="hint" style="margin-bottom:6px">Šablona (HTML + CSS). Proměnné: <code>{{doc.number}}</code>, <code>{{#each items}}…{{/each}}</code>, <code>{{barcode doc.number h=45}}</code>, <code>{{gs1 sscc}}</code>, <code>{{qr value}}</code>, <code>{{date now}}</code>, <code>{{#if x}}…{{else}}…{{/if}}</code><br>Lidé na dokladu: <code>{{people.received}}</code> přijal, <code>{{people.putaway}}</code> zaskladnil, <code>{{people.picked}}</code> vychystal, <code>{{people.packed}}</code> zabalil, <code>{{people.loaded}}</code> naložil, <code>{{people.shipped}}</code> vydal, <code>{{people.checked}}</code> zkontroloval (+ <code>_at</code> = kdy)</div>
       <textarea id="ed-body" spellcheck="false"></textarea>
       <div class="errbox" id="ed-err"></div></div>
       <div><div class="hint" style="margin-bottom:6px">Náhled s ukázkovými daty</div><div class="pv"><iframe id="ed-prev" title="náhled"></iframe></div></div>
