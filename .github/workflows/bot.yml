@@ -3,6 +3,7 @@ name: PRG testovaci robot
 on:
   schedule:
     - cron: '17 2 * * *'        # kazdou noc ve 3:17 / 4:17 (cas v Praze)
+    - cron: '*/15 19-23,0-5 * * *'   # DOCASNE: noc 7.-8.11. kazdych 15 min (20:00-06:59 v Praze)
   workflow_dispatch: {}          # rucni spusteni: Actions -> PRG testovaci robot -> Run workflow
   push:
     branches: [main]
