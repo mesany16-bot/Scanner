@@ -151,6 +151,7 @@ setTimeout(function(){
     <button class="mode-select-btn sim" id="btn-temp" onclick="enterMode('teploty')" style="background:linear-gradient(135deg,#c0392b,#e67e22)"><span class="msb-icon">🌡️</span><span class="msb-title">Monitoring teplot</span><span class="msb-sub">Čidla, alarmy, reporty (GDP)</span></button>
     <button class="mode-select-btn sim" id="btn-sim" onclick="enterMode('simulator')"><span class="msb-icon">🚜</span><span class="msb-title">Retrak simulátor</span><span class="msb-sub">Simulace provozu haly a retraků</span></button>
     <button class="mode-select-btn" id="btn-setup" onclick="if(window.PRG_SETUP)PRG_SETUP.open()" style="background:linear-gradient(135deg,#34495e,#2c3e50)"><span class="msb-icon">⚙️</span><span class="msb-title">Setup</span><span class="msb-sub">Jazyk a DC</span></button>
+    <div id="hub-user" style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:4px;padding-top:14px;border-top:1px solid #eef0f4"><span style="font-size:13px;color:#7a8090;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">👤 <b id="hub-user-name" data-noi18n style="color:#1a1d24">–</b></span><button onclick="doLogout()" style="flex-shrink:0;padding:10px 14px;border:1.5px solid #f1c4bf;background:#fff5f4;color:#c0392b;border-radius:10px;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer">🚪 Odhlásit se</button></div>
   </div>
 </div>
 <div id="app" style="display:none">
@@ -375,6 +376,7 @@ async function onLoggedIn(user){
     return;
   }
   document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;
+  var hun=document.getElementById('hub-user-name'); if(hun) hun.textContent=currentProfile.name||user.email;
   var rb=document.getElementById('sidebar-user-role');
   rb.textContent=currentProfile.role==='admin'?'Admin':'User';
   rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';
