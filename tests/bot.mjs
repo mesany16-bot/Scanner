@@ -74,7 +74,7 @@ function watch(page, bag) {
 
   const PAGES = ['wms_dashboard.html?app=wms', 'wms_kpi.html', 'wms_stock.html', 'wms_balances.html', 'wms_occupancy.html', 'wms_accuracy.html',
     'wms_adjustments.html', 'wms_history.html', 'wms_clients.html', 'wms_receipts.html', 'wms_deliveries.html', 'wms_yard.html',
-    'wms_scans.html', 'wms_exceptions.html', 'wms_locations.html', 'wms_inventura.html', 'wms_temp.html'];
+    'wms_scans.html', 'wms_exceptions.html', 'wms_locations.html', 'wms_inventura.html', 'wms_temp.html', 'wms_reports.html'];
   for (const p of PAGES) {
     await step('Web: stránka ' + p, async () => {
       werr.length = 0;
@@ -87,6 +87,12 @@ function watch(page, bag) {
       must(!werr.length, werr.slice(0, 3).join(' | '));
     }, web);
   }
+
+  await step('Web: reporty (všech 17 přehledů)', async () => {
+    await web.goto(BASE + 'wms_reports.html', { waitUntil: 'domcontentloaded' }); await sleep(3000);
+    const bad = await web.evaluate(async () => { const out = []; for (const r of REPORTS) { const x = await supa.rpc('wms_report', { p_code: r.c, p: { from: '2026-01-01' } }); if (x.error) out.push(r.c + ': ' + x.error.message); } return out; });
+    must(!bad.length, bad.slice(0, 4).join(' | '));
+  }, web);
 
   await step('Web: přepnutí jazyka EN → CS', async () => {
     await web.goto(BASE + 'wms_dashboard.html?app=wms', { waitUntil: 'domcontentloaded' }); await sleep(2500);

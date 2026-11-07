@@ -18,6 +18,7 @@
     {k:'yard',     i:'🚛', t:'Yard',       u:'wms_yard.html'},
     {k:'scans',    i:'📱', t:'Skeny',      u:'wms_scans.html'},
     {k:'exceptions', i:'⚠️', t:'Výjimky',  u:'wms_exceptions.html'},
+    {k:'reports',  i:'📑', t:'Reporty',    u:'wms_reports.html'},
     {k:'billing',  i:'💰', t:'Fakturace',  u:'wms_billing.html', admin:true},
     {group:'setup', i:'⚙️', t:'Setup', items:[
       {k:'prefs',    i:'🌐', t:'Jazyk a DC',     fn:'PRG_SETUP.open()'},
