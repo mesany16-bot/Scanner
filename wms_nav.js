@@ -5,7 +5,7 @@
   if(!window.PRG_I18N&&!document.getElementById('prg-i18n-js')){var sc=document.createElement('script');sc.id='prg-i18n-js';sc.src='prg_i18n.js?v=1';(document.head||document.documentElement).appendChild(sc);}
   var ITEMS=[
     {k:'hub',      i:'📊', t:'Hub',        u:'wms_dashboard.html'},
-    {k:'wms',      i:'🏭', t:'PRG WMS',    u:'wms_dashboard.html?app=wms'},
+    {k:'wms',      i:'🏭', t:'Dashboard',  u:'wms_dashboard.html?app=wms'},
     {k:'kpi',      i:'📈', t:'KPI',        u:'wms_kpi.html'},
     {k:'balances', i:'🧮', t:'Zásoby',     u:'wms_balances.html'},
     {k:'occupancy',i:'🗺️', t:'Obsazenost', u:'wms_occupancy.html'},
