@@ -1,0 +1,47 @@
+name: PRG testovaci robot
+
+on:
+  schedule:
+    - cron: '17 2 * * *'        # kazdou noc ve 3:17 / 4:17 (cas v Praze)
+  workflow_dispatch: {}          # rucni spusteni: Actions -> PRG testovaci robot -> Run workflow
+  push:
+    branches: [main]
+    paths-ignore: ['tests/**', '.github/**', '*.md']
+
+concurrency:
+  group: prg-bot
+  cancel-in-progress: true
+
+jobs:
+  robot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Pockat na zverejneni stranek (po nahrani zmeny)
+        if: github.event_name == 'push'
+        run: sleep 120
+      - name: Instalace prohlizece
+        run: |
+          npm install --no-save playwright@1.48.2
+          npx playwright install --with-deps chromium
+      - name: Robot projde Dashboard a scanner
+        env:
+          BASE_URL: https://mesany16-bot.github.io/Scanner/
+          BOT_EMAIL: ${{ secrets.BOT_EMAIL }}
+          BOT_PASSWORD: ${{ secrets.BOT_PASSWORD }}
+          OUT_DIR: bot-report
+        run: node tests/bot.mjs
+      - name: Shrnuti
+        if: always()
+        run: cat bot-report/summary.md >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Report se screenshoty
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: robot-report
+          path: bot-report
+          retention-days: 14
