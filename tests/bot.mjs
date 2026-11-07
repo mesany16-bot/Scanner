@@ -55,7 +55,7 @@ function watch(page, bag) {
   must(PASS || LOCAL_BRIDGE, 'Chybí BOT_PASSWORD');
   const browser = await chromium.launch();
   const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
-  const ctx = { dc: null, client: null, run: new Date().toISOString().slice(2, 19).replace(/[-:T]/g, ''), qa: rnd(2, 12), qb: rnd(1, 8) };
+  const ctx = { dc: null, client: null, run: new Date().toISOString().slice(2, 19).replace(/[-:T]/g, ''), qa: rnd(2, 12), qb: rnd(4, 8) };
   ctx.qd = rnd(1, ctx.qa);
   log(`Množství tohoto běhu: A ${ctx.qa}, B ${ctx.qb}, výdej A ${ctx.qd}`);
 
@@ -196,7 +196,7 @@ function watch(page, bag) {
       const num = 'BOT-VYD-' + a.run;
       const r = await supa.from('deliveries').insert({ delivery_number: num, client_id: a.client, warehouse_id: a.dc, status: 'new', note: 'automaticky test', created_by: currentUserId }).select().single();
       if (r.error) return { e: r.error.message };
-      const i = await supa.from('delivery_items').insert([{ delivery_id: r.data.id, sku: 'BOT-A', quantity: a.qd }]);
+      const i = await supa.from('delivery_items').insert([{ delivery_id: r.data.id, sku: 'BOT-A', quantity: a.qd }, { delivery_id: r.data.id, sku: 'BOT-B', quantity: 4 }]);
       if (i.error) return { e: i.error.message };
       const al = await supa.rpc('wms_delivery_allocate', { p_id: r.data.id, p_user: currentUserId });
       if (al.error) return { e: 'alokace: ' + al.error.message };
@@ -213,7 +213,20 @@ function watch(page, bag) {
     await type(dl.num); await sleep(800);
     const cur = await s.evaluate(() => task && task.cur && { l: task.cur.location_code });
     must(cur && cur.l, 'scanner neukázal lokaci k vychystání · ' + await status());
-    await type(cur.l); await type('2999000000011'); await sheetOk(ctx.qd);
+    // BOT-A po kusech, BOT-B přes kód kartonu (1 × outer = 4 ks)
+    for (let n = 0; n < 4; n++) {
+      const c = await s.evaluate(() => task && task.cur && { l: task.cur.location_code, sku: task.cur.sku });
+      if (!c || !c.l) break;
+      await type(c.l); await type(c.sku === 'BOT-B' ? '3999000000029' : '2999000000011');
+      if (c.sku === 'BOT-B') {
+        await s.waitForSelector('#tk-sheet', { state: 'visible', timeout: 8000 });
+        must(await s.$('#tkf-uom'), 'vychystání BOT-B nenabídlo jednotky balení');
+        must(await s.inputValue('#tkf-uom') === 'outer' && await s.inputValue('#tkf-cnt') === '1', 'předvyplněno ' + await s.inputValue('#tkf-uom') + ' × ' + await s.inputValue('#tkf-cnt') + ' (čekáno 1 × outer)');
+        await s.click('#tk-ok'); await sleep(1200);
+      } else await sheetOk(ctx.qd);
+    }
+    const pk = await db(id => supa.from('delivery_allocations').select('sku,picked_qty').eq('delivery_id', id).then(r => r.data || []), dl.id);
+    must(pk.filter(x => x.sku === 'BOT-B').reduce((t, x) => t + Number(x.picked_qty || 0), 0) === 4, 'BOT-B vychystáno: ' + JSON.stringify(pk));
     const st = await db(id => supa.from('deliveries').select('status').eq('id', id).single().then(r => r.data && r.data.status), dl.id);
     must(/picked|packed|packing/.test(st), 'stav výdeje po vychystání: ' + st + ' · ' + await status());
   }, s);
@@ -232,11 +245,63 @@ function watch(page, bag) {
     must(r.checked && r.picked && r.shipped, 'chybí jména: ' + JSON.stringify(r));
   }, s);
 
+  // ---- blokace / karanténa ----
+  await step('Blokace: karanténa a uvolnění palety', async () => {
+    const r = await db(async a => {
+      const b = await supa.from('stock_balances').select('id,lpn,units_total').eq('dc_id', a.dc).eq('sku', 'BOT-B').gt('units_total', 0).limit(1);
+      const bal = b.data && b.data[0]; if (!bal) return { e: 'BOT-B nemá zásobu' };
+      const q = await supa.rpc('wms_adjust_param', { p_balance_id: bal.id, p_field: 'condition_code', p_value: 'QUARANTINE', p_reason: 'block', p_note: 'robot', p_user: currentUserId });
+      if (q.error) return { e: 'blokace: ' + q.error.message };
+      const c1 = await supa.from('stock_balances').select('condition_code').eq('id', bal.id).single();
+      const al = await supa.rpc('wms_is_allocatable', { p_code: c1.data && c1.data.condition_code });
+      const o = await supa.rpc('wms_adjust_param', { p_balance_id: bal.id, p_field: 'condition_code', p_value: 'OK', p_reason: 'release', p_note: 'robot', p_user: currentUserId });
+      if (o.error) return { e: 'uvolnění: ' + o.error.message };
+      const c2 = await supa.from('stock_balances').select('condition_code').eq('id', bal.id).single();
+      return { c1: c1.data && c1.data.condition_code, al: al.data, c2: c2.data && c2.data.condition_code };
+    }, ctx);
+    must(r && !r.e, r && r.e);
+    must(r.c1 === 'QUARANTINE' && r.al === false && (r.c2 || 'OK') === 'OK', 'stavy: ' + JSON.stringify(r));
+  }, s);
+
+  // ---- inventura s přepočítáním ----
+  await step('Inventura: rozdíl → přepočítání → sedí', async () => {
+    const ct = await db(async a => {
+      const b = await supa.from('stock_balances').select('id,sku,lpn,lot,units_total').eq('dc_id', a.dc).eq('location_code', 'BOT-01-01').gt('units_total', 0);
+      if (b.error || !b.data || !b.data.length) return { e: 'BOT-01-01 je prázdná ' + ((b.error || {}).message || '') };
+      const t = await supa.from('count_tasks').insert({ dc_id: a.dc, location_code: 'BOT-01-01', reason: 'robot', created_by: currentUserId }).select().single();
+      if (t.error) return { e: t.error.message };
+      const l = await supa.from('count_lines').insert(b.data.map(x => ({ task_id: t.data.id, balance_id: x.id, sku: x.sku, lpn: x.lpn, lot: x.lot, expected: x.units_total })));
+      if (l.error) return { e: l.error.message };
+      return { id: t.data.id, bal: b.data };
+    }, ctx);
+    must(ct && ct.id, 'nelze založit inventuru: ' + (ct && ct.e));
+    ctx.cc = ct.id;
+    await s.evaluate(() => tkOpenCounts()); await sleep(2000);
+    const i = await s.evaluate(id => task.list.findIndex(t => t.id === id), ct.id);
+    must(i >= 0, 'inventura není v seznamu na scanneru');
+    await s.evaluate(i => tkOpenCount(i), i); await sleep(1500);
+    await type('BOT-01-01');
+    const countAll = async (plus) => {
+      for (const b of ct.bal) {
+        await type(b.lpn);
+        await s.waitForSelector('#tkf-sku', { state: 'visible', timeout: 8000 }); await s.fill('#tkf-sku', b.sku); await s.click('#tk-ok'); await sleep(800);
+        await sheetOk(Number(b.units_total) + plus);
+      }
+    };
+    await countAll(1);
+    s.evaluate(() => tkCountSubmit()); await sleep(3000);
+    must(await s.evaluate(() => task && task.kind === 'count' && task.recount === true), 'po rozdílu scanner nechtěl přepočítat · ' + await status());
+    await countAll(0);
+    s.evaluate(() => tkCountSubmit()); await sleep(3000);
+    const st = await db(id => supa.from('count_tasks').select('status,diff_lines').eq('id', id).single().then(r => r.data), ct.id);
+    must(st && st.status === 'approved', 'stav inventury: ' + JSON.stringify(st) + ' · ' + await status());
+  }, s);
+
   await step('Scanner: bez chyb v prohlížeči', async () => { must(!serr.length, serr.slice(0, 4).join(' | ')); }, s);
 
   // úklid: zbylé zboží z testu vyskladnit, ať DC 99 neroste
   await step('Úklid testovacích zásob', async () => {
-    await db(async () => { try { await supa.rpc('wms_bot_cleanup'); } catch (e) {} });
+    await db(async id => { try { if (id) { await supa.from('count_lines').delete().eq('task_id', id); await supa.from('count_tasks').delete().eq('id', id); } await supa.rpc('wms_bot_cleanup'); } catch (e) {} }, ctx.cc || null);
   }, null);
 
   await browser.close();

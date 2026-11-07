@@ -2105,7 +2105,7 @@ var currentUser = '';
 var useLocation = false;
 var eanIntl = false;
 var intlSeen = {}, intlFull = null; // Mezinárodka: už naskenované celé štítky (s +pořadím)    // Mezinárodka: z kódu se bere jen část před „+“ (číslo zásilky bez pořadí kusu)
-var APP_VERSION = '5-67';
+var APP_VERSION = '5-68';
 var eanCount = false;   // Inventory Tool: počítání EAN (s lokací nebo bez)
 var eanSession = null;  // session_uid volné inventury EAN – na serveru jako řádek inventory_lists (kind ean / ean_loc)
 var expectingLoc = false;
@@ -3392,6 +3392,23 @@ async function tkOpenReceipt(id) {
   setStatus('📥 ' + (task.doc.receipt_number || '') + ' · naskenuj EAN / SKU zboží');
   updateScanBtn();
 }
+function tkUnits(s) {
+  var U = [['ks', 'kus', 1]];
+  if (Number(s.units_per_inner) > 1) U.push(['inner', 'inner (' + s.units_per_inner + ' ks)', Number(s.units_per_inner)]);
+  if (Number(s.units_per_carton) > 1) U.push(['outer', 'outer / karton (' + s.units_per_carton + ' ks)', Number(s.units_per_carton)]);
+  if (Number(s.units_per_pallet) > 1) U.push(['pallet', 'paleta (' + s.units_per_pallet + ' ks)', Number(s.units_per_pallet)]);
+  return U;
+}
+function tkSplit(n, U) {   // 23 ks -> "2 × outer + 3 ks" (největší balení nejdřív)
+  var out = [], r = Math.round(Number(n) || 0), nm = { pallet: 'pal.', outer: 'outer', inner: 'inner' };
+  U.slice().sort(function(a, b){ return b[2] - a[2]; }).forEach(function(u){ if (u[2] > 1 && r >= u[2]) { var k = Math.floor(r / u[2]); out.push(k + ' × ' + nm[u[0]]); r -= k * u[2]; } });
+  if (r > 0 || !out.length) out.push(r + ' ks');
+  return out.join(' + ');
+}
+function tkUomLive(tot) {
+  var upd = function(){ var el = document.getElementById('tk-uom-sum'); if (!el) return; var x = { uom: (document.getElementById('tkf-uom') || {}).value, cnt: (document.getElementById('tkf-cnt') || {}).value, loose: (document.getElementById('tkf-loose') || {}).value }; el.textContent = '= ' + tkNf(tot(x)) + ' ks'; };
+  ['tkf-uom', 'tkf-cnt', 'tkf-loose'].forEach(function(id){ var e = document.getElementById(id); if (e) { e.addEventListener('input', upd); e.addEventListener('change', upd); } }); upd();
+}
 function tkPackTxt(u, c, f, l) { if (!u || u === 'ks') return ''; var n = { inner: 'inner', outer: 'outer', pallet: 'pal.' }[u] || u; return tkNf(c) + ' × ' + n + (f ? ' à ' + tkNf(f) : '') + (Number(l) > 0 ? ' + ' + tkNf(l) + ' ks' : ''); }
 function tkRcSave() { if (task && task.kind === 'receipt') tkCacheSet('rc_' + task.id, { doc: task.doc, items: task.items, scans: task.scans, skus: task.skus }); }
 function tkFindSku(code, skus) {
@@ -3474,7 +3491,8 @@ async function tkReceiptCode(code) {
   var fields = multi
     ? [{ k: 'uom', label: 'Jednotka', opts: U.map(function(x){ return [x[0], x[1]]; }), v: defU }, { k: 'cnt', label: 'Počet', num: true, v: 1, req: true, focus: true }, { k: 'loose', label: 'Kusy navíc (volné)', num: true, v: '', ph: '0' }]
     : [{ k: 'qty', label: 'Množství (ks)', num: true, v: 1, req: true, focus: true }];
-  fields = fields.concat([ { k: 'lot', label: 'LOT', req: lotReq, ph: lotReq ? 'povinný' : 'nepovinný' }, { k: 'lpn', label: 'LPN (štítek palety)', ph: 'prázdné = přidělí systém' }]);
+  fields = fields.concat([ { k: 'lot', label: 'LOT', req: lotReq, ph: lotReq ? 'povinný' : 'nepovinný' }, { k: 'lpn', label: 'LPN (štítek palety)', ph: 'prázdné = přidělí systém' },
+    { k: 'cond', label: 'Stav zboží', opts: [['OK', '✅ V pořádku'], ['QUARANTINE', '🟡 Karanténa – čeká na kontrolu'], ['DAMAGE', '🔴 Poškozené'], ['HOLD', '⛔ Blokované (HOLD)']], v: 'OK' }]);
   if (one) fields.push({ k: 'loc', label: 'Lokace', req: true, ph: s.primary_location || 'naskenuj lokaci', v: '' });
   if (s.expiry_tracked) fields.push({ k: 'exp', label: 'Expirace', req: true, ph: 'DD.MM.RRRR' });
   if (s.serial_in) fields.push({ k: 'ser', label: 'Sériová čísla (každé na nový řádek / sken)', req: true, area: true });
@@ -3488,6 +3506,7 @@ async function tkReceiptCode(code) {
   if (multi) v.qty = String(tot(v));
   var line = { sku: s.sku, qty: Number(v.qty), lot: v.lot || null, lpn: tkUp(v.lpn) || null, location: one ? tkUp(v.loc) : null };
   if (multi) { line.uom = v.uom; line.uom_count = Number(v.cnt) || 0; line.uom_factor = uf(v.uom); line.loose_qty = Number(v.loose) || 0; }
+  if (v.cond && v.cond !== 'OK') line.condition = v.cond;
   if (s.expiry_tracked) line.expiry = tkDate(v.exp);
   if (s.serial_in) line.serials = tkSerials(v.ser);
   var rec = { sku: s.sku, qty: line.qty, lot: line.lot, lpn: line.lpn, loc: line.location, st: 'q', pk: tkPackTxt(line.uom, line.uom_count, line.uom_factor, line.loose_qty) };
@@ -3638,11 +3657,25 @@ function tkRenderInfo() {
   } else if (r.type === 'lpn') {
     var b = r.bal;
     h += '<div class="tk-big"><div class="tk-sub">PALETA</div><div class="tk-mono" style="font-size:22px;font-weight:700">' + tkEsc(b.lpn) + '</div><div style="font-size:18px;margin-top:4px">📍 <b class="tk-mono">' + tkEsc(b.location_code || '?') + '</b></div>'
+      + (tkBlocked(b.condition_code) ? '<div style="margin:4px 0;font-weight:800;color:#c0392b">⛔ ' + tkEsc(b.condition_code) + ' – nelze vydat</div>' : '')
       + '<div>' + tkEsc(b.sku) + ' · ' + tkNf(b.units_total) + ' ks' + (b.lot ? ' · LOT ' + tkEsc(b.lot) : '') + '</div><div class="tk-sub">' + tkEsc(b.customer || '') + (b.units_committed > 0 ? ' · rezervováno ' + tkNf(b.units_committed) : '') + '</div>'
       + '<div style="margin-top:6px">Přesah: ' + (r.blocks.length ? r.blocks.map(function(x){ return '<b class="tk-mono">' + tkEsc(x.location_code) + '</b>'; }).join(', ') : '<span class="tk-sub">žádný</span>') + '</div></div>'
-      + '<button class="tk-btn sec" onclick="tkInfoOvfStart()">↔ Nastavit přesah na další pozice</button>';
+      + '<button class="tk-btn sec" onclick="tkInfoOvfStart()">↔ Nastavit přesah na další pozice</button>'
+      + (tkBlocked(b.condition_code) ? '<button class="tk-btn" onclick="tkInfoCond(\'OK\')">🔓 Uvolnit (stav OK)</button>' : '<button class="tk-btn sec" style="border-color:#c0392b;color:#c0392b" onclick="tkInfoCond(null)">🔒 Blokovat / karanténa</button>');
   }
   tkPanel(h);
+}
+function tkBlocked(c) { return !!c && ['DAMAGE', 'HOLD', 'PIR', 'QUARANTINE'].indexOf(tkUp(c)) >= 0; }
+async function tkInfoCond(code) {
+  var b = task.res && task.res.bal; if (!b) return;
+  var v = await tkLineSheet({ title: (code === 'OK' ? '🔓 Uvolnit ' : '🔒 Blokovat ') + tkEsc(b.lpn || b.sku), sub: tkEsc(b.sku) + ' · ' + tkNf(b.units_total) + ' ks' + (b.units_committed > 0 ? ' · ⚠ ' + tkNf(b.units_committed) + ' ks už je rezervováno pro výdej' : ''),
+    fields: (code === 'OK' ? [] : [{ k: 'cond', label: 'Nový stav', opts: [['QUARANTINE', '🟡 Karanténa – čeká na kontrolu'], ['HOLD', '⛔ Blokované (HOLD)'], ['DAMAGE', '🔴 Poškozené']], v: 'QUARANTINE' }]).concat([{ k: 'reason', label: 'Důvod', req: true, focus: true, ph: code === 'OK' ? 'např. kontrola OK' : 'např. poškozený obal' }]),
+    validate: function(x){ return x.reason ? '' : 'Zadej důvod'; } });
+  if (!v) { setStatus('✖ Zrušeno'); return; }
+  var r = await tkRpc('wms_adjust_param', { p_balance_id: b.id, p_field: 'condition_code', p_value: code || v.cond, p_reason: code === 'OK' ? 'release' : 'block', p_note: v.reason, p_user: currentUserId }, 'stav ' + (b.lpn || b.sku));
+  if (r.s === 'fail') { beepError(); setStatus('❌ ' + tkErr(r.msg)); return; }
+  beepOk(); setStatus(r.s === 'done' ? '✅ ' + (b.lpn || b.sku) + ' · stav ' + (code || v.cond) : '⏳ Změna stavu se odešle, až bude signál');
+  if (r.s === 'done') await tkInfoCode(b.lpn || b.sku);
 }
 async function tkInfoCode(code) {
   var k = tkUp(code); if (!k) return;
@@ -3772,11 +3805,21 @@ async function tkPickCode(code) {
   var skuRec = task.skus.find(function(x){ return tkUp(x.sku) === tkUp(c.sku); }) || {};
   if (byLpn && skuRec.serial_out) byLpn = false;
   if (!byLpn) {   // sken LPN = celá rezervovaná část palety; sken EAN/SKU = zadat kusy
-    var v = await tkLineSheet({ title: '📦 ' + tkEsc(c.sku) + ' z ' + tkEsc(c.location_code || ''), sub: 'Zbývá vychystat ' + tkNf(rest) + ' ks', okText: '✅ Vychystáno', extra: '⚠ Chybí (short)',
-      fields: [{ k: 'qty', label: 'Vychystané množství', num: true, v: rest, req: true, focus: true }].concat(skuRec.serial_out ? [{ k: 'ser', label: 'Sériová čísla (každé na nový řádek / sken)', req: true, area: true }] : []),
-      validate: function(x){ var n = Number(x.qty); if (!(n > 0) || n > rest) return 'Množství 1 až ' + rest; if (skuRec.serial_out && tkSerials(x.ser).length !== n) return 'Počet sériových čísel (' + tkSerials(x.ser).length + ') musí být ' + n; return ''; } });
+    var U = tkUnits(skuRec), multi = U.length > 1 && !skuRec.serial_out;
+    var by0 = m0 && m0.by === 'carton' ? 'outer' : m0 && m0.by === 'inner' ? 'inner' : m0 && m0.by === 'pallet' ? 'pallet' : null;
+    var defU = by0 && U.find(function(u){ return u[0] === by0; }) ? by0 : (U.slice().reverse().find(function(u){ return u[2] > 1 && rest % u[2] === 0; }) || ['ks', '', 1])[0];
+    var defF = (U.find(function(u){ return u[0] === defU; }) || [0, 0, 1])[2];
+    var flds = multi ? [{ k: 'uom', label: 'Jednotka', opts: U.map(function(u){ return [u[0], u[1]]; }), v: defU }, { k: 'cnt', label: 'Počet', num: true, v: Math.floor(rest / defF) || 1, req: true, focus: true }, { k: 'loose', label: 'Kusy navíc (volné)', num: true, v: (rest % defF) || '', ph: '0' }]
+      : [{ k: 'qty', label: 'Vychystané množství', num: true, v: rest, req: true, focus: true }];
+    var tot = function(x){ return multi ? Math.round((Number(x.cnt) || 0) * ((U.find(function(u){ return u[0] === x.uom; }) || [0, 0, 1])[2]) + (Number(x.loose) || 0)) : Number(x.qty); };
+    var pv = tkLineSheet({ title: '📦 ' + tkEsc(c.sku) + ' z ' + tkEsc(c.location_code || ''), sub: 'Zbývá vychystat ' + tkNf(rest) + ' ks' + (multi ? ' (' + tkEsc(tkSplit(rest, U)) + ')<div id="tk-uom-sum" style="margin-top:6px;font-size:18px;font-weight:800;color:#0a7c4e"></div>' : ''), okText: '✅ Vychystáno', extra: '⚠ Chybí (short)',
+      fields: flds.concat(skuRec.serial_out ? [{ k: 'ser', label: 'Sériová čísla (každé na nový řádek / sken)', req: true, area: true }] : []),
+      validate: function(x){ if (multi) x.qty = String(tot(x)); var n = Number(x.qty); if (!(n > 0) || n > rest) return 'Množství 1 až ' + rest; if (skuRec.serial_out && tkSerials(x.ser).length !== n) return 'Počet sériových čísel (' + tkSerials(x.ser).length + ') musí být ' + n; return ''; } });
+    if (multi) tkUomLive(tot);
+    var v = await pv;
     if (!v) { setStatus('✖ Zrušeno'); return; }
     if (v._extra) { tkPickShort(); return; }
+    if (multi) v.qty = String(tot(v));
     qty = Number(v.qty);
     if (skuRec.serial_out) serials = tkSerials(v.ser);
   }
@@ -3819,7 +3862,7 @@ async function tkShip() {
 // ── BALENÍ ──
 async function tkOpenPack(id) {
   tkPanel('<div class="tk-muted" style="padding:18px">Načítám výdej…</div>');
-  var r = await tkFetch(supa.from('deliveries').select('*,clients(name,delivery_flow)').eq('id', id).single());
+  var r = await tkFetch(supa.from('deliveries').select('*,clients(name,delivery_flow,pack_scan_required)').eq('id', id).single());
   if (!r.data) { tkPanel('<div class="tk-warn">Výdej nejde načíst' + (r.net ? ' – bez signálu (balení potřebuje připojení)' : '') + '.</div><button class="tk-btn sec" onclick="tkOpenList(\'pack\')">↩ Zpět</button>'); return; }
   var al = await tkFetch(supa.from('delivery_allocations').select('*').eq('delivery_id', id).order('id'));
   var pk = await tkFetch(supa.from('packages').select('*,package_lines(*)').eq('delivery_id', id).order('id'));
@@ -3836,7 +3879,8 @@ function tkRenderPack() {
   h += '<div class="tk-big' + (boxN ? ' on' : '') + '"><div class="tk-sub">ROZBALENÝ OBAL</div><div style="font-size:24px;font-weight:700">' + tkNf(boxN) + ' ks</div>'
     + (boxN ? Object.keys(task.box).map(function(k){ var a = task.allocs.find(function(x){ return String(x.id) === k; }); return '<div>' + tkEsc(a ? a.sku : k) + ' · ' + tkNf(task.box[k]) + ' ks</div>'; }).join('') : '<div class="tk-sub">naskenuj EAN / SKU / LPN</div>') + '</div>';
   if (boxN) h += '<button class="tk-btn" onclick="tkPackClose(false)">✅ Uzavřít obal</button><button class="tk-btn sec" onclick="task.box={};tkRenderPack()">✖ Vyprázdnit obal</button>';
-  else if (left > 0) h += '<button class="tk-btn" onclick="tkPackClose(true)">📦 Zabalit vše zbývající do jednoho obalu</button>';
+  else if (left > 0 && !(d.clients && d.clients.pack_scan_required)) h += '<button class="tk-btn" onclick="tkPackClose(true)">📦 Zabalit vše zbývající do jednoho obalu</button>';
+  else if (left > 0) h += '<div class="tk-sub" style="padding:6px 14px">🔍 Kontrola balení: každý kus naskenuj do obalu.</div>';
   else h += '<div class="tk-big on"><div style="font-size:20px">✅ Vše zabaleno</div></div><button class="tk-btn" onclick="tkOpenLoad(' + task.id + ')">🚚 Pokračovat nakládkou</button>';
   h += '<div class="tk-sec">Řádky</div>' + task.allocs.map(function(a){ var u = tkUnpacked(a); return '<div class="tk-row"><span><b>' + tkEsc(a.sku) + '</b>' + (a.lot ? ' · LOT ' + tkEsc(a.lot) : '') + '<br><span class="tk-sub">zabaleno ' + tkNf(tkPacked(a)) + ' / ' + tkNf(a.picked_qty) + ' ks</span></span><span>' + (u <= 0 ? '✅' : tkNf(u)) + '</span></div>'; }).join('');
   if (task.pkgs.length) h += '<div class="tk-sec">Obaly (' + task.pkgs.length + ')</div>' + task.pkgs.map(function(p){ return '<div class="tk-row"><span><b class="tk-mono">' + tkEsc(p.code) + '</b><br><span class="tk-sub">' + tkEsc(p.kind === 'carton' ? 'karton' : p.kind === 'pallet' ? 'paleta' : p.kind) + (p.weight_kg ? ' · ' + tkNf(p.weight_kg) + ' kg' : '') + (p.length_cm ? ' · ' + tkNf(p.length_cm) + '×' + tkNf(p.width_cm) + '×' + tkNf(p.height_cm) + ' cm' : '') + '</span></span><span class="tk-sub">' + (p.package_lines || []).reduce(function(s, l){ return s + Number(l.qty); }, 0) + ' ks</span></div>'; }).join('');
@@ -3847,6 +3891,14 @@ async function tkPackCode(code) {
   if (!a) { var m = tkFindSku(code, task.skus); if (m) a = task.allocs.find(function(x){ return tkUp(x.sku) === tkUp(m.s.sku) && tkUnpacked(x) > 0; }); }
   if (!a) { beepError(); setStatus('❌ ' + code + ' – nic takového k zabalení není'); return; }
   var u = tkUnpacked(a);
+  if (task.doc.clients && task.doc.clients.pack_scan_required) {   // kontrola balení: sken = 1 ks (kód kartonu / inneru = celé balení)
+    var sr = task.skus.find(function(x){ return tkUp(x.sku) === tkUp(a.sku); }) || {}, mm = tkFindSku(code, task.skus), add = 1;
+    if (mm && mm.by === 'carton' && Number(sr.units_per_carton) > 1) add = Number(sr.units_per_carton);
+    if (mm && mm.by === 'inner' && Number(sr.units_per_inner) > 1) add = Number(sr.units_per_inner);
+    if (a.lpn && tkUp(a.lpn) === k) add = u;
+    if (add > u) { beepError(); setStatus('❌ ' + a.sku + ' – do obalu už zbývá jen ' + tkNf(u) + ' ks'); return; }
+    task.box[a.id] = (task.box[a.id] || 0) + add; beepOk(); setStatus('✅ ' + a.sku + ' +' + add + ' · v obalu ' + task.box[a.id] + ' · zbývá ' + tkNf(u - add)); tkRenderPack(); return;
+  }
   var v = await tkLineSheet({ title: '📦 ' + tkEsc(a.sku), sub: 'K zabalení zbývá ' + tkNf(u) + ' ks', fields: [{ k: 'qty', label: 'Kusů do obalu', num: true, v: u, req: true, focus: true }],
     validate: function(x){ var n = Number(x.qty); return n > 0 && n <= u ? '' : 'Množství 1 až ' + u; } });
   if (!v) return;
@@ -3857,6 +3909,13 @@ async function tkPackClose(all) {
     { k: 'kind', label: 'Typ', opts: [['pallet', 'Paleta'], ['carton', 'Karton'], ['other', 'Jiné']], v: all ? 'pallet' : 'carton' },
     { k: 'w', label: 'Váha (kg)', num: true, focus: true }, { k: 'l', label: 'Délka (cm)', num: true }, { k: 'wi', label: 'Šířka (cm)', num: true }, { k: 'h', label: 'Výška (cm)', num: true }] });
   if (!v) return;
+  // kontrola váhy: očekávaná váha z „váha 1 ks“ v SKU Setupu (jen když ji mají všechny položky v obalu)
+  var exp = 0, known = true, src = all ? task.allocs.map(function(a){ return [a, tkUnpacked(a)]; }) : Object.keys(task.box).map(function(k){ return [task.allocs.find(function(x){ return String(x.id) === k; }), task.box[k]]; });
+  src.forEach(function(p){ if (!p[0] || !(p[1] > 0)) return; var sr = task.skus.find(function(x){ return tkUp(x.sku) === tkUp(p[0].sku); }) || {}; if (Number(sr.unit_weight_kg) > 0) exp += Number(sr.unit_weight_kg) * p[1]; else known = false; });
+  if (known && exp > 0 && Number(v.w) > 0) {
+    var diff = Math.abs(Number(v.w) - exp), tol = Math.max(0.5, exp * 0.1);
+    if (diff > tol && !confirm('⚖️ Váha nesedí!\nZváženo ' + tkNf(v.w) + ' kg, očekáváno ' + tkNf(Math.round(exp * 100) / 100) + ' kg (±' + tkNf(Math.round(tol * 100) / 100) + ').\nZkontroluj obsah obalu.\n\nPřesto uzavřít?')) { beepError(); setStatus('⚖️ Váha nesedí – obal neuzavřen'); return; }
+  }
   var lines = all ? null : Object.keys(task.box).map(function(k){ return { alloc_id: Number(k), qty: task.box[k] }; });
   var n = function(x){ return x === '' || x == null ? null : Number(x); };
   var r = await tkRpc('wms_pack', { p_id: task.id, p_kind: v.kind, p_weight: n(v.w), p_l: n(v.l), p_w: n(v.wi), p_h: n(v.h), p_lines: lines }, 'balení ' + task.doc.delivery_number);
@@ -3989,7 +4048,7 @@ function tkRenderCount() {
   var t = task.t, n = task.lines.reduce(function(s, l){ return s + l.qty; }, 0);
   var h = '<div class="tk-head">📋 ' + tkEsc(t.location_code) + '<button class="tk-x" onclick="tkOpenCounts()">↩</button></div>';
   h += '<div class="tk-big' + (task.step === 'items' ? ' on' : '') + '">' + (task.step === 'loc' ? '<div style="font-size:20px">📍 Naskenuj lokaci <b class="tk-mono">' + tkEsc(t.location_code) + '</b></div>'
-    : '<div class="tk-sub">NAPOČÍTÁNO (NASLEPO)</div><div style="font-size:28px;font-weight:700">' + tkNf(n) + ' ks</div><div class="tk-sub">Skenuj každou paletu (LPN) nebo zboží (EAN) a zadej kusy</div>') + '</div>';
+    : (task.recount ? '<div style="color:#c0392b;font-weight:700">🔁 2. POČÍTÁNÍ – rozdíl proti stavu, napočítej znovu</div>' : '') + '<div class="tk-sub">NAPOČÍTÁNO (NASLEPO)</div><div style="font-size:28px;font-weight:700">' + tkNf(n) + ' ks</div><div class="tk-sub">Skenuj každou paletu (LPN) nebo zboží (EAN) a zadej kusy</div>') + '</div>';
   if (task.step === 'items') {
     h += '<button class="tk-btn" onclick="tkCountSubmit()">✅ Dokončit lokaci</button><button class="tk-btn sec" onclick="tkCountEmpty()">⬜ Lokace je prázdná</button>';
     h += task.lines.slice().reverse().map(function(l){ return '<div class="tk-row"><span><b>' + tkEsc(l.sku) + '</b> · ' + tkNf(l.qty) + ' ks' + (l.lot ? ' · LOT ' + tkEsc(l.lot) : '') + '<br><span class="tk-sub tk-mono">' + tkEsc(l.lpn || 'bez LPN') + '</span></span><span onclick="tkCountDel(' + task.lines.indexOf(l) + ')" style="color:#c0392b;font-size:20px;cursor:pointer">✕</span></div>'; }).join('');
@@ -4015,6 +4074,15 @@ async function tkCountCode(code) {
 async function tkCountEmpty() { if (task.lines.length && !confirm('Smazat napočítané řádky a nahlásit prázdnou lokaci?')) return; task.lines = []; return tkCountSubmit(true); }
 async function tkCountSubmit(empty) {
   if (!empty && !task.lines.length && !confirm('Nic není napočítané – nahlásit lokaci jako prázdnou?')) return;
+  if (!task.recount) {   // rozdil -> jednou prepocitat naslepo, teprve pak odeslat
+    var c = await tkFetch(supa.rpc('wms_cc_check', { p_task: task.t.id, p_lines: task.lines }));
+    if (c.data && c.data.diff_lines) {
+      task.recount = true; task.first = task.lines; task.lines = []; task.step = 'items';
+      beepWarn(); tkRenderCount();
+      setStatus('🔁 ' + task.t.location_code + ': napočítané se neshoduje – přepočítej lokaci znovu');
+      return;
+    }
+  }
   var r = await tkRpc('wms_cc_submit', { p_task: task.t.id, p_lines: task.lines, p_uid: obUid() }, 'inventura ' + task.t.location_code);
   if (r.s === 'fail') { beepError(); setStatus('❌ ' + tkErr(r.msg)); return; }
   beepOk();
