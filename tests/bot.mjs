@@ -110,7 +110,7 @@ function watch(page, bag) {
   const s = await sctx.newPage(); const serr = []; watch(s, serr);
   const status = () => s.evaluate(() => (typeof LAST_STATUS !== 'undefined' && LAST_STATUS) || document.getElementById('status-bar').textContent);
   const type = async code => { await s.fill('#manual-code', code); await s.press('#manual-code', 'Enter'); await sleep(900); };
-  const sheetOk = async (qty) => { await s.waitForSelector('#tk-sheet', { state: 'visible', timeout: 8000 }); if (qty != null) await s.fill('#tkf-qty', String(qty)); await s.click('#tk-ok'); await sleep(1200); };
+  const sheetOk = async (qty) => { try { await s.waitForSelector('#tk-sheet', { state: 'visible', timeout: 8000 }); } catch (e) { throw new Error('formulář množství se neotevřel · stav: ' + await status() + ' · panel: ' + (await s.textContent('#task-panel')).replace(/\s+/g, ' ').slice(0, 160)); } if (qty != null) await s.fill('#tkf-qty', String(qty)); await s.click('#tk-ok'); await sleep(1200); };
   const db = (fn, arg) => s.evaluate(fn, arg);
 
   await step('Scanner: přihlášení', async () => {
