@@ -65,7 +65,161 @@ Klient (nebo jeho systém) pošle objednávku výdeje či avízo příjmu jako H
 <div><b>Objednávka (výdej)</b></div><div class="code">{"type":"order","client":"Klient A","dc":"DC29","number":"PO-123","planned_at":"2026-11-05T10:00:00Z","priority":"high","note":"…","lines":[{"sku":"A-100","qty":5,"lot":null}]}</div>
 <div><b>Avízo (příjem)</b></div><div class="code">{"type":"asn","client":"Klient A","dc":"DC29","number":"ASN-55","supplier":"Dodavatel","expected_at":"2026-11-04T08:00:00Z","lines":[{"sku":"A-100","qty":480}]}</div>
 <div><b>Stav dokladu</b></div><div class="code">{"type":"status","number":"PO-123"}</div>
-<div style="color:var(--muted);font-size:12px">Odpověď: {"id":…, "number":…, "status":…}. Chyby: BAD_TOKEN, UNKNOWN_CLIENT, UNKNOWN_DC, UNKNOWN_SKU, DUPLICATE, NO_LINES. Token drž v tajnosti – kdo ho má, může zakládat doklady.</div></div></div>
+<div style="color:var(--muted);font-size:12px">Odpověď: {"id":…, "number":…, "status":…}. Chyby: BAD_TOKEN, UNKNOWN_CLIENT, UNKNOWN_DC, UNKNOWN_SKU, DUPLICATE, NO_LINES. Token drž v tajnosti – kdo ho má, může zakládat doklady. Pro systémy zákazníků (Business Central, SAP, Odoo…) používej raději vlastní token každého partnera v <a href="wms_integrations.html">🔗 Integrace</a> – vidí jen svého klienta a dostávají i potvrzení a stav zásob.</div></div></div>
+<div class="card" id="pr-card"><div class="card-header"><h3>🖨️ Tiskárny (štítky ze scanneru)</h3><button class="btn btn-primary btn-sm" onclick="prEdit(null)">+ Tiskárna</button></div>
+<div id="pr-form" style="display:none;padding:12px 16px;background:#f7f9fb;border-bottom:1px solid var(--border)"><div class="sx" style="padding:0">
+<div><label>Název</label><input id="pf-name" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%" placeholder="např. PM45 Expedice"></div>
+<div><label>IP adresa</label><input id="pf-ip" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%" placeholder="192.168.1.50"></div>
+<div><label>Port</label><input id="pf-port" type="number" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%" value="9100"></div>
+<div><label>DC</label><select id="pf-dc" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%"></select></div>
+<div><label>Štítek šířka × výška (mm)</label><div style="display:flex;gap:6px"><input id="pf-w" type="number" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%" value="100"><input id="pf-h" type="number" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%" value="150"></div></div>
+<div><label>Rozlišení (dpi)</label><select id="pf-dpi" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%"><option>203</option><option>300</option><option>406</option></select></div>
+<div><label>Aktivní</label><select id="pf-act" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;width:100%"><option value="1">Ano</option><option value="0">Ne</option></select></div>
+</div><div style="margin-top:10px;display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="prSave()">💾 Uložit</button><button class="btn btn-secondary btn-sm" onclick="document.getElementById('pr-form').style.display='none'">Zrušit</button></div></div>
+<div style="overflow-x:auto"><table><thead><tr><th>Název</th><th>IP : port</th><th>DC</th><th>Štítek</th><th>Stav</th><th></th></tr></thead><tbody id="pr-body"></tbody></table></div>
+<div style="padding:12px 16px;font-size:13px;line-height:1.6">
+<div id="pr-agents" style="margin-bottom:10px"></div>
+<b>Tiskový agent na PC ve skladu</b> – malý program, který bere úlohy ze scanneru a posílá je na IP tiskárny; od verze 1.1 také předává soubory partnerům z 🔗 Integrace (složka na PC). PC musí být ve stejné síti jako tiskárny a zapnuté.
+<ol style="margin:6px 0 8px 18px"><li>Stáhni oba soubory do jedné složky na PC (např. <code>C:&#92;PRG</code>): <button class="btn btn-primary btn-sm" onclick="prDownload('ps1')">⬇️ prg_print_agent.ps1</button> <button class="btn btn-secondary btn-sm" onclick="prDownload('cmd')">⬇️ prg_print_agent.cmd</button></li>
+<li>Spusť dvojklikem <b>prg_print_agent.cmd</b> – otevře se černé okno „PRG tiskový agent“. Nech ho otevřené (stačí minimalizovat).</li>
+<li>Automatický start po zapnutí PC: Win+R → <code>shell:startup</code> → do složky vlož <b>zástupce</b> na prg_print_agent.cmd.</li>
+<li>Na tiskárně PM45 zapni jazyk <b>ZSim (ZPL)</b>: webové rozhraní tiskárny (IP v prohlížeči) → Settings → Printer language / Command language → ZSim2, případně na displeji tiskárny. Pak tady klikni na <b>🧪 Test</b>.</li></ol>
+<div style="color:var(--muted);font-size:12px">Soubor agenta obsahuje tiskový token (ne heslo) – umí jen brát tiskové úlohy. Po „🔄 Nový token“ je potřeba agenta stáhnout znovu. Token: <code id="pr-token"></code> <button class="btn btn-secondary btn-sm" onclick="prNewToken()">🔄 Nový token</button></div>
+<details style="margin-top:10px"><summary style="cursor:pointer;font-weight:700">Poslední tiskové úlohy</summary><div style="overflow-x:auto"><table><thead><tr><th>Kdy</th><th>Tiskárna</th><th>Co</th><th>Kdo</th><th>Stav</th></tr></thead><tbody id="pj-body"></tbody></table></div></details>
+</div></div>
+<script type="text/plain" id="pr-tpl-ps1"># PRG tiskovy agent - posila stitky ze scanneru (PRG Scanner) na sitove tiskarny (ZPL, port 9100)
+# a predava soubory partnerum (integrace): odchozi zpravy do slozky, prichozi objednavky/aviza ze slozky.
+# Spusteni: pravym tlacitkem "Spustit v PowerShellu", nebo dvojklikem na prg_print_agent.cmd
+# Bezi, dokud je okno otevrene. Automaticky start: zastupce na prg_print_agent.cmd dej do slozky shell:startup.
+param([int]$Interval = 3)
+
+$Url     = '__URL__'
+$Key     = '__KEY__'
+$Token   = '__TOKEN__'
+$Agent   = if ($env:COMPUTERNAME) { $env:COMPUTERNAME } else { [Environment]::MachineName }
+$Version = '1.1'
+
+$ErrorActionPreference = 'Continue'
+try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12 } catch {}
+$Headers = @{ 'apikey' = $Key; 'Authorization' = "Bearer $Key" }
+
+function Invoke-PrgRpc([string]$fn, [hashtable]$body) {
+  $json = $body | ConvertTo-Json -Compress
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+  return Invoke-RestMethod -Method Post -Uri ($Url + '/rest/v1/rpc/' + $fn) -Headers $Headers -ContentType 'application/json; charset=utf-8' -Body $bytes -TimeoutSec 20
+}
+
+function Send-Raw([string]$ip, [int]$port, [string]$data, [int]$copies) {
+  $bytes = [System.Text.Encoding]::UTF8.GetBytes($data)
+  if ($copies -lt 1) { $copies = 1 }
+  for ($i = 0; $i -lt $copies; $i++) {
+    $client = New-Object System.Net.Sockets.TcpClient
+    try {
+      $iar = $client.BeginConnect($ip, $port, $null, $null)
+      if (-not $iar.AsyncWaitHandle.WaitOne(5000)) { throw ("Tiskarna {0}:{1} neodpovida" -f $ip, $port) }
+      $client.EndConnect($iar)
+      $stream = $client.GetStream()
+      $stream.Write($bytes, 0, $bytes.Length)
+      $stream.Flush()
+      Start-Sleep -Milliseconds 300
+    } finally { $client.Close() }
+  }
+}
+
+function Write-Utf8([string]$path, [string]$text, [bool]$bom) {
+  $dir = Split-Path -Parent $path
+  if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+  $tmp = $path + '.tmp'
+  [System.IO.File]::WriteAllText($tmp, $text, (New-Object System.Text.UTF8Encoding($bom)))
+  Move-Item -LiteralPath $tmp -Destination $path -Force
+}
+
+function Invoke-Files {
+  $files = Invoke-PrgRpc 'wms_int_claim_files' @{ p_token = $Token; p_agent = $Agent }
+  foreach ($f in @($files)) {
+    if ($null -eq $f -or -not $f.id) { continue }
+    try {
+      if (-not $f.path) { throw 'partner nema nastavenou slozku' }
+      Write-Utf8 (Join-Path ([string]$f.path) ([string]$f.filename)) ([string]$f.content) ([string]$f.filename).EndsWith('.csv')
+      Invoke-PrgRpc 'wms_int_file_done' @{ p_token = $Token; p_id = [long]$f.id; p_ok = $true } | Out-Null
+      Write-Host ("{0:HH:mm:ss} soubor {1}" -f (Get-Date), $f.filename)
+    } catch {
+      $ex = $_.Exception; while ($ex.InnerException) { $ex = $ex.InnerException }
+      try { Invoke-PrgRpc 'wms_int_file_done' @{ p_token = $Token; p_id = [long]$f.id; p_ok = $false; p_error = $ex.Message } | Out-Null } catch {}
+      Write-Host ("{0:HH:mm:ss} CHYBA souboru {1}: {2}" -f (Get-Date), $f.filename, $ex.Message) -ForegroundColor Red
+    }
+  }
+}
+
+function Invoke-Inbound {
+  $dirs = Invoke-PrgRpc 'wms_int_inbound_folders' @{ p_token = $Token }
+  foreach ($d in @($dirs)) {
+    if ($null -eq $d -or -not $d.in_path) { continue }
+    $in = [string]$d.in_path
+    if (-not (Test-Path -LiteralPath $in)) { continue }
+    foreach ($file in @(Get-ChildItem -LiteralPath $in -File | Where-Object { $_.Extension -in '.json', '.csv' })) {
+      $target = 'done'; $note = ''
+      try {
+        $text = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
+        $res = Invoke-PrgRpc 'wms_int_inbound_file' @{ p_token = $Token; p_partner = [long]$d.partner_id; p_filename = $file.Name; p_content = $text }
+        $bad = @($res.results | Where-Object { -not $_.ok })
+        if ($bad.Count -gt 0) { $target = 'error'; $note = ($bad | ForEach-Object { $_.error }) -join [Environment]::NewLine }
+      } catch {
+        $target = 'error'; $note = $_.Exception.Message
+        if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $note = $_.ErrorDetails.Message }
+      }
+      $dest = Join-Path $in $target
+      if (-not (Test-Path -LiteralPath $dest)) { New-Item -ItemType Directory -Force -Path $dest | Out-Null }
+      $stamp = (Get-Date).ToString('yyyyMMdd_HHmmss')
+      Move-Item -LiteralPath $file.FullName -Destination (Join-Path $dest ($stamp + '_' + $file.Name)) -Force
+      if ($note) { Write-Utf8 (Join-Path $dest ($stamp + '_' + $file.Name + '.chyba.txt')) $note $false }
+      if ($target -eq 'done') { Write-Host ("{0:HH:mm:ss} prijato {1}" -f (Get-Date), $file.Name) }
+      else { Write-Host ("{0:HH:mm:ss} CHYBA prichoziho {1}: {2}" -f (Get-Date), $file.Name, $note) -ForegroundColor Red }
+    }
+  }
+}
+
+Write-Host ("PRG tiskovy agent {0} na {1} - okno nech otevrene (Ctrl+C ukonci)" -f $Version, $Agent) -ForegroundColor Green
+$lastErr = ''
+$lastInbound = [datetime]::MinValue
+while ($true) {
+  try {
+    $jobs = Invoke-PrgRpc 'wms_print_claim' @{ p_token = $Token; p_agent = $Agent; p_host = $Agent; p_version = $Version; p_max = 10 }
+    if ($lastErr) { Write-Host ("{0:HH:mm:ss} spojeni obnoveno" -f (Get-Date)) -ForegroundColor Green; $lastErr = '' }
+    foreach ($j in @($jobs)) {
+      if ($null -eq $j -or -not $j.id) { continue }
+      try {
+        Send-Raw ([string]$j.ip) ([int]$j.port) ([string]$j.payload) ([int]$j.copies)
+        Invoke-PrgRpc 'wms_print_done' @{ p_token = $Token; p_id = [long]$j.id; p_ok = $true } | Out-Null
+        Write-Host ("{0:HH:mm:ss} vytisteno #{1} -> {2}" -f (Get-Date), $j.id, $j.printer)
+      } catch {
+        $ex = $_.Exception; while ($ex.InnerException) { $ex = $ex.InnerException }
+        $msg = ("Tiskarna {0}:{1}: {2}" -f $j.ip, $j.port, $ex.Message)
+        try { Invoke-PrgRpc 'wms_print_done' @{ p_token = $Token; p_id = [long]$j.id; p_ok = $false; p_error = $msg } | Out-Null } catch {}
+        Write-Host ("{0:HH:mm:ss} CHYBA #{1}: {2}" -f (Get-Date), $j.id, $msg) -ForegroundColor Red
+      }
+    }
+    try {
+      Invoke-Files
+      if (((Get-Date) - $lastInbound).TotalSeconds -ge 30) { $lastInbound = Get-Date; Invoke-Inbound }
+    } catch {
+      $im = $_.Exception.Message; if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $im = $_.ErrorDetails.Message }
+      if ($im -notmatch 'PGRST202|wms_int_') { throw }   # integrace jeste neni nastavena (SQL davka F) - tisk bezi dal
+    }
+  } catch {
+    $m = $_.Exception.Message
+    if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $m = $_.ErrorDetails.Message }
+    if ($m -match 'BAD_TOKEN') { $m = 'neplatny token - stahni agenta znovu v Nastaveni systemu > Tiskarny' }
+    if ($m -ne $lastErr) { Write-Host ("{0:HH:mm:ss} spojeni se serverem: {1}" -f (Get-Date), $m) -ForegroundColor Yellow; $lastErr = $m }
+  }
+  Start-Sleep -Seconds $Interval
+}
+</script><script type="text/plain" id="pr-tpl-cmd">@echo off
+title PRG tiskovy agent
+cd /d "%~dp0"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0prg_print_agent.ps1"
+pause
+</script>
 <div class="card"><div class="card-header"><h3>✉️ E-mailová upozornění</h3><button class="btn btn-primary btn-sm" onclick="addRule()">+ Pravidlo</button></div>
 <div style="overflow-x:auto"><table><thead><tr><th>Událost</th><th>Klient</th><th>Komu</th><th>Aktivní</th><th></th></tr></thead><tbody id="nr-body"></tbody></table></div>
 <div style="padding:12px 16px;font-size:13px;line-height:1.55"><b>Fronta zpráv</b> (posledních 30)<div style="overflow-x:auto"><table><thead><tr><th>Kdy</th><th>Událost</th><th>Komu</th><th>Předmět</th><th>Stav</th></tr></thead><tbody id="nq-body"></tbody></table></div>
@@ -104,7 +258,7 @@ Deno.serve(async () =&gt; {
 </div></details></div></div>
 <div class="card"><div class="card-header"><h3>🏢 Klientský portál a ochrana dat</h3></div><div style="padding:14px 16px;font-size:13px;line-height:1.6">
 <ol style="margin-left:18px"><li>V <a href="wms_users.html">Uživatelích</a> nastav účtu roli <b>Klient</b> a vyber klienta. Po přihlášení uvidí jen <a href="wms_portal.html">klientský portál</a> (zásoby, příjmy, výdeje, teploty – jen čtení).</li>
-<li>Aby klient nemohl data jiných klientů vidět ani přes přímé dotazy, spusť v Supabase <b>rls_setup-01.sql</b> (zapne ochranu dat na řádcích). Zaměstnanci fungují dál beze změny. Vrácení: <b>rls_off-01.sql</b>.</li>
+<li>Aby klient nemohl data jiných klientů vidět ani přes přímé dotazy, spusť v Supabase <b>rls_setup-02.sql</b> (zapne ochranu dat na řádcích). Zaměstnanci fungují dál beze změny. Vrácení: <b>rls_off-01.sql</b>.</li>
 <li>Admin si může portál prohlédnout za libovolného klienta (výběr nahoře v portálu).</li></ol></div></div>
 </div>
 </div>
@@ -127,7 +281,48 @@ function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
 supa.auth.getSession().then(function(res){if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}else{window.location.href='wms_dashboard.html';}});
 
 var SET={},CL=[];
-var EV={receipt_done:'Příjem dokončen',delivery_shipped:'Výdej odeslán',temp_alarm:'Alarm teploty',problem:'Problém u dokladu'};
+var PRN=[],DCS=[],PR_EDIT=null;
+async function printers(){
+  var r=await supa.from('printers').select('*').order('name');
+  if(r.error){document.getElementById('pr-body').innerHTML='<tr class="empty-row"><td colspan="6">'+(/printers/.test(r.error.message)?'Spusť v Supabase printq_setup-01.sql':esc(r.error.message))+'</td></tr>';return;}
+  PRN=r.data||[];if(!DCS.length)DCS=(await supa.from('warehouses').select('id,code,name').order('code')).data||[];
+  var lj={};((await supa.from('print_jobs').select('printer_id,status,error,created_at').order('id',{ascending:false}).limit(200)).data||[]).forEach(function(j){if(!lj[j.printer_id])lj[j.printer_id]=j;});
+  document.getElementById('pr-body').innerHTML=PRN.map(function(p){var d=DCS.find(function(x){return String(x.id)===String(p.dc_id);}),j=lj[p.id];
+    var st=!p.is_active?'<span class="badge badge-gray">vypnutá</span>':!j?'<span class="badge badge-gray">zatím nic</span>':j.status==='done'?'<span class="badge badge-green">OK</span>':j.status==='error'?'<span class="badge badge-red" title="'+esc(j.error)+'">chyba</span>':'<span class="badge badge-gray">'+esc(j.status==='queued'?'čeká':'tiskne')+'</span>';
+    return '<tr><td><b>'+esc(p.name)+'</b></td><td>'+esc(p.ip)+' : '+p.port+'</td><td>'+esc(d?d.code:(p.dc_id==null?'všechna':p.dc_id))+'</td><td>'+Number(p.label_w_mm)+'×'+Number(p.label_h_mm)+' mm · '+p.dpi+' dpi</td><td>'+st+'</td><td style="white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="prTest('+p.id+')">🧪 Test</button> <button class="btn btn-secondary btn-sm" onclick="prEdit('+p.id+')">✏️</button> <button class="btn btn-secondary btn-sm" onclick="prDel('+p.id+')">🗑</button></td></tr>';}).join('')||'<tr class="empty-row"><td colspan="6">Zatím žádná tiskárna – přidej ji tlačítkem + Tiskárna</td></tr>';
+  var a=(await supa.from('print_agents').select('*').order('last_seen',{ascending:false})).data||[];
+  document.getElementById('pr-agents').innerHTML=a.length?a.map(function(x){var age=(Date.now()-new Date(x.last_seen).getTime())/1000;return (age<60?'🟢 Agent <b>'+esc(x.agent)+'</b> běží':'🔴 Agent <b>'+esc(x.agent)+'</b> neběží – naposledy '+new Date(x.last_seen).toLocaleString('cs-CZ'))+(x.version?' <span style="color:var(--muted)">(verze '+esc(x.version)+')</span>':'');}).join('<br>'):'⚪ Agent zatím nikdy neběžel.';
+  document.getElementById('pr-token').textContent=SET.print_token||'– (spusť printq_setup-01.sql)';
+  var pj=(await supa.from('print_jobs').select('id,printer_id,ref_label,created_by,status,error,created_at').order('id',{ascending:false}).limit(20)).data||[];
+  document.getElementById('pj-body').innerHTML=pj.map(function(j){var p=PRN.find(function(x){return x.id===j.printer_id;});return '<tr><td style="font-size:12px">'+new Date(j.created_at).toLocaleString('cs-CZ')+'</td><td>'+esc(p?p.name:'–')+'</td><td>'+esc(j.ref_label||'')+'</td><td>'+esc(j.created_by||'')+'</td><td>'+(j.status==='done'?'<span class="badge badge-green">vytištěno</span>':j.status==='error'?'<span class="badge badge-red">chyba</span> <span style="font-size:12px">'+esc(j.error||'')+'</span>':'<span class="badge badge-gray">'+(j.status==='queued'?'čeká':'tiskne')+'</span>')+'</td></tr>';}).join('')||'<tr class="empty-row"><td colspan="5">Zatím nic</td></tr>';
+}
+function prEdit(id){PR_EDIT=id;var p=PRN.find(function(x){return x.id===id;})||{name:'',ip:'',port:9100,dc_id:DCS[0]?DCS[0].id:null,label_w_mm:100,label_h_mm:150,dpi:203,is_active:true};
+  document.getElementById('pf-dc').innerHTML='<option value="">všechna DC</option>'+DCS.map(function(d){return '<option value="'+d.id+'">'+esc(d.code)+' – '+esc(d.name||'')+'</option>';}).join('');
+  document.getElementById('pf-name').value=p.name;document.getElementById('pf-ip').value=p.ip;document.getElementById('pf-port').value=p.port;document.getElementById('pf-dc').value=p.dc_id==null?'':String(p.dc_id);
+  document.getElementById('pf-w').value=Number(p.label_w_mm);document.getElementById('pf-h').value=Number(p.label_h_mm);document.getElementById('pf-dpi').value=String(p.dpi);document.getElementById('pf-act').value=p.is_active?'1':'0';
+  document.getElementById('pr-form').style.display='block';document.getElementById('pf-name').focus();}
+async function prSave(){var row={name:document.getElementById('pf-name').value.trim(),ip:document.getElementById('pf-ip').value.trim(),port:Number(document.getElementById('pf-port').value)||9100,
+  dc_id:document.getElementById('pf-dc').value===''?null:Number(document.getElementById('pf-dc').value),label_w_mm:Number(document.getElementById('pf-w').value)||100,label_h_mm:Number(document.getElementById('pf-h').value)||150,
+  dpi:Number(document.getElementById('pf-dpi').value)||203,is_active:document.getElementById('pf-act').value==='1'};
+  if(!row.name||!/^[A-Za-z0-9.\-]+$/.test(row.ip)){toast('Vyplň název a IP adresu tiskárny');return;}
+  var r=PR_EDIT?await supa.from('printers').update(row).eq('id',PR_EDIT):await supa.from('printers').insert(row);
+  if(r.error){toast('❌ '+r.error.message);return;}document.getElementById('pr-form').style.display='none';toast('Tiskárna uložena');printers();}
+async function prDel(id){if(!confirm('Smazat tiskárnu?'))return;var r=await supa.from('printers').delete().eq('id',id);toast(r.error?'❌ '+r.error.message:'Smazáno');printers();}
+function prTestZpl(p){var dpi=p.dpi||203,W=Math.round(p.label_w_mm/25.4*dpi),H=Math.round(p.label_h_mm/25.4*dpi);
+  return '^XA^CI0^PW'+W+'^LL'+H+'^FO0,40^FB'+W+',1,0,C,0^A0N,70,70^FDPRG TEST^FS^FO0,140^FB'+W+',1,0,C,0^A0N,34,34^FD'+String(p.name).normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^\x20-\x7E]/g,'').replace(/[\^~]/g,' ')+'  '+p.ip+'^FS^BY3,3^FO'+Math.max(20,Math.round(W/2-200))+',220^BCN,160,Y,N,N^FDPRG-TEST-123^FS^FO40,460^GB'+(W-80)+','+(H-560)+',4^FS^FO0,'+(H-60)+'^FB'+W+',1,0,C,0^A0N,28,28^FD'+new Date().toLocaleString('cs-CZ')+'^FS^XZ';}
+async function prTest(id){var p=PRN.find(function(x){return x.id===id;});if(!p)return;
+  var r=await supa.from('print_jobs').insert({printer_id:id,payload:prTestZpl(p),ref_label:'Testovací štítek',created_by:(currentProfile&&(currentProfile.full_name||currentProfile.username))||null});
+  if(r.error){toast('❌ '+r.error.message);return;}toast('🧪 Test odeslán – vytiskne se, jakmile ho převezme agent');setTimeout(printers,4000);}
+function prDownload(kind){if(!SET.print_token){toast('Nejdřív spusť v Supabase printq_setup-01.sql');return;}
+  var t=document.getElementById('pr-tpl-'+kind).textContent;
+  if(kind==='ps1')t=t.split('__URL__').join(SUPA_URL).split('__KEY__').join(SUPA_KEY).split('__TOKEN__').join(SET.print_token);
+  t=t.replace(/\r?\n/g,'\r\n');
+  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([t],{type:'application/octet-stream'}));a.download='prg_print_agent.'+kind;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},500);}
+async function prNewToken(){if(!confirm('Vytvořit nový tiskový token? Běžící agent přestane fungovat – stáhni ho pak znovu.'))return;
+  var t=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(function(b){return ('0'+b.toString(16)).slice(-2);}).join('');
+  var r=await supa.from('wms_settings').upsert({key:'print_token',value:t,updated_at:new Date().toISOString()},{onConflict:'key'});if(r.error){toast('❌ '+r.error.message);return;}SET.print_token=t;printers();toast('Nový token uložen – stáhni agenta znovu');}
+
+var EV={receipt_done:'Příjem dokončen',delivery_shipped:'Výdej odeslán',temp_alarm:'Alarm teploty',problem:'Problém u dokladu',inventory_done:'Inventura dokončena (rozdíly)'};
 function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 async function afterLogin(){
   if(!(currentProfile&&currentProfile.role==='admin')){document.querySelector('.content').innerHTML='<div class="card" style="padding:20px">Nastavení je jen pro administrátory.</div>';return;}
@@ -136,7 +331,7 @@ async function afterLogin(){
   CL=(await supa.from('clients').select('id,name').order('name')).data||[];
   document.getElementById('api-url').textContent=SUPA_URL+'/rest/v1/rpc/wms_api';
   document.getElementById('api-h').textContent='apikey: '+SUPA_KEY+'\nContent-Type: application/json\nX-PRG-Token: '+(SET.api_token||'');
-  rules();queue();
+  rules();queue();printers();
 }
 async function saveSet(keys){var rows=keys.map(function(k){return {key:k,value:document.getElementById('s-'+k).value.trim(),updated_at:new Date().toISOString()};});
   if(keys.indexOf('gs1_prefix')>=0){var g=rows.find(function(x){return x.key==='gs1_prefix';}).value.replace(/\D/g,'');if(g&&(g.length<6||g.length>12)){toast('GS1 prefix má 6–12 číslic');return;}}
@@ -146,7 +341,7 @@ async function newToken(){if(!confirm('Vytvořit nový API token? Starý přesta
   var r=await supa.from('wms_settings').upsert({key:'api_token',value:t,updated_at:new Date().toISOString()},{onConflict:'key'});if(r.error){toast('❌ '+r.error.message);return;}SET.api_token=t;document.getElementById('api-h').textContent='apikey: '+SUPA_KEY+'\nContent-Type: application/json\nX-PRG-Token: '+t;toast('Nový token uložen');}
 async function rules(){var r=(await supa.from('notify_rules').select('*').order('id')).data||[];
   document.getElementById('nr-body').innerHTML=r.map(function(x){var c=CL.find(function(k){return k.id===x.client_id;});return '<tr><td>'+esc(EV[x.event]||x.event)+'</td><td>'+esc(c?c.name:'všichni')+'</td><td>'+esc(x.emails)+'</td><td>'+(x.is_active?'✅':'–')+'</td><td><button class="btn btn-secondary btn-sm" onclick="toggleRule('+x.id+','+(!x.is_active)+')">'+(x.is_active?'Vypnout':'Zapnout')+'</button> <button class="btn btn-secondary btn-sm" onclick="delRule('+x.id+')">🗑</button></td></tr>';}).join('')||'<tr class="empty-row"><td colspan="5">Žádná pravidla</td></tr>';}
-async function addRule(){var ev=prompt('Událost – napiš číslo:\n1 = Příjem dokončen\n2 = Výdej odeslán\n3 = Alarm teploty\n4 = Problém u dokladu','2');if(!ev)return;var k=['receipt_done','delivery_shipped','temp_alarm','problem'][Number(ev)-1];if(!k){toast('Neplatná volba');return;}
+async function addRule(){var ev=prompt('Událost – napiš číslo:\n1 = Příjem dokončen\n2 = Výdej odeslán\n3 = Alarm teploty\n4 = Problém u dokladu\n5 = Inventura dokončena (souhrn rozdílů)','2');if(!ev)return;var k=['receipt_done','delivery_shipped','temp_alarm','problem','inventory_done'][Number(ev)-1];if(!k){toast('Neplatná volba');return;}
   var c=prompt('Pro kterého klienta? Číslo, nebo prázdné = všichni:\n'+CL.map(function(x,i){return (i+1)+' = '+x.name;}).join('\n'),'');if(c===null)return;var cid=c?((CL[Number(c)-1]||{}).id||null):null;
   var em=prompt('E-maily (oddělené čárkou):','');if(!em)return;
   var r=await supa.from('notify_rules').insert({event:k,client_id:cid,emails:em.trim()});toast(r.error?'❌ '+r.error.message:'Pravidlo přidáno');rules();}

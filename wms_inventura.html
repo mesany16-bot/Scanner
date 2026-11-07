@@ -147,13 +147,64 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
       </div>
 
       <div class="card">
-        <div class="card-header"><h3>✅ Dokončené a zrušené inventury</h3></div>
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h3>✅ Dokončené a zrušené inventury</h3>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px">
+            <button class="btn btn-secondary btn-sm" onclick="doneClear()" id="done-clear" style="display:none">✖ Zrušit filtry</button>
+            <label style="display:flex;gap:6px;align-items:center;color:var(--muted)">Zobrazit <select id="done-size" onchange="doneSize(this.value)" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit"><option>15</option><option>30</option><option>50</option><option>100</option><option value="0">Vše</option></select></label>
+          </div></div>
         <div style="overflow-x:auto;">
-        <table><thead><tr><th>Název</th><th>Kdo dokončil</th><th>Nalezeno</th><th>Chybí</th><th>Přebývá</th><th>Kdy</th><th style="text-align:right">Akce</th><th style="text-align:right">Stáhnout</th></tr></thead>
-        <tbody id="t-completed"><tr class="empty-row"><td colspan="8">Načítám…</td></tr></tbody></table>
+        <table id="done-table"><thead><tr><th>Status</th><th>Druh</th><th>Název</th><th>Kdo dokončil</th><th>Nalezeno</th><th>Chybí</th><th>Přebývá</th><th>Kdy</th><th style="text-align:right">Akce</th><th style="text-align:right">Stáhnout</th></tr>
+        <tr class="done-flt">
+          <th><select data-f="status"><option value="">Vše</option><option value="completed">Dokončená</option><option value="cancelled">Zrušená</option></select></th>
+          <th><select data-f="kind" id="done-f-kind"><option value="">Vše</option></select></th>
+          <th><input data-f="name" type="search" placeholder="Hledat…"></th>
+          <th><select data-f="who" id="done-f-who"><option value="">Vše</option></select></th>
+          <th><select data-f="found"><option value="">Vše</option><option value="1">&gt; 0</option><option value="0">0</option></select></th>
+          <th><select data-f="missing"><option value="">Vše</option><option value="1">Chybí</option><option value="0">Nechybí</option></select></th>
+          <th><select data-f="extra"><option value="">Vše</option><option value="1">Přebývá</option><option value="0">Nepřebývá</option></select></th>
+          <th><input data-f="from" type="date" title="Od data"></th>
+          <th></th><th></th>
+        </tr></thead>
+        <tbody id="t-completed"><tr class="empty-row"><td colspan="10">Načítám…</td></tr></tbody></table>
+        </div>
+        <div id="done-pager" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 16px;font-size:13px;color:var(--muted)"></div>
+        <style>.done-flt th{padding:6px 8px !important;background:var(--bg,#f6f8fa)}.done-flt select,.done-flt input{width:100%;min-width:70px;padding:5px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12.5px;font-family:inherit;background:#fff;box-sizing:border-box}.done-flt input[type=search]{min-width:120px}
+        .pg-btn{min-width:34px;padding:5px 9px;border:1.5px solid var(--border);border-radius:7px;background:#fff;font-size:13px;font-family:inherit;cursor:pointer}.pg-btn.on{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}.pg-btn[disabled]{opacity:.4;cursor:default}</style>
+      </div>
+
+      <div class="card">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <h3>📅 Stáří zásilek ve skladu <span style="font-weight:400;font-size:12px;color:var(--muted)">(podle nahraných exportů / importů)</span></h3>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+            <select id="ag-type" onchange="loadAging()"><option value="">Export i import</option><option value="export">📤 Export</option><option value="import">📥 Import</option></select>
+            <label style="font-size:13px;display:flex;align-items:center;gap:4px"><input type="checkbox" id="ag-in" checked onchange="loadAging()"> jen ve skladu</label>
+            <label style="font-size:13px">min. dní <input type="number" id="ag-min" value="0" min="0" style="width:64px" onchange="loadAging()"></label>
+            <button class="btn btn-secondary btn-sm" onclick="agingXlsx()">📊 XLSX</button>
+          </div>
+        </div>
+        <div id="ag-sum" style="font-size:13px;color:var(--muted);margin:4px 0 8px"></div>
+        <div style="overflow-x:auto;">
+        <table><thead><tr><th>HB</th><th>OH / File</th><th>Typ</th><th>Destinace · Příjemce</th><th>Ks</th><th>Lokace</th><th>Poprvé</th><th>Naposledy</th><th>Dní</th></tr></thead>
+        <tbody id="t-aging"><tr class="empty-row"><td colspan="9">Načítám…</td></tr></tbody></table>
         </div>
       </div>
 
+    </div>
+  </div>
+</div>
+<div class="modal-backdrop" id="modal-live" style="display:none">
+  <div class="modal-box" style="max-width:980px;width:96vw">
+    <div class="modal-header"><h3 id="live-title">📊 Živý přehled</h3><button class="modal-close" onclick="closeLive()">✕</button></div>
+    <div class="modal-body">
+      <div id="live-sum" style="font-size:13px;margin-bottom:10px"></div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:10px">
+        <span><span style="display:inline-block;width:12px;height:12px;background:#27ae60;border-radius:3px"></span> hotovo</span>
+        <span><span style="display:inline-block;width:12px;height:12px;background:#f39c12;border-radius:3px"></span> rozpracováno</span>
+        <span><span style="display:inline-block;width:12px;height:12px;background:#dfe4ea;border-radius:3px"></span> nezačato</span>
+        <span><span style="display:inline-block;width:12px;height:12px;background:#c0392b;border-radius:3px"></span> přebývá / mimo export</span>
+      </div>
+      <div id="live-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px"></div>
+      <div id="live-detail" style="margin-top:12px;font-size:13px"></div>
     </div>
   </div>
 </div>
@@ -282,20 +333,22 @@ var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m
 function esc(s){ return (s||'').replace(/'/g,"\\'"); }
 
 async function loadInvPage(quiet){
+  try{ loadAging(); }catch(e){}
+
   var ut=document.getElementById('t-uploaded');
   var at=document.getElementById('t-active');
   var ct=document.getElementById('t-completed');
   if(!quiet){
   ut.innerHTML='<tr class="empty-row"><td colspan="4">Načítám…</td></tr>';
   at.innerHTML='<tr class="empty-row"><td colspan="7">Načítám…</td></tr>';
-  ct.innerHTML='<tr class="empty-row"><td colspan="8">Načítám…</td></tr>';
+  ct.innerHTML='<tr class="empty-row"><td colspan="10">Načítám…</td></tr>';
   }
 
   var lq=supa.from('inventory_lists').select('*').order('created_at',{ascending:false});if(window.PRG_DC)lq=PRG_DC.apply(lq,'dc_id');var lr=await lq;
   if(lr.error){
     ut.innerHTML='<tr class="empty-row"><td colspan="4">Chyba: '+lr.error.message+'</td></tr>';
     at.innerHTML='<tr class="empty-row"><td colspan="7">Chyba: '+lr.error.message+'</td></tr>';
-    ct.innerHTML='<tr class="empty-row"><td colspan="8">Chyba: '+lr.error.message+'</td></tr>';
+    ct.innerHTML='<tr class="empty-row"><td colspan="10">Chyba: '+lr.error.message+'</td></tr>';
     return;
   }
   var all=lr.data||[];
@@ -306,7 +359,7 @@ async function loadInvPage(quiet){
     var sr=await supa.from('scans').select('inv_session,quantity,location,placement_mode').in('inv_session',sess);
     KIT_SETS={};
     (sr.data||[]).forEach(function(r){scanCnt[r.inv_session]=(scanCnt[r.inv_session]||0)+1;scanPcs[r.inv_session]=(scanPcs[r.inv_session]||0)+(Number(r.quantity)||1);
-      if(r.placement_mode==='inv_kit3'&&r.location==='PRINTER')KIT_SETS[r.inv_session]=(KIT_SETS[r.inv_session]||0)+(Number(r.quantity)||1);});
+      if(r.placement_mode==='inv_kit3'&&(r.location==='PRINTER'||r.location==='P1'))KIT_SETS[r.inv_session]=(KIT_SETS[r.inv_session]||0)+(Number(r.quantity)||1);});
   }
   SCAN_PCS=scanPcs;
   var uploaded=all.filter(function(l){return l.status==='uploaded'||!l.status;});
@@ -351,6 +404,7 @@ async function loadInvPage(quiet){
       '<td><span class="badge '+(extra>0?'badge-orange':'badge-gray')+'">'+extra+'</span></td>'+
       '<td style="font-size:12px;color:var(--muted)">'+(l.started_at?new Date(l.started_at).toLocaleString('cs-CZ'):'–')+'</td>'+
       '<td style="text-align:right;white-space:nowrap">'+
+        (isIntl(l)?'<button class="btn btn-info btn-sm" onclick="openLive('+l.id+',\''+esc(l.name)+'\')">📊 Živě</button> ':'')+
         '<button class="btn btn-secondary btn-sm" onclick="restartInvList('+l.id+',\''+esc(l.name)+'\')">🔁 Restart</button> '+
         '<button class="btn btn-danger btn-sm" onclick="cancelInvList('+l.id+',\''+esc(l.name)+'\')">🚫 Zrušit</button> '+
         '<button class="btn btn-primary btn-sm" onclick="finishInvFromDashboard('+l.id+',\''+esc(l.name)+'\')">✅ Dokončit</button>'+
@@ -361,40 +415,83 @@ async function loadInvPage(quiet){
       '</td></tr>';
   }).join(''):'<tr class="empty-row"><td colspan="7">Právě nikdo neskenuje</td></tr>';
 
-  ct.innerHTML=completed.length?completed.map(function(l){
+  var dl=function(l){return '<td style="text-align:right;white-space:nowrap">'+
+      '<button class="btn btn-secondary btn-sm" onclick="downloadInvCsv('+l.id+',\''+esc(l.name)+'\')">📥 CSV</button> '+
+      '<button class="btn btn-secondary btn-sm" onclick="downloadInvXlsx('+l.id+',\''+esc(l.name)+'\')">📊 XLSX</button></td>';};
+  DONE_ROWS=completed.map(function(l){
+    var r={id:l.id,status:l.status,kind:invKindText(l),name:l.name||'',who:whoDone(l),when:new Date((l.status==='cancelled'?l.cancelled_at:l.completed_at)||l.created_at||0)};
     if(isEanInv(l)){
-      return '<tr><td>'+cancelBadge(l)+invKindBadge(l)+'<b>'+l.name+'</b></td><td>'+whoDone(l)+'</td>'+
-        '<td><span class="badge badge-green">'+pcsLabel(l)+'</span></td>'+
+      r.found=isKitInv(l)?(KIT_SETS[l.session_uid]||0):(SCAN_PCS[l.session_uid]||0);r.missing=null;r.extra=null;
+      r.html='<td><b>'+l.name+'</b></td><td>'+whoDone(l)+'</td><td><span class="badge badge-green">'+pcsLabel(l)+'</span></td>'+
         '<td><span class="badge badge-gray">–</span></td><td><span class="badge badge-gray">–</span></td>'+
         '<td style="font-size:12px;color:var(--muted)">'+whenDone(l)+'</td>'+
-        '<td style="text-align:right;white-space:nowrap"><button class="btn btn-danger btn-sm" onclick="deleteInvList('+l.id+',\''+esc(l.name)+'\')">🗑 Smazat</button></td>'+
-        '<td style="text-align:right;white-space:nowrap">'+
-          '<button class="btn btn-secondary btn-sm" onclick="downloadInvCsv('+l.id+',\''+esc(l.name)+'\')">📥 CSV</button> '+
-          '<button class="btn btn-secondary btn-sm" onclick="downloadInvXlsx('+l.id+',\''+esc(l.name)+'\')">📊 XLSX</button>'+
-        '</td></tr>';
+        '<td style="text-align:right;white-space:nowrap"><button class="btn btn-danger btn-sm" onclick="deleteInvList('+l.id+',\''+esc(l.name)+'\')">🗑 Smazat</button></td>'+dl(l);
+    }else{
+      var total=totalCounts[l.id]||0, found=foundCounts[l.id]||0, missing=total-found, extra=extraCounts[l.id]||0;
+      r.found=found;r.missing=missing;r.extra=extra;
+      r.html='<td><b>'+l.name+'</b>'+(isIntl(l)?'<br><span style="font-size:12px;color:var(--muted)">'+(pcsFound[l.id]||0)+' / '+(pcsExp[l.id]||0)+' ks</span>':'')+'</td><td>'+whoDone(l)+'</td>'+
+        '<td><span class="badge badge-green">'+found+'</span></td>'+
+        '<td><span class="badge '+(missing>0?'badge-red':'badge-gray')+'">'+missing+'</span></td>'+
+        '<td><span class="badge '+(extra>0?'badge-orange':'badge-gray')+'">'+extra+'</span></td>'+
+        '<td style="font-size:12px;color:var(--muted)">'+whenDone(l)+'</td>'+
+        '<td style="text-align:right;white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="reviveInvList('+l.id+')">🔄 Oživit</button></td>'+dl(l);
     }
-    var total=totalCounts[l.id]||0, found=foundCounts[l.id]||0, missing=total-found, extra=extraCounts[l.id]||0;
-    return '<tr><td>'+cancelBadge(l)+invKindBadge(l)+'<b>'+l.name+'</b>'+(isIntl(l)?'<br><span style="font-size:12px;color:var(--muted)">'+(pcsFound[l.id]||0)+' / '+(pcsExp[l.id]||0)+' ks</span>':'')+'</td><td>'+whoDone(l)+'</td>'+
-      '<td><span class="badge badge-green">'+found+'</span></td>'+
-      '<td><span class="badge '+(missing>0?'badge-red':'badge-gray')+'">'+missing+'</span></td>'+
-      '<td><span class="badge '+(extra>0?'badge-orange':'badge-gray')+'">'+extra+'</span></td>'+
-      '<td style="font-size:12px;color:var(--muted)">'+whenDone(l)+'</td>'+
-      '<td style="text-align:right;white-space:nowrap"><button class="btn btn-secondary btn-sm" onclick="reviveInvList('+l.id+')">🔄 Oživit</button></td>'+
-      '<td style="text-align:right;white-space:nowrap">'+
-        '<button class="btn btn-secondary btn-sm" onclick="downloadInvCsv('+l.id+',\''+esc(l.name)+'\')">📥 CSV</button> '+
-        '<button class="btn btn-secondary btn-sm" onclick="downloadInvXlsx('+l.id+',\''+esc(l.name)+'\')">📊 XLSX</button>'+
-      '</td></tr>';
-  }).join(''):'<tr class="empty-row"><td colspan="8">Zatím žádné dokončené inventury</td></tr>';
+    r.html='<td>'+(l.status==='cancelled'?'<span class="badge badge-red" style="white-space:nowrap">🚫 Zrušená</span>':'<span class="badge badge-green" style="white-space:nowrap">✅ Dokončená</span>')+'</td><td>'+invKindBadge(l).replace('margin-right:6px','white-space:nowrap')+'</td>'+r.html;
+    return r;
+  }).sort(function(a,b){return b.when-a.when;});
+  doneOptions();
+  renderDone();
 }
 
 var INV_BY_ID={};
-function isEanInv(l){ return !!l && (l.kind==='ean'||l.kind==='ean_loc'||l.kind==='ean_loc_sn'||l.kind==='kit3'); }
-function isKitInv(l){ return !!l && l.kind==='kit3'; }
+// ── Dokončené inventury: filtry ve sloupcích + stránkování ──
+var DONE_ROWS=[],DONE_F={},DONE_PAGE=1,DONE_SIZE=15;
+try{var _ds=localStorage.getItem('prg_inv_done_size');if(_ds!=null)DONE_SIZE=Number(_ds);}catch(e){}
+function invKindText(l){var h=invKindBadge(l);return h?h.replace(/<[^>]+>/g,'').trim():'Seznam ze serveru';}
+function doneOptions(){
+  [['kind','done-f-kind'],['who','done-f-who']].forEach(function(x){var el=document.getElementById(x[1]);if(!el)return;var cur=DONE_F[x[0]]||'';
+    var vals=Array.from(new Set(DONE_ROWS.map(function(r){return r[x[0]];}))).filter(Boolean).sort(function(a,b){return a.localeCompare(b,'cs');});
+    el.innerHTML='<option value="">Vše</option>'+vals.map(function(v){return '<option'+(v===cur?' selected':'')+'>'+String(v).replace(/</g,'&lt;')+'</option>';}).join('');});
+  var sz=document.getElementById('done-size');if(sz)sz.value=String(DONE_SIZE);
+  if(!doneOptions.bound){doneOptions.bound=true;document.querySelectorAll('.done-flt [data-f]').forEach(function(el){el.addEventListener(el.tagName==='INPUT'&&el.type==='search'?'input':'change',function(){DONE_F[el.getAttribute('data-f')]=el.value;DONE_PAGE=1;renderDone();});});}
+}
+function doneFiltered(){var f=DONE_F,q=(f.name||'').trim().toLowerCase(),from=f.from?new Date(f.from+'T00:00:00'):null;
+  return DONE_ROWS.filter(function(r){
+    if(f.status&&r.status!==f.status)return false;
+    if(f.kind&&r.kind!==f.kind)return false;
+    if(f.who&&r.who!==f.who)return false;
+    if(q&&r.name.toLowerCase().indexOf(q)<0)return false;
+    if(f.found==='1'&&!(r.found>0))return false; if(f.found==='0'&&r.found>0)return false;
+    if(f.missing==='1'&&!(r.missing>0))return false; if(f.missing==='0'&&r.missing>0)return false;
+    if(f.extra==='1'&&!(r.extra>0))return false; if(f.extra==='0'&&r.extra>0)return false;
+    if(from&&r.when<from)return false;
+    return true;});}
+function renderDone(){
+  var ct=document.getElementById('t-completed'),pg=document.getElementById('done-pager');if(!ct)return;
+  var list=doneFiltered(),n=list.length,size=DONE_SIZE>0?DONE_SIZE:Math.max(n,1),pages=Math.max(1,Math.ceil(n/size));
+  if(DONE_PAGE>pages)DONE_PAGE=pages;
+  var a=(DONE_PAGE-1)*size,page=list.slice(a,a+size);
+  var anyF=Object.keys(DONE_F).some(function(k){return DONE_F[k];});
+  document.getElementById('done-clear').style.display=anyF?'inline-flex':'none';
+  ct.innerHTML=page.length?page.map(function(r){return '<tr>'+r.html+'</tr>';}).join(''):'<tr class="empty-row"><td colspan="10">'+(DONE_ROWS.length?'Filtru nic neodpovídá':'Zatím žádné dokončené inventury')+'</td></tr>';
+  if(!n){pg.innerHTML='';return;}
+  var nums=[],add=function(p){nums.push(p);};
+  for(var p=1;p<=pages;p++){if(p===1||p===pages||Math.abs(p-DONE_PAGE)<=1)add(p);else if(nums[nums.length-1]!=='…')add('…');}
+  pg.innerHTML='<span>'+(a+1)+'–'+(a+page.length)+' z '+n+(n!==DONE_ROWS.length?' (filtr, celkem '+DONE_ROWS.length+')':'')+'</span>'
+    +(pages>1?'<span style="display:flex;gap:4px;flex-wrap:wrap"><button class="pg-btn" '+(DONE_PAGE<=1?'disabled':'')+' onclick="donePage('+(DONE_PAGE-1)+')" aria-label="Předchozí">‹</button>'
+      +nums.map(function(x){return x==='…'?'<span style="padding:5px 4px">…</span>':'<button class="pg-btn'+(x===DONE_PAGE?' on':'')+'" onclick="donePage('+x+')">'+x+'</button>';}).join('')
+      +'<button class="pg-btn" '+(DONE_PAGE>=pages?'disabled':'')+' onclick="donePage('+(DONE_PAGE+1)+')" aria-label="Další">›</button></span>':'');
+}
+function donePage(p){DONE_PAGE=p;renderDone();}
+function doneSize(v){DONE_SIZE=Number(v);DONE_PAGE=1;try{localStorage.setItem('prg_inv_done_size',String(DONE_SIZE));}catch(e){}renderDone();}
+function doneClear(){DONE_F={};DONE_PAGE=1;document.querySelectorAll('.done-flt [data-f]').forEach(function(el){el.value='';});renderDone();}
+function isEanInv(l){ return !!l && (l.kind==='ean'||l.kind==='ean_loc'||l.kind==='ean_loc_sn'||l.kind==='kit3'||l.kind==='prusa'); }
+function isKitInv(l){ return !!l && (l.kind==='kit3'||l.kind==='prusa'); }
 function pcsLabel(l){ return isKitInv(l)?(KIT_SETS[l.session_uid]||0)+' sad':(SCAN_PCS[l.session_uid]||0)+' ks'; }
 var KIT_SETS={}, SCAN_PCS={};
 function isSnInv(l){ return !!l && l.kind==='ean_loc_sn'; }
 function isIntl(l){ return !!l && l.kind==='intl'; }
-function invKindBadge(l){ if(l.kind==='kit3')return '<span class="badge badge-gray" style="margin-right:6px">🖨️ Printer + Flash + Doplněk</span>'; if(l.kind==='ean_loc_sn')return '<span class="badge badge-gray" style="margin-right:6px">🏷️ EAN + lokace + S/N</span>'; if(l.kind==='intl')return '<span class="badge badge-orange" style="margin-right:6px">🌍 Mezinárodka</span>'; if((l.kind==='ean'||l.kind==='ean_loc')&&/^Mezinárodka/.test(l.name||''))return '<span class="badge badge-orange" style="margin-right:6px">🌍 Mezinárodka (volná)</span>'; return l.kind==='ean_loc'?'<span class="badge badge-gray" style="margin-right:6px">📍 EAN + lokace</span>':(l.kind==='ean'?'<span class="badge badge-gray" style="margin-right:6px">🔢 Jen EAN</span>':''); }
+function invKindBadge(l){ if(l.kind==='prusa')return '<span class="badge badge-gray" style="margin-right:6px">📦 Průša dobalování</span>'; if(l.kind==='kit3')return '<span class="badge badge-gray" style="margin-right:6px">🖨️ Printer + Flash + Doplněk</span>'; if(l.kind==='ean_loc_sn')return '<span class="badge badge-gray" style="margin-right:6px">🏷️ EAN + lokace + S/N</span>'; if(l.kind==='intl')return '<span class="badge badge-orange" style="margin-right:6px">🌍 Mezinárodka</span>'; if((l.kind==='ean'||l.kind==='ean_loc')&&/^Mezinárodka/.test(l.name||''))return '<span class="badge badge-orange" style="margin-right:6px">🌍 Mezinárodka (volná)</span>'; return l.kind==='ean_loc'?'<span class="badge badge-gray" style="margin-right:6px">📍 EAN + lokace</span>':(l.kind==='ean'?'<span class="badge badge-gray" style="margin-right:6px">🔢 Jen EAN</span>':''); }
 var EAN_COLS=['EAN','Lokace','Množství','Skenů','Uživatelé','První sken','Poslední sken'];
 var KIT_COLS=['Sada','Printer','Flash','Doplněk','Kompletní','Uživatel','Čas'];
 async function fetchKitExportRows(l){
@@ -408,9 +505,19 @@ async function fetchKitExportRows(l){
   });
   Object.keys(net).forEach(function(key){ if(net[key]>0){var a=key.split('|');g[a[0]].parts[a[1]]=a.slice(2).join('|');} });
   var n=0;
+  if(l.kind==='prusa'){
+    var N=0; var m=String(l.name||'').match(/\((\d+) kód/); if(m)N=+m[1];
+    order.forEach(function(k){Object.keys(g[k].parts).forEach(function(p){var i=+String(p).replace('P','');if(i>N)N=i;});});
+    KIT_COLS_DYN=['Sada'];for(var i=1;i<=N;i++)KIT_COLS_DYN.push('Kód '+i);KIT_COLS_DYN=KIT_COLS_DYN.concat(['Kompletní','Uživatel','Čas']);
+    return order.filter(function(k){return Object.keys(g[k].parts).length;}).map(function(k){var o=g[k];n++;var r={'Sada':n};var full=true;
+      for(var i=1;i<=N;i++){r['Kód '+i]=o.parts['P'+i]||'';if(!o.parts['P'+i])full=false;}
+      r['Kompletní']=full?'ano':'NE';r['Uživatel']=o.u;r['Čas']=o.t;return r;});
+  }
+  KIT_COLS_DYN=KIT_COLS;
   return order.filter(function(k){return Object.keys(g[k].parts).length;}).map(function(k){var o=g[k];n++;
     return {'Sada':n,'Printer':o.parts.PRINTER||'','Flash':o.parts.FLASH||'','Doplněk':o.parts.DOPLNEK||'','Kompletní':(o.parts.PRINTER&&o.parts.FLASH&&o.parts.DOPLNEK)?'ano':'NE','Uživatel':o.u,'Čas':o.t};});
 }
+var KIT_COLS_DYN=null;
 var SN_COLS=['EAN','Lokace','S/N','Množství','Uživatel','Čas skenu'];
 async function fetchSnExportRows(l){
   var r=await supa.from('scans').select('ean,location,quantity,serial_no,scanned_at,profiles(name)').eq('inv_session',l.session_uid).order('scanned_at',{ascending:true});
@@ -480,7 +587,7 @@ async function downloadInvCsv(listId, listName){
   var L=INV_BY_ID[listId], ean=isEanInv(L);
   if(isIntl(L)){var x=await fetchIntlExportRows(listId);var rows=x.rows,cols=x.cols;}else{
   var rows=isKitInv(L)?await fetchKitExportRows(L):isSnInv(L)?await fetchSnExportRows(L):ean?await fetchEanExportRows(L):await fetchInvExportRows(listId);
-  var cols=isKitInv(L)?KIT_COLS:isSnInv(L)?SN_COLS:ean?EAN_COLS:['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];}
+  var cols=isKitInv(L)?(KIT_COLS_DYN||KIT_COLS):isSnInv(L)?SN_COLS:ean?EAN_COLS:['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];}
   var q=function(v){ return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'; };
   var csv=cols.join(',')+'\n';
   rows.forEach(function(r){ csv+=cols.map(function(k){return q(r[k]);}).join(',')+'\n'; });
@@ -496,7 +603,7 @@ async function downloadInvXlsx(listId, listName){
   var L=INV_BY_ID[listId], ean=isEanInv(L);
   if(isIntl(L)){var x=await fetchIntlExportRows(listId);var ws0=XLSX.utils.json_to_sheet(x.rows,{header:x.cols});ws0['!cols']=x.cols.map(function(c){return {wch:Math.max(10,c.length+2)};});var wb0=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb0,ws0,'Mezinárodka');XLSX.writeFile(wb0,'mezinarodka_'+listName.replace(/[^a-z0-9_-]/gi,'_')+'.xlsx');return;}
   var rows=isKitInv(L)?await fetchKitExportRows(L):isSnInv(L)?await fetchSnExportRows(L):ean?await fetchEanExportRows(L):await fetchInvExportRows(listId);
-  var cols=isKitInv(L)?KIT_COLS:isSnInv(L)?SN_COLS:ean?EAN_COLS:['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];
+  var cols=isKitInv(L)?(KIT_COLS_DYN||KIT_COLS):isSnInv(L)?SN_COLS:ean?EAN_COLS:['Kód','Název','Umístění','Nové umístění','Stav','Čas','Uživatel'];
   var ws=XLSX.utils.json_to_sheet(rows,{header:cols});
   ws['!cols']=ean?[{wch:16},{wch:14},{wch:10},{wch:8},{wch:24},{wch:20},{wch:20}]:[{wch:16},{wch:30},{wch:14},{wch:16},{wch:12},{wch:20},{wch:16}];
   var wb=XLSX.utils.book_new();
@@ -526,6 +633,69 @@ async function cancelInvList(id, name){
   if(res.error){toast('❌ '+res.error.message);return;}
   toast('🚫 Inventura zrušena');
   loadInvPage();
+}
+
+// ── 📊 Živý přehled Mezinárodky po lokacích ──
+var LIVE={id:null,name:'',timer:null,locs:{}};
+function openLive(id,name){LIVE.id=id;LIVE.name=name;document.getElementById('live-title').textContent='📊 Živě: '+name;document.getElementById('live-detail').innerHTML='';document.getElementById('modal-live').style.display='flex';loadLive();clearInterval(LIVE.timer);LIVE.timer=setInterval(loadLive,10000);}
+function closeLive(){clearInterval(LIVE.timer);LIVE.timer=null;LIVE.id=null;document.getElementById('modal-live').style.display='none';}
+async function loadLive(){
+  if(!LIVE.id)return;
+  var it=await supa.from('inventory_list_items').select('*').eq('list_id',LIVE.id);
+  var ps=await supa.from('inventory_piece_scans').select('item_id,base_code,location,found_by,found_at').eq('list_id',LIVE.id).order('found_at',{ascending:false}).limit(5000);
+  if(it.error){document.getElementById('live-sum').textContent='❌ '+it.error.message;return;}
+  var L={};function loc(k){k=(k||'?').toUpperCase();return L[k]||(L[k]={loc:k,exp:0,done:0,part:0,miss:0,pcsExp:0,pcs:0,extra:0,last:null,who:'',items:[]});}
+  var items=it.data||[], byId={};items.forEach(function(i){byId[String(i.id)]=i;});
+  items.forEach(function(i){
+    var locs=String(i.location||'').toUpperCase().split(',').map(function(x){return x.trim();}).filter(Boolean);if(!locs.length)locs=['bez lokace'];
+    var e=+i.qty_expected||0,f=+i.qty_found||0;
+    locs.forEach(function(k){var o=loc(k);o.exp++;o.pcsExp+=e;o.pcs+=f;if(f===0)o.miss++;else if(f<e)o.part++;else o.done++;o.items.push(i);});
+  });
+  (ps.data||[]).forEach(function(p){var k=(p.location||'?').toUpperCase();var o=loc(k);if(!o.last||p.found_at>o.last){o.last=p.found_at;o.who=p.found_by||'';}if(p.item_id==null)o.extra++;
+    else{var i=byId[String(p.item_id)];if(i){var exp=String(i.location||'').toUpperCase().split(',').map(function(x){return x.trim();});if(exp.indexOf(k)<0)o.extra++;}}});
+  LIVE.locs=L;
+  var arr=Object.values(L).sort(function(a,b){return a.loc.localeCompare(b.loc,'cs',{numeric:true});});
+  var tot={hb:items.length,done:0,pcs:0,pcsExp:0};items.forEach(function(i){var e=+i.qty_expected||0,f=+i.qty_found||0;tot.pcs+=f;tot.pcsExp+=e;if(f>=e&&e>0)tot.done++;});
+  var lastAny=(ps.data||[])[0];
+  document.getElementById('live-sum').innerHTML='<b>'+tot.done+' / '+tot.hb+'</b> HB hotovo · <b>'+tot.pcs+' / '+tot.pcsExp+'</b> ks'+(lastAny?' · poslední sken '+new Date(lastAny.found_at).toLocaleTimeString('cs-CZ')+' ('+(lastAny.found_by||'')+', '+(lastAny.location||'?')+')':'')+' · obnovuje se každých 10 s';
+  document.getElementById('live-grid').innerHTML=arr.map(function(o){
+    var bg=o.exp===0?'#c0392b':(o.done===o.exp?'#27ae60':(o.done+o.part>0?'#f39c12':'#dfe4ea')), fg=(bg==='#dfe4ea')?'#2c3e50':'#fff';
+    return '<div onclick="liveDetail(\''+o.loc.replace(/'/g,'')+'\')" style="cursor:pointer;background:'+bg+';color:'+fg+';border-radius:10px;padding:8px 10px;min-height:64px">'+
+      '<div style="font-weight:800;font-size:16px">'+o.loc+'</div><div style="font-size:12px">'+(o.exp?o.done+'/'+o.exp+' HB · '+o.pcs+'/'+o.pcsExp+' ks':'mimo export')+'</div>'+
+      (o.extra?'<div style="font-size:11px">➕ '+o.extra+' navíc</div>':'')+(o.who?'<div style="font-size:11px;opacity:.85">'+o.who+'</div>':'')+'</div>';
+  }).join('')||'<div style="color:var(--muted)">Zatím žádná data</div>';
+}
+function liveDetail(k){var o=LIVE.locs[k];if(!o)return;
+  var miss=o.items.filter(function(i){return (+i.qty_found||0)<(+i.qty_expected||0);});
+  document.getElementById('live-detail').innerHTML='<b>'+k+'</b> – chybí '+miss.length+' HB'+(miss.length?': '+miss.map(function(i){return i.code+' ('+(+i.qty_found||0)+'/'+(+i.qty_expected||0)+')';}).join(', '):' ✅');}
+
+// ── 📅 Stáří zásilek ──
+var AGING=[];
+async function loadAging(){
+  var tb=document.getElementById('t-aging');if(!tb)return;
+  var q=supa.from('v_intl_aging').select('*').order('days',{ascending:false}).limit(2000);
+  var dc=window.PRG_DC?PRG_DC.currentId():null;if(dc!=null)q=q.eq('dc_id',dc);
+  var t=document.getElementById('ag-type').value;if(t)q=q.eq('typ',t);
+  if(document.getElementById('ag-in').checked)q=q.eq('in_latest',true);
+  var mn=parseInt(document.getElementById('ag-min').value,10)||0;if(mn>0)q=q.gte('days',mn);
+  var r=await q;
+  if(r.error){tb.innerHTML='<tr class="empty-row"><td colspan="9">'+(/v_intl_aging/.test(r.error.message)?'Přehled zatím není zapnutý – spusť intl_b_setup-01.sql':'❌ '+r.error.message)+'</td></tr>';return;}
+  AGING=r.data||[];
+  var old7=AGING.filter(function(x){return x.days>=7;}).length,old3=AGING.filter(function(x){return x.days>=3;}).length;
+  document.getElementById('ag-sum').innerHTML=AGING.length+' zásilek'+(AGING.length?' · ≥ 3 dny: <b>'+old3+'</b> · ≥ 7 dní: <b style="color:var(--danger)">'+old7+'</b>':'');
+  if(!AGING.length){tb.innerHTML='<tr class="empty-row"><td colspan="9">Žádné zásilky (nahraj export nebo import jako Mezinárodku)</td></tr>';return;}
+  tb.innerHTML=AGING.slice(0,500).map(function(x){
+    var c=x.days>=7?'badge-red':(x.days>=3?'badge-orange':'badge-green');
+    return '<tr><td data-label="HB"><b>'+x.hb+'</b></td><td data-label="OH / File" style="font-size:12px">'+(x.oh||'')+'</td><td data-label="Typ">'+(x.typ==='import'?'📥 Import':'📤 Export')+'</td>'+
+      '<td data-label="Destinace" style="font-size:12px">'+[x.dest,x.consignee].filter(Boolean).join(' · ')+'</td><td data-label="Ks">'+(x.pcs==null?'':x.pcs)+'</td><td data-label="Lokace">'+(x.location||'')+'</td>'+
+      '<td data-label="Poprvé" style="font-size:12px">'+new Date(x.first_seen).toLocaleDateString('cs-CZ')+'</td><td data-label="Naposledy" style="font-size:12px">'+new Date(x.last_seen).toLocaleDateString('cs-CZ')+(x.in_latest?'':' <span class="badge badge-gray">odešlo</span>')+'</td>'+
+      '<td data-label="Dní"><span class="badge '+c+'">'+x.days+'</span></td></tr>';
+  }).join('');
+}
+function agingXlsx(){
+  if(!AGING.length){toast('Žádná data');return;}
+  var rows=AGING.map(function(x){return {'HB':x.hb,'OH / File':x.oh||'','Typ':x.typ,'Destinace':x.dest||'','Příjemce':x.consignee||'','Ks':x.pcs,'Lokace':x.location||'','Poprvé':new Date(x.first_seen).toLocaleDateString('cs-CZ'),'Naposledy':new Date(x.last_seen).toLocaleDateString('cs-CZ'),'Ve skladu':x.in_latest?'ano':'ne','Dní':x.days};});
+  var ws=XLSX.utils.json_to_sheet(rows),wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Stáří zásilek');XLSX.writeFile(wb,'stari_zasilek.xlsx');
 }
 
 async function finishInvFromDashboard(id, name){

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="cs"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Výjimky – PRG WMS</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="wms_nav.js"></script>
+<script src="wms_flow.js"></script>
+<script src="wms_dc.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+:root{--bg:#f0f2f5;--surface:#fff;--border:#e2e6ed;--accent:#0a7c4e;--accent-light:#e8f7f1;--danger:#c0392b;--danger-light:#fdecea;--warning:#e67e22;--warning-light:#fef3e8;--info:#2980b9;--info-light:#eaf4fb;--text:#1a1d27;--muted:#7a8090;--shadow:0 2px 12px rgba(0,0,0,0.07);--sidebar-w:220px;}
+*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.btn{padding:9px 18px;border:none;border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;transition:opacity 0.15s;text-decoration:none;display:inline-flex;align-items:center;gap:6px;}.btn:active{opacity:0.8;}.btn-primary{background:var(--accent);color:#fff;}.btn-secondary{background:var(--bg);color:var(--muted);border:1.5px solid var(--border);}.btn-danger{background:var(--danger);color:#fff;}.btn-warning{background:var(--warning);color:#fff;}.btn-sm{padding:6px 12px;font-size:12px;}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}.badge-green{background:var(--accent-light);color:var(--accent);}.badge-orange{background:var(--warning-light);color:var(--warning);}.badge-red{background:var(--danger-light);color:var(--danger);}.badge-blue{background:var(--info-light);color:var(--info);}.badge-gray{background:#f0f2f5;color:var(--muted);}
+.card{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden;margin-bottom:20px;}.card-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}.card-header h3{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;}
+table{width:100%;border-collapse:collapse;font-size:13px;}thead{background:#f8f9fb;}th{padding:9px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;}td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}tbody tr:last-child td{border-bottom:none;}tbody tr:hover{background:#fafbfc;}.empty-row td{text-align:center;color:var(--muted);padding:28px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}.form-row.single{grid-template-columns:1fr;}.form-row.triple{grid-template-columns:1fr 1fr 1fr;}
+.form-group{display:flex;flex-direction:column;gap:5px;}.form-group label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;}
+.form-group input,.form-group select,.form-group textarea{padding:9px 12px;border:1.5px solid var(--border);border-radius:7px;font-family:'Inter',sans-serif;font-size:13px;outline:none;transition:border-color 0.2s;background:#fff;}.form-group input:focus,.form-group select:focus{border-color:var(--accent);}.form-group textarea{resize:vertical;min-height:70px;}
+.form-section{font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+#sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);background:#0a7c4e;display:flex;flex-direction:column;z-index:50;transition:transform 0.25s ease;}.sidebar-logo{padding:20px 18px 14px;font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:#fff;letter-spacing:1.5px;border-bottom:1px solid rgba(255,255,255,0.15);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;}.sidebar-logo span{font-size:11px;font-weight:400;opacity:0.7;width:100%;letter-spacing:0;}#sidebar-close-btn{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;opacity:0.8;display:none;}nav{flex:1;padding:10px 0;overflow-y:auto;}.nav-item{display:flex;align-items:center;gap:10px;padding:11px 18px;color:rgba(255,255,255,0.75);cursor:pointer;font-size:14px;font-weight:500;transition:background 0.15s,color 0.15s;border-left:3px solid transparent;}.nav-item:hover{background:rgba(255,255,255,0.1);color:#fff;}.nav-item.active{background:rgba(255,255,255,0.15);color:#fff;border-left-color:#fff;}.nav-icon{font-size:17px;width:22px;text-align:center;}.sidebar-user{padding:12px 18px;border-top:1px solid rgba(255,255,255,0.15);font-size:12px;color:rgba(255,255,255,0.7);display:flex;flex-direction:column;gap:4px;}.sidebar-user strong{color:#fff;font-size:13px;}.sidebar-user button{background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;margin-top:4px;}
+#main{margin-left:var(--sidebar-w);min-height:100vh;}.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:13px 24px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow);position:sticky;top:0;z-index:40;}.topbar h2{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;flex:1;}.topbar-actions{display:flex;gap:8px;align-items:center;}.hamburger-btn{display:inline-flex;align-items:center;background:none;border:none;font-size:24px;cursor:pointer;color:var(--text);padding:4px 8px;margin-right:4px;border-radius:6px;}.content{padding:24px;}#sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:49;}
+.back-btn{background:var(--bg);border:1.5px solid var(--border);border-radius:7px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;text-decoration:none;display:flex;align-items:center;gap:6px;}.back-btn:hover{border-color:var(--accent);color:var(--accent);}
+.items-table td input,.items-table td select{padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;width:100%;outline:none;font-family:'Inter',sans-serif;}
+#toast{position:fixed;bottom:24px;right:24px;background:#1a1d27;color:#fff;padding:12px 20px;border-radius:9px;font-size:13px;font-weight:500;z-index:999;opacity:0;transition:opacity 0.3s;pointer-events:none;}#toast.show{opacity:1;}
+@media(min-width:901px){.hamburger-btn{display:none;}#sidebar-close-btn{display:none !important;}}
+@media(max-width:900px){:root{--sidebar-w:0px;}#sidebar{transform:translateX(-220px);width:220px;}#sidebar.open{transform:translateX(0);}#sidebar-close-btn{display:block !important;}#main{margin-left:0;}.content{padding:14px;}.topbar{padding:11px 14px;}}
+/* mobilní zobrazení – sjednoceno s Inventory Tool */
+@media(max-width:900px){
+body{overflow-x:hidden;}
+#main{min-width:0;max-width:100%;}
+.content{padding:12px !important;min-width:0;max-width:100%;}
+.card{min-width:0;max-width:100%;}
+.topbar{flex-wrap:wrap;gap:8px;padding:10px 12px !important;}
+.topbar h2{font-size:19px !important;min-width:0;flex:1 1 auto;}
+.topbar-actions{flex-wrap:wrap;gap:6px;margin-left:auto;}
+#last-refresh{display:none;}
+#theme-popover{right:8px !important;max-width:calc(100vw - 16px);}
+.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:10px !important;}
+.two-col{grid-template-columns:minmax(0,1fr) !important;}
+.stat-grid>*,.two-col>*{min-width:0;}
+.form-row{grid-template-columns:1fr !important;}
+}
+</style></head><body>
+<div id="session-check" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)"><div style="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:16px;opacity:0.85;">Načítám…</div></div><div id="auth-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)"><div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)"><h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1><p style="font-size:13px;color:#7a8090;margin-bottom:20px">Warehouse Management System</p><div id="auth-msg" style="font-size:13px;color:#c0392b;min-height:18px;margin-bottom:8px"></div><input id="login-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none"><input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none"><button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Přihlásit se</button></div></div>
+<div id="app" style="display:none">
+  <div id="sidebar"><div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">&#x2715;</button></div>
+  <nav id="wms-nav" data-active="exceptions"></nav>
+  <div class="sidebar-user"><strong id="sidebar-user-name">-</strong><span id="sidebar-user-role" class="badge badge-gray"></span><button onclick="doLogout()">Odhlásit se</button></div></div>
+  <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+  <div id="main">
+<div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">&#9776;</button><h2>⚠️ Výjimky</h2><div class="topbar-actions"><button class="btn btn-primary" onclick="newExc()">➕ Nová výjimka</button></div></div>
+<div class="content">
+<div class="card"><div style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;border-bottom:1px solid var(--border)">
+<select id="f-st" onchange="load()" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"><option value="active">Otevřené + řeší se</option><option value="open">Otevřené</option><option value="in_progress">Řeší se</option><option value="done">Vyřešené / uzavřené</option><option value="">Vše</option></select>
+<select id="f-type" onchange="load()" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"><option value="">Všechny typy</option></select>
+<select id="f-client" onchange="load()" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"><option value="">Všichni klienti</option></select>
+<select id="f-src" onchange="load()" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"><option value="">Ruční i automatické</option><option value="manual">Nahlášené</option><option value="auto">Automatické</option></select>
+<input id="f-q" placeholder="Hledat (HB, doklad, popis)…" oninput="clearTimeout(window._qt);window._qt=setTimeout(load,300)" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;min-width:200px;flex:1">
+</div>
+<div id="sum" style="padding:8px 16px;font-size:13px;color:var(--muted)"></div>
+<div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Typ</th><th>Výjimka</th><th>Týká se</th><th>Klient</th><th>Závažnost</th><th>Stav</th><th>📷</th><th>Nahlásil</th><th>Kdy</th></tr></thead><tbody id="tb"><tr class="empty-row"><td colspan="10">Načítám…</td></tr></tbody></table></div>
+<div style="padding:10px 16px;font-size:12px;color:var(--muted)">Výjimky vznikají ručně (scanner ⚠️📷, tady ➕ Nová) i automaticky: manko při vychystání, problém na dokladu, teplotní alarm, rozdíly po dokončení Mezinárodky.</div>
+</div>
+</div>
+<input type="file" id="w-photo" accept="image/*" multiple style="display:none">
+</div>
+</div>
+<div id="toast"></div>
+<script>
+var SUPA_URL="https://ujvqanqqhmnfxsfeqixc.supabase.co";var SUPA_KEY="sb_publishable_5o19BnZUEi8j-rU5DDAgBA_HwKB7V-v";
+var supa=supabase.createClient(SUPA_URL,SUPA_KEY);
+var currentUser=null,currentProfile=null;
+async function doLogin(){var email=document.getElementById('login-email').value.trim();var pass=document.getElementById('login-pass').value;if(!email||!pass){document.getElementById('auth-msg').textContent='Vyplňte pole';return;}document.getElementById('auth-msg').textContent='Přihlašování…';var res=await supa.auth.signInWithPassword({email,password:pass});if(res.error){document.getElementById('auth-msg').textContent='Chyba: '+res.error.message;return;}await onLoggedIn(res.data.user);}
+// idle logout
+var SESSION_IDLE_MS=2*60*60*1000;var sessionIdleTimer=null;function startSessionIdleWatch(){function reset(){clearTimeout(sessionIdleTimer);sessionIdleTimer=setTimeout(async function(){await supa.auth.signOut();alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');window.location.href='wms_dashboard.html';},SESSION_IDLE_MS);}['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){document.addEventListener(evt,reset,{passive:true});});reset();}
+async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}var allowed=currentProfile.allowed_apps;if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1){alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';(async function(){try{if(window.PRG_DC)await PRG_DC.init(supa,currentProfile);}catch(e){console.warn('DC',e);}if(typeof afterLogin==='function')afterLogin();})();startSessionIdleWatch();}
+async function doLogout(){await supa.auth.signOut();window.location.href='wms_dashboard.html';}
+function go(u){window.location.href=u;}
+function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
+var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(_tt);_tt=setTimeout(function(){e.classList.remove('show');},2800);}
+function closeModal(id){document.getElementById(id).style.display='none';}
+function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
+supa.auth.getSession().then(function(res){if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}else{window.location.href='wms_dashboard.html';}});
+
+var T={damage:'💥 Poškození',shortage:'➖ Manko',overage:'➕ Přebytek',wrong_location:'📍 Jiná lokace',missing:'❓ Nenalezeno',temperature:'🌡️ Teplota',missing_label:'🏷️ Štítek',other:'• Jiné'};
+var ST={open:'<span class="badge badge-red">Otevřená</span>',in_progress:'<span class="badge badge-orange">Řeší se</span>',resolved:'<span class="badge badge-green">Vyřešená</span>',closed:'<span class="badge badge-gray">Uzavřená</span>'};
+var SV={low:'<span class="badge badge-gray">Nízká</span>',medium:'<span class="badge badge-orange">Střední</span>',high:'<span class="badge badge-red">Vysoká</span>'};
+var CL={},ROWS=[],PH={};
+function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function dcId(){return window.PRG_DC&&PRG_DC.currentId()!=null?PRG_DC.currentId():null;}
+function who(){return (currentProfile&&currentProfile.name)||(currentUser&&currentUser.email)||'';}
+async function afterLogin(){
+  var ft=document.getElementById('f-type');Object.keys(T).forEach(function(k){ft.insertAdjacentHTML('beforeend','<option value="'+k+'">'+T[k]+'</option>');});
+  var c=await supa.from('clients').select('id,name').order('name');(c.data||[]).forEach(function(x){CL[x.id]=x.name;document.getElementById('f-client').insertAdjacentHTML('beforeend','<option value="'+x.id+'">'+esc(x.name)+'</option>');});
+  load();
+}
+async function load(){
+  var q=supa.from('exceptions').select('*').order('created_at',{ascending:false}).limit(1000);
+  var st=document.getElementById('f-st').value;
+  if(st==='active')q=q.in('status',['open','in_progress']);else if(st==='done')q=q.in('status',['resolved','closed']);else if(st)q=q.eq('status',st);
+  var t=document.getElementById('f-type').value;if(t)q=q.eq('type',t);
+  var c=document.getElementById('f-client').value;if(c)q=q.eq('client_id',c);
+  var sr=document.getElementById('f-src').value;if(sr)q=q.eq('source',sr);
+  var dc=dcId();if(dc!=null)q=q.or('dc_id.eq.'+dc+',dc_id.is.null');
+  var r=await q;var tb=document.getElementById('tb');
+  if(r.error){tb.innerHTML='<tr class="empty-row"><td colspan="10">'+esc(/exceptions|schema cache/.test(r.error.message)?'Chybí databázová část – spusť v Supabase exc_setup-01.sql':r.error.message)+'</td></tr>';return;}
+  var qq=document.getElementById('f-q').value.trim().toLowerCase();
+  ROWS=(r.data||[]).filter(function(x){return !qq||[x.title,x.description,x.ref_label,x.ref_id,x.location].join(' ').toLowerCase().indexOf(qq)>=0;});
+  PH={};if(ROWS.length){var pr=await supa.from('photos').select('exception_id').in('exception_id',ROWS.map(function(x){return x.id;}));(pr.data||[]).forEach(function(p){PH[p.exception_id]=(PH[p.exception_id]||0)+1;});}
+  var open=ROWS.filter(function(x){return x.status==='open';}).length,hi=ROWS.filter(function(x){return x.severity==='high'&&x.status!=='resolved'&&x.status!=='closed';}).length;
+  document.getElementById('sum').innerHTML=ROWS.length+' výjimek · otevřených <b>'+open+'</b>'+(hi?' · vysoká závažnost <b style="color:var(--danger)">'+hi+'</b>':'');
+  if(!ROWS.length){tb.innerHTML='<tr class="empty-row"><td colspan="10">Žádné výjimky 👍</td></tr>';return;}
+  tb.innerHTML=ROWS.map(function(x){return '<tr style="cursor:pointer" onclick="detail('+x.id+')"><td data-label="#">'+x.id+'</td><td data-label="Typ">'+(T[x.type]||esc(x.type))+'</td><td data-label="Výjimka"><b>'+esc(x.title)+'</b>'+(x.description?'<br><span style="font-size:12px;color:var(--muted)">'+esc(String(x.description).slice(0,90))+'</span>':'')+'</td>'+
+    '<td data-label="Týká se" style="font-size:12px">'+esc(x.ref_label||x.ref_id||'')+(x.location?'<br>📍 '+esc(x.location):'')+'</td><td data-label="Klient">'+esc(CL[x.client_id]||'')+'</td><td data-label="Závažnost">'+(SV[x.severity]||'')+'</td><td data-label="Stav">'+(ST[x.status]||esc(x.status))+'</td>'+
+    '<td data-label="📷">'+(PH[x.id]||'')+'</td><td data-label="Nahlásil" style="font-size:12px">'+esc(x.reported_by||'')+(x.source==='auto'?' <span class="badge badge-gray">auto</span>':'')+'</td><td data-label="Kdy" style="font-size:12px">'+new Date(x.created_at).toLocaleString('cs-CZ')+'</td></tr>';}).join('');
+}
+function photoCompress(file){return new Promise(function(res,rej){var u=URL.createObjectURL(file),i=new Image();i.onload=function(){var m=1600,k=Math.min(1,m/Math.max(i.naturalWidth,i.naturalHeight)),c=document.createElement('canvas');c.width=Math.round(i.naturalWidth*k);c.height=Math.round(i.naturalHeight*k);c.getContext('2d').drawImage(i,0,0,c.width,c.height);URL.revokeObjectURL(u);c.toBlob(function(b){res(b);},'image/jpeg',0.75);};i.onerror=function(){rej(new Error('fotku nejde načíst'));};i.src=u;});}
+async function uploadPhotos(files,exc){
+  for(var i=0;i<files.length;i++){var b=await photoCompress(files[i]);var path=(exc.client_id||0)+'/exception/'+exc.id+'/web-'+Date.now()+'-'+i+'.jpg';
+    var up=await supa.storage.from('prg-photos').upload(path,b,{contentType:'image/jpeg'});if(up.error){toast('❌ '+up.error.message);return;}
+    await supa.from('photos').insert({path:path,kind:'exception',ref_id:exc.ref_id,ref_label:exc.ref_label,client_id:exc.client_id,exception_id:exc.id,taken_by:who()});}
+  await supa.from('exception_events').insert({exception_id:exc.id,event:'photo',note:files.length+' foto',user_name:who()});
+}
+function modal(html){var w=document.createElement('div');w.className='modal-backdrop';w.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:300;padding:16px';
+  w.innerHTML='<div style="background:#fff;border-radius:14px;width:100%;max-width:760px;max-height:92vh;overflow:auto">'+html+'</div>';document.body.appendChild(w);w.addEventListener('click',function(e){if(e.target===w)w.remove();});return w;}
+async function detail(id){
+  var x=(await supa.from('exceptions').select('*').eq('id',id).single()).data;if(!x)return;
+  var ev=(await supa.from('exception_events').select('*').eq('exception_id',id).order('created_at')).data||[];
+  var ph=(await supa.from('photos').select('*').eq('exception_id',id).order('taken_at')).data||[];
+  if(x.ref_id){var ph2=(await supa.from('photos').select('*').eq('ref_id',x.ref_id).is('exception_id',null).order('taken_at')).data||[];ph=ph.concat(ph2);}
+  var urls={};if(ph.length){var su=await supa.storage.from('prg-photos').createSignedUrls(ph.map(function(p){return p.path;}),3600);(su.data||[]).forEach(function(u){urls[u.path]=u.signedUrl;});}
+  var sel='padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px';
+  var w=modal('<div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center"><b style="font-size:17px">#'+x.id+' · '+esc(x.title)+'</b><button class="btn btn-secondary btn-sm" id="x-c">✕</button></div>'+
+    '<div style="padding:14px 20px;display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;font-size:13px">'+
+      '<div>Typ: <b>'+(T[x.type]||esc(x.type))+'</b></div><div>Týká se: <b>'+esc(x.ref_label||x.ref_id||'–')+'</b>'+(x.location?' · 📍 '+esc(x.location):'')+'</div>'+
+      '<div>Klient: <b>'+esc(CL[x.client_id]||'–')+'</b></div><div>Nahlásil: '+esc(x.reported_by||'')+' · '+new Date(x.created_at).toLocaleString('cs-CZ')+(x.source==='auto'?' (automaticky)':'')+'</div>'+
+      (x.qty!=null?'<div>Množství: <b>'+x.qty+'</b></div>':'')+'<div style="grid-column:1/-1;white-space:pre-wrap;background:var(--bg);padding:10px;border-radius:8px">'+esc(x.description||'(bez popisu)')+'</div></div>'+
+    '<div style="padding:0 20px 10px"><b style="font-size:13px">📷 Fotky ('+ph.length+')</b><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">'+ph.map(function(p){var u=urls[p.path]||'';return '<a href="'+u+'" target="_blank"><img src="'+u+'" style="width:110px;height:110px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" title="'+esc((p.taken_by||'')+' '+new Date(p.taken_at).toLocaleString('cs-CZ'))+'"></a>';}).join('')+
+      '<button class="btn btn-secondary btn-sm" id="x-ph" style="height:110px;width:110px">➕ Přidat foto</button></div></div>'+
+    '<div style="padding:10px 20px;display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;font-size:13px;border-top:1px solid var(--border)">'+
+      '<label>Stav<br><select id="x-st" style="'+sel+';width:100%"><option value="open">Otevřená</option><option value="in_progress">Řeší se</option><option value="resolved">Vyřešená</option><option value="closed">Uzavřená</option></select></label>'+
+      '<label>Řeší<br><input id="x-as" value="'+esc(x.assigned_to||'')+'" style="'+sel+';width:100%"></label>'+
+      '<label>Závažnost<br><select id="x-sv" style="'+sel+';width:100%"><option value="low">Nízká</option><option value="medium">Střední</option><option value="high">Vysoká</option></select></label>'+
+      '<label style="display:flex;align-items:center;gap:6px;margin-top:18px"><input type="checkbox" id="x-vc" '+(x.visible_to_client?'checked':'')+'> vidí zákazník v portálu</label>'+
+      '<label style="grid-column:1/-1">Řešení / komentář<br><textarea id="x-rs" rows="3" style="'+sel+';width:100%;font-family:inherit">'+esc(x.resolution||'')+'</textarea></label></div>'+
+    '<div style="padding:0 20px 10px;font-size:12px;color:var(--muted)"><b>Historie</b><br>'+ev.map(function(e){return new Date(e.created_at).toLocaleString('cs-CZ')+' · '+esc(e.event)+(e.note?': '+esc(e.note):'')+(e.user_name?' ('+esc(e.user_name)+')':'');}).join('<br>')+'</div>'+
+    '<div style="padding:12px 20px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border)"><button class="btn btn-secondary" id="x-x">Zavřít</button><button class="btn btn-primary" id="x-ok">💾 Uložit</button></div>');
+  w.querySelector('#x-st').value=x.status;w.querySelector('#x-sv').value=x.severity;
+  w.querySelector('#x-c').onclick=w.querySelector('#x-x').onclick=function(){w.remove();};
+  w.querySelector('#x-ph').onclick=function(){var inp=document.getElementById('w-photo');inp.value='';inp.onchange=async function(){toast('⏳ Nahrávám…');await uploadPhotos(Array.prototype.slice.call(inp.files),x);w.remove();detail(id);load();};inp.click();};
+  w.querySelector('#x-ok').onclick=async function(){
+    var upd={status:w.querySelector('#x-st').value,assigned_to:w.querySelector('#x-as').value.trim()||null,severity:w.querySelector('#x-sv').value,visible_to_client:w.querySelector('#x-vc').checked,resolution:w.querySelector('#x-rs').value.trim()||null};
+    var r=await supa.from('exceptions').update(upd).eq('id',id);if(r.error){toast('❌ '+r.error.message);return;}
+    if((upd.resolution||'')!==(x.resolution||'')&&upd.status===x.status)await supa.from('exception_events').insert({exception_id:id,event:'note',note:upd.resolution,user_name:who()});
+    toast('✅ Uloženo');w.remove();load();};
+}
+function newExc(){
+  var sel='padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px';
+  var w=modal('<div style="padding:16px 20px;border-bottom:1px solid var(--border)"><b style="font-size:17px">➕ Nová výjimka</b></div><div style="padding:14px 20px;display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;font-size:13px">'+
+    '<label>Typ<br><select id="n-t" style="'+sel+';width:100%">'+Object.keys(T).map(function(k){return '<option value="'+k+'">'+T[k]+'</option>';}).join('')+'</select></label>'+
+    '<label>Klient<br><select id="n-c" style="'+sel+';width:100%"><option value="">–</option>'+Object.keys(CL).map(function(k){return '<option value="'+k+'">'+esc(CL[k])+'</option>';}).join('')+'</select></label>'+
+    '<label style="grid-column:1/-1">Název<br><input id="n-ti" style="'+sel+';width:100%" placeholder="např. Poškozená paleta při příjmu"></label>'+
+    '<label>Týká se (HB / doklad)<br><input id="n-r" style="'+sel+';width:100%"></label><label>Závažnost<br><select id="n-s" style="'+sel+';width:100%"><option value="low">Nízká</option><option value="medium" selected>Střední</option><option value="high">Vysoká</option></select></label>'+
+    '<label style="grid-column:1/-1">Popis<br><textarea id="n-d" rows="3" style="'+sel+';width:100%;font-family:inherit"></textarea></label>'+
+    '<label style="grid-column:1/-1">Fotky<br><input type="file" id="n-f" accept="image/*" multiple></label>'+
+    '<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="n-v" checked> vidí zákazník v portálu</label></div>'+
+    '<div style="padding:12px 20px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border)"><button class="btn btn-secondary" id="n-x">Zrušit</button><button class="btn btn-primary" id="n-ok">Uložit</button></div>');
+  w.querySelector('#n-x').onclick=function(){w.remove();};
+  w.querySelector('#n-ok').onclick=async function(){
+    var ti=w.querySelector('#n-ti').value.trim();if(!ti){toast('Vyplň název');return;}
+    var ref=w.querySelector('#n-r').value.trim().toUpperCase()||null,cl=w.querySelector('#n-c').value||null;
+    var r=await supa.from('exceptions').insert({dc_id:dcId(),client_id:cl,type:w.querySelector('#n-t').value,severity:w.querySelector('#n-s').value,title:ti,description:w.querySelector('#n-d').value.trim()||null,
+      ref_kind:ref?'hb':null,ref_id:ref,ref_label:ref,reported_by:who(),visible_to_client:w.querySelector('#n-v').checked}).select().single();
+    if(r.error){toast('❌ '+r.error.message);return;}
+    var f=w.querySelector('#n-f').files;if(f&&f.length){toast('⏳ Nahrávám fotky…');await uploadPhotos(Array.prototype.slice.call(f),r.data);}
+    toast('✅ Výjimka založena');w.remove();load();};
+}
+</script></body></html>

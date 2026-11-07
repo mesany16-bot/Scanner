@@ -48,6 +48,13 @@
       overflow: hidden;
     }
 
+    .modal { position: relative; }
+    .msb { position: sticky; top: 0; height: 0; z-index: 5; pointer-events: none; }
+    .msb-track { position: absolute; right: -16px; top: -20px; width: 5px; border-radius: 3px; background: rgba(0,0,0,0.08); }
+    .msb-thumb { position: absolute; left: 0; width: 5px; border-radius: 3px; background: #8a94a6; }
+    .modal::-webkit-scrollbar { width: 6px; }
+    .modal::-webkit-scrollbar-thumb { background: #8a94a6; border-radius: 3px; }
+    .modal::-webkit-scrollbar-track { background: transparent; }
     .modal-backdrop {
       position: fixed; inset: 0;
       background: rgba(0,0,0,0.55);
@@ -60,6 +67,10 @@
       padding: 26px 22px;
       width: 100%; max-width: 340px;
       box-shadow: 0 12px 48px rgba(0,0,0,0.22);
+      /* když se okno nevejde na výšku: posouvat uvnitř, s viditelným jezdcem */
+      max-height: calc(100vh - 40px); max-height: calc(100dvh - 40px);
+      overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
+      scrollbar-width: thin; scrollbar-color: #8a94a6 transparent;
       text-align: center;
     }
     .modal h2 { font-size: 22px; font-weight: 700; margin-bottom: 8px; color: var(--accent); }
@@ -119,6 +130,7 @@
     .mode-select-btn .msb-sub   { font-size: 13px; font-weight: 400; opacity: 0.85; display:block; margin-top:2px; }
     .mode-select-btn.wms { background: var(--accent); }
     .mode-select-btn.inv { background: var(--info); }
+    .mode-select-btn.cust { background: #8e44ad; }
 
     .inv-list-item {
       display:flex; justify-content:space-between; align-items:center;
@@ -207,8 +219,9 @@
     #cam-wrap.reader #reader-panel { display: none; }
     #reader-panel .rp-t { font-family: 'Barlow Condensed', sans-serif; font-size: 24px; font-weight: 700; letter-spacing: .5px; }
     #reader-panel .rp-s { font-size: 13px; opacity: .8; margin-top: 2px; }
-    #manual-row { display: flex; gap: 6px; padding: 8px 12px 2px; align-items: center; }
-    #manual-row input { flex: 1; min-width: 0; padding: 10px 12px; border: 1.5px solid #e2e6ed; border-radius: 9px; font-size: 15px; font-family: 'JetBrains Mono', monospace; outline: none; background: #fff; }
+    #manual-row { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 2px; align-items: center; }
+    #manual-row #voice-btn, #manual-row #sound-btn, #manual-row #exc-btn { padding: 10px 9px; }
+    #manual-row input { flex: 1 1 120px; min-width: 0; padding: 10px 12px; border: 1.5px solid #e2e6ed; border-radius: 9px; font-size: 15px; font-family: 'JetBrains Mono', monospace; outline: none; background: #fff; }
     #manual-row input:focus { border-color: #0a7c4e; }
     #manual-row button { padding: 10px 12px; border-radius: 9px; border: 1.5px solid #e2e6ed; background: #fff; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
     #manual-row #manual-ok { background: #0a7c4e; color: #fff; border-color: #0a7c4e; }
@@ -401,11 +414,443 @@
       background: var(--bg); color: var(--text); cursor: pointer;
     }
     .ctrl-btn.start { border-color: #a0d4bc; color: var(--accent); }
+    .ctrl-btn.go   { background: #2980b9; border-color: #2980b9; color: #fff; font-weight: 700; }
+    .ctrl-btn.halt { background: #c0392b; border-color: #c0392b; color: #fff; font-weight: 700; }
+    .ctrl-btn.home { border-color: #b8c2d0; color: #34495e; font-weight: 700; }
     .ctrl-btn.stop  { border-color: #f0c0bb; color: var(--danger); }
     .ctrl-btn.exp   { border-color: #c8d4a0; color: #4a6a00; }
     .ctrl-btn.rst   { border-color: #f0d8b0; color: var(--warning); }
     .ctrl-btn.mydev { border-color: #a0c8e8; color: var(--info); font-weight: 700; }
   </style>
+<script>
+/* PRG Systems – jazyky (překlad rozhraní) + hlasová hlášení + nastavení (Setup) na webu.
+   Překládá texty v obrazovce podle slovníku (čeština → zvolený jazyk); co ve slovníku není, zůstane česky.
+   Jazyk: localStorage 'prg_lang'. Použití: PRG_I18N.setLang('en'), PRG_I18N.say('wrong_loc'), PRG_SETUP.open() */
+(function(){
+  if (window.PRG_I18N) return;
+  var LANGS = [
+    ['cs','Čeština','🇨🇿','cs-CZ'], ['en','English','🇬🇧','en-GB'], ['sk','Slovenčina','🇸🇰','sk-SK'], ['uk','Українська','🇺🇦','uk-UA'],
+    ['pl','Polski','🇵🇱','pl-PL'], ['nl','Nederlands','🇳🇱','nl-NL'], ['de','Deutsch','🇩🇪','de-DE'], ['ro','Română','🇷🇴','ro-RO'],
+    ['hu','Magyar','🇭🇺','hu-HU'], ['vi','Tiếng Việt','🇻🇳','vi-VN']
+  ];
+  var ORDER = ['en','sk','uk','pl','nl','de','ro','hu','vi'];
+  // čeština | en | sk | uk | pl | nl | de | ro | hu | vi
+  var RAW = `
+Přihlásit se|Sign in|Prihlásiť sa|Увійти|Zaloguj się|Inloggen|Anmelden|Autentificare|Bejelentkezés|Đăng nhập
+Odhlásit se|Sign out|Odhlásiť sa|Вийти|Wyloguj się|Uitloggen|Abmelden|Deconectare|Kijelentkezés|Đăng xuất
+Přihlas se pro pokračování.|Sign in to continue.|Prihlás sa pre pokračovanie.|Увійдіть, щоб продовжити.|Zaloguj się, aby kontynuować.|Log in om verder te gaan.|Melde dich an, um fortzufahren.|Autentifică-te pentru a continua.|Jelentkezz be a folytatáshoz.|Đăng nhập để tiếp tục.
+Zapomenuté heslo?|Forgot password?|Zabudnuté heslo?|Забули пароль?|Nie pamiętasz hasła?|Wachtwoord vergeten?|Passwort vergessen?|Ai uitat parola?|Elfelejtett jelszó?|Quên mật khẩu?
+Vyber, co chceš dělat:|Choose what you want to do:|Vyber, čo chceš robiť:|Виберіть, що хочете робити:|Wybierz, co chcesz zrobić:|Kies wat je wilt doen:|Wähle, was du tun möchtest:|Alege ce vrei să faci:|Válaszd ki, mit szeretnél csinálni:|Chọn việc bạn muốn làm:
+Co chceš otevřít?|What do you want to open?|Čo chceš otvoriť?|Що хочете відкрити?|Co chcesz otworzyć?|Wat wil je openen?|Was möchtest du öffnen?|Ce vrei să deschizi?|Mit szeretnél megnyitni?|Bạn muốn mở gì?
+Co chceš dělat?|What do you want to do?|Čo chceš robiť?|Що хочете робити?|Co chcesz zrobić?|Wat wil je doen?|Was möchtest du tun?|Ce vrei să faci?|Mit szeretnél csinálni?|Bạn muốn làm gì?
+Příjmy, výdeje a skladové operace|Receipts, shipments and warehouse tasks|Príjmy, výdaje a skladové operácie|Приймання, відвантаження та складські операції|Przyjęcia, wydania i operacje magazynowe|Ontvangsten, verzendingen en magazijntaken|Wareneingänge, Ausgänge und Lageraufgaben|Recepții, livrări și operațiuni de depozit|Bevételezés, kiadás és raktári műveletek|Nhập, xuất và thao tác kho
+Inventura ze serveru, EAN + lokace, jen EAN, Mezinárodka|Stocktake from server, EAN + location, EAN only, International|Inventúra zo servera, EAN + lokácia, len EAN, Medzinárodka|Інвентаризація з сервера, EAN + локація, лише EAN, Міжнародна|Inwentaryzacja z serwera, EAN + lokalizacja, tylko EAN, Międzynarodowa|Inventaris van server, EAN + locatie, alleen EAN, Internationaal|Inventur vom Server, EAN + Lagerplatz, nur EAN, International|Inventar de pe server, EAN + locație, doar EAN, Internațional|Leltár szerverről, EAN + hely, csak EAN, Nemzetközi|Kiểm kê từ máy chủ, EAN + vị trí, chỉ EAN, Quốc tế
+Zákazníci|Customers|Zákazníci|Клієнти|Klienci|Klanten|Kunden|Clienți|Ügyfelek|Khách hàng
+Odejít|Leave|Odísť|Вийти|Wyjdź|Verlaten|Verlassen|Ieșire|Kilépés|Thoát
+Zpět|Back|Späť|Назад|Wstecz|Terug|Zurück|Înapoi|Vissza|Quay lại
+Zavřít|Close|Zavrieť|Закрити|Zamknij|Sluiten|Schließen|Închide|Bezárás|Đóng
+Zrušit|Cancel|Zrušiť|Скасувати|Anuluj|Annuleren|Abbrechen|Anulează|Mégse|Hủy
+Uložit|Save|Uložiť|Зберегти|Zapisz|Opslaan|Speichern|Salvează|Mentés|Lưu
+Potvrdit|Confirm|Potvrdiť|Підтвердити|Potwierdź|Bevestigen|Bestätigen|Confirmă|Megerősítés|Xác nhận
+Dokončit|Finish|Dokončiť|Завершити|Zakończ|Voltooien|Abschließen|Finalizează|Befejezés|Hoàn tất
+Pokračovat|Continue|Pokračovať|Продовжити|Kontynuuj|Doorgaan|Weiter|Continuă|Tovább|Tiếp tục
+Načítám…|Loading…|Načítavam…|Завантаження…|Ładowanie…|Laden…|Lädt…|Se încarcă…|Betöltés…|Đang tải…
+Domů|Home|Domov|Додому|Start|Start|Start|Acasă|Kezdőlap|Trang chủ
+Start|Start|Štart|Старт|Start|Start|Start|Start|Indítás|Bắt đầu
+Stop|Stop|Stop|Стоп|Stop|Stop|Stopp|Stop|Leállítás|Dừng
+Reset|Reset|Reset|Скинути|Reset|Reset|Zurücksetzen|Resetare|Visszaállítás|Đặt lại
+Menu|Menu|Menu|Меню|Menu|Menu|Menü|Meniu|Menü|Menu
+Nastavení|Settings|Nastavenia|Налаштування|Ustawienia|Instellingen|Einstellungen|Setări|Beállítások|Cài đặt
+Setup|Setup|Nastavenie|Налаштування|Ustawienia|Instellingen|Einstellungen|Configurare|Beállítás|Thiết lập
+Jazyk|Language|Jazyk|Мова|Język|Taal|Sprache|Limbă|Nyelv|Ngôn ngữ
+Jazyk a DC|Language and DC|Jazyk a DC|Мова і DC|Język i DC|Taal en DC|Sprache und DC|Limbă și DC|Nyelv és DC|Ngôn ngữ và DC
+Jazyk, DC, hlasová hlášení|Language, DC, voice messages|Jazyk, DC, hlasové hlásenia|Мова, DC, голосові повідомлення|Język, DC, komunikaty głosowe|Taal, DC, gesproken meldingen|Sprache, DC, Sprachansagen|Limbă, DC, mesaje vocale|Nyelv, DC, hangüzenetek|Ngôn ngữ, DC, thông báo giọng nói
+Distribuční centrum|Distribution centre|Distribučné centrum|Розподільчий центр|Centrum dystrybucyjne|Distributiecentrum|Distributionszentrum|Centru de distribuție|Elosztóközpont|Trung tâm phân phối
+Všechna DC|All DCs|Všetky DC|Усі DC|Wszystkie DC|Alle DC's|Alle DCs|Toate DC|Összes DC|Tất cả DC
+Změnit DC|Change DC|Zmeniť DC|Змінити DC|Zmień DC|DC wijzigen|DC ändern|Schimbă DC|DC váltása|Đổi DC
+Hlasová hlášení chyb|Spoken error messages|Hlasové hlásenia chýb|Голосові повідомлення про помилки|Głosowe komunikaty błędów|Gesproken foutmeldingen|Gesprochene Fehlermeldungen|Mesaje vocale de eroare|Hibák hangos bemondása|Đọc thông báo lỗi
+Vyzkoušet hlas|Test voice|Vyskúšať hlas|Перевірити голос|Sprawdź głos|Stem testen|Stimme testen|Testează vocea|Hang kipróbálása|Thử giọng nói
+Zvuky|Sounds|Zvuky|Звуки|Dźwięki|Geluiden|Töne|Sunete|Hangok|Âm thanh
+Verze|Version|Verzia|Версія|Wersja|Versie|Version|Versiune|Verzió|Phiên bản
+Kamera|Camera|Kamera|Камера|Kamera|Camera|Kamera|Cameră|Kamera|Máy ảnh
+Čtečka|Scanner|Čítačka|Сканер|Skaner|Scanner|Scanner|Scaner|Olvasó|Máy quét
+Kamera vypnuta|Camera off|Kamera vypnutá|Камера вимкнена|Kamera wyłączona|Camera uit|Kamera aus|Cameră oprită|Kamera kikapcsolva|Máy ảnh tắt
+Kamera připravena|Camera ready|Kamera pripravená|Камера готова|Kamera gotowa|Camera gereed|Kamera bereit|Cameră pregătită|Kamera kész|Máy ảnh sẵn sàng
+Kamera spuštěna|Camera started|Kamera spustená|Камеру запущено|Kamera uruchomiona|Camera gestart|Kamera gestartet|Cameră pornită|Kamera elindítva|Đã bật máy ảnh
+Kamera spí|Camera sleeping|Kamera spí|Камера спить|Kamera uśpiona|Camera slaapt|Kamera schläft|Camera doarme|Kamera alszik|Máy ảnh đang ngủ
+šetříme baterku|saving battery|šetríme batériu|економимо батарею|oszczędzamy baterię|batterij sparen|Akku wird geschont|economisim bateria|akkumulátor kímélése|tiết kiệm pin
+ČTEČKA VYPNUTA|SCANNER OFF|ČÍTAČKA VYPNUTÁ|СКАНЕР ВИМКНЕНО|SKANER WYŁĄCZONY|SCANNER UIT|SCANNER AUS|SCANER OPRIT|OLVASÓ KIKAPCSOLVA|MÁY QUÉT TẮT
+ČTEČKA PŘIPRAVENA|SCANNER READY|ČÍTAČKA PRIPRAVENÁ|СКАНЕР ГОТОВИЙ|SKANER GOTOWY|SCANNER GEREED|SCANNER BEREIT|SCANER PREGĂTIT|OLVASÓ KÉSZ|MÁY QUÉT SẴN SÀNG
+Čtečka připravena|Scanner ready|Čítačka pripravená|Сканер готовий|Skaner gotowy|Scanner gereed|Scanner bereit|Scaner pregătit|Olvasó kész|Máy quét sẵn sàng
+Stiskni ▶ Start|Press ▶ Start|Stlač ▶ Štart|Натисніть ▶ Старт|Naciśnij ▶ Start|Druk op ▶ Start|Drücke ▶ Start|Apasă ▶ Start|Nyomd meg: ▶ Indítás|Nhấn ▶ Bắt đầu
+Stiskni spoušť / boční tlačítko čtečky|Press the trigger / side button|Stlač spúšť / bočné tlačidlo čítačky|Натисніть курок / бічну кнопку сканера|Naciśnij spust / boczny przycisk skanera|Druk op de trekker / zijknop|Drücke den Auslöser / die Seitentaste|Apasă trăgaciul / butonul lateral|Nyomd meg a ravaszt / oldalgombot|Nhấn cò / nút bên của máy quét
+Čekám na spuštění…|Waiting to start…|Čakám na spustenie…|Очікую запуску…|Czekam na uruchomienie…|Wachten op start…|Warte auf Start…|Aștept pornirea…|Indításra vár…|Đang chờ bắt đầu…
+Žádná naskenovaná data|No scanned data|Žiadne naskenované dáta|Немає відсканованих даних|Brak zeskanowanych danych|Geen gescande gegevens|Keine gescannten Daten|Nicio dată scanată|Nincs beolvasott adat|Chưa có dữ liệu quét
+Zadat kód ručně…|Enter code manually…|Zadať kód ručne…|Ввести код вручну…|Wpisz kod ręcznie…|Code handmatig invoeren…|Code manuell eingeben…|Introdu codul manual…|Kód kézi megadása…|Nhập mã thủ công…
+Kód nejde přečíst – zadat ručně|Code unreadable – enter manually|Kód nejde prečítať – zadať ručne|Код не читається – ввести вручну|Kod nieczytelny – wpisz ręcznie|Code onleesbaar – handmatig invoeren|Code unlesbar – manuell eingeben|Cod ilizibil – introdu manual|A kód olvashatatlan – add meg kézzel|Không đọc được mã – nhập thủ công
+SKENOVAT|SCAN|SKENOVAŤ|СКАНУВАТИ|SKANUJ|SCANNEN|SCANNEN|SCANEAZĂ|BEOLVASÁS|QUÉT
+SKENOVAT EAN|SCAN EAN|SKENOVAŤ EAN|СКАНУВАТИ EAN|SKANUJ EAN|EAN SCANNEN|EAN SCANNEN|SCANEAZĂ EAN|EAN BEOLVASÁSA|QUÉT EAN
+SKENUJ LOKACI|SCAN LOCATION|SKENUJ LOKÁCIU|СКАНУЙТЕ ЛОКАЦІЮ|SKANUJ LOKALIZACJĘ|SCAN LOCATIE|LAGERPLATZ SCANNEN|SCANEAZĂ LOCAȚIA|HELY BEOLVASÁSA|QUÉT VỊ TRÍ
+Nejdřív naskenuj LOKACI|Scan the LOCATION first|Najprv naskenuj LOKÁCIU|Спочатку відскануйте ЛОКАЦІЮ|Najpierw zeskanuj LOKALIZACJĘ|Scan eerst de LOCATIE|Zuerst LAGERPLATZ scannen|Scanează mai întâi LOCAȚIA|Először a HELYET olvasd be|Quét VỊ TRÍ trước
+naskenuj LOKACI|scan the LOCATION|naskenuj LOKÁCIU|відскануйте ЛОКАЦІЮ|zeskanuj LOKALIZACJĘ|scan de LOCATIE|LAGERPLATZ scannen|scanează LOCAȚIA|olvasd be a HELYET|quét VỊ TRÍ
+Lokace: nenastavena|Location: not set|Lokácia: nenastavená|Локація: не задана|Lokalizacja: nieustawiona|Locatie: niet ingesteld|Lagerplatz: nicht gesetzt|Locație: nesetată|Hely: nincs beállítva|Vị trí: chưa đặt
+Místnost: nenastavena|Room: not set|Miestnosť: nenastavená|Приміщення: не задано|Pomieszczenie: nieustawione|Ruimte: niet ingesteld|Raum: nicht gesetzt|Cameră: nesetată|Helyiség: nincs beállítva|Phòng: chưa đặt
+Mezinárodka|International|Medzinárodka|Міжнародна|Międzynarodowa|Internationaal|International|Internațional|Nemzetközi|Quốc tế
+Mezinárodka – slepá inventura|International – blind count|Medzinárodka – slepá inventúra|Міжнародна – сліпа інвентаризація|Międzynarodowa – inwentaryzacja na ślepo|Internationaal – blinde telling|International – Blindinventur|Internațional – inventar orb|Nemzetközi – vak leltár|Quốc tế – kiểm kê mù
+Jakou inventuru chceš dělat?|Which stocktake do you want to do?|Akú inventúru chceš robiť?|Яку інвентаризацію хочете робити?|Jaką inwentaryzację chcesz zrobić?|Welke telling wil je doen?|Welche Inventur möchtest du machen?|Ce inventar vrei să faci?|Milyen leltárt szeretnél?|Bạn muốn kiểm kê loại nào?
+Inventura ze serveru (seznam)|Stocktake from server (list)|Inventúra zo servera (zoznam)|Інвентаризація з сервера (список)|Inwentaryzacja z serwera (lista)|Telling van server (lijst)|Inventur vom Server (Liste)|Inventar de pe server (listă)|Leltár szerverről (lista)|Kiểm kê từ máy chủ (danh sách)
+EAN + lokace|EAN + location|EAN + lokácia|EAN + локація|EAN + lokalizacja|EAN + locatie|EAN + Lagerplatz|EAN + locație|EAN + hely|EAN + vị trí
+EAN + Lokace|EAN + Location|EAN + Lokácia|EAN + Локація|EAN + Lokalizacja|EAN + Locatie|EAN + Lagerplatz|EAN + Locație|EAN + Hely|EAN + Vị trí
+Jen EAN|EAN only|Len EAN|Лише EAN|Tylko EAN|Alleen EAN|Nur EAN|Doar EAN|Csak EAN|Chỉ EAN
+Seznam z Excelu/CSV v zařízení|List from Excel/CSV on device|Zoznam z Excelu/CSV v zariadení|Список з Excel/CSV на пристрої|Lista z Excela/CSV w urządzeniu|Lijst uit Excel/CSV op apparaat|Liste aus Excel/CSV auf dem Gerät|Listă din Excel/CSV pe dispozitiv|Lista Excelből/CSV-ből az eszközön|Danh sách từ Excel/CSV trên máy
+Seznamy na serveru|Lists on server|Zoznamy na serveri|Списки на сервері|Listy na serwerze|Lijsten op server|Listen auf dem Server|Liste pe server|Listák a szerveren|Danh sách trên máy chủ
+Průša dobalování|Průša repacking|Průša dobaľovanie|Průša допакування|Průša dopakowanie|Průša herverpakken|Průša Nachverpackung|Průša reambalare|Průša utócsomagolás|Průša đóng gói bổ sung
+Vyber zákaznickou činnost:|Choose a customer task:|Vyber zákaznícku činnosť:|Виберіть клієнтську операцію:|Wybierz zadanie klienta:|Kies een klanttaak:|Wähle eine Kundenaufgabe:|Alege o activitate pentru client:|Válassz ügyfélfeladatot:|Chọn công việc khách hàng:
+Zpět do hlavního rozcestníku|Back to main menu|Späť do hlavného rozcestníka|Назад до головного меню|Powrót do menu głównego|Terug naar hoofdmenu|Zurück zum Hauptmenü|Înapoi la meniul principal|Vissza a főmenübe|Về menu chính
+Příjem|Receiving|Príjem|Приймання|Przyjęcie|Ontvangst|Wareneingang|Recepție|Bevételezés|Nhập hàng
+Zaskladnění|Putaway|Zaskladnenie|Розміщення|Rozlokowanie|Wegzetten|Einlagerung|Depozitare|Betárolás|Cất hàng
+Vychystání|Picking|Vychystanie|Комплектація|Kompletacja|Orderpicken|Kommissionierung|Picking|Komissiózás|Lấy hàng
+Balení|Packing|Balenie|Пакування|Pakowanie|Inpakken|Verpacken|Ambalare|Csomagolás|Đóng gói
+Nakládka|Loading|Nakládka|Завантаження|Załadunek|Laden|Verladung|Încărcare|Rakodás|Xếp hàng lên xe
+Doplnění pick lokací|Pick location replenishment|Doplnenie pick lokácií|Поповнення пік-локацій|Uzupełnianie lokalizacji pick|Aanvullen pickplaatsen|Nachschub Pickplätze|Reaprovizionare locații pick|Pick-helyek feltöltése|Bổ sung vị trí lấy hàng
+Cyklická inventura|Cycle count|Cyklická inventúra|Циклічна інвентаризація|Inwentaryzacja cykliczna|Cyclustelling|Permanente Inventur|Inventar ciclic|Ciklikus leltár|Kiểm kê định kỳ
+Info lokace / LPN · přesah|Location / LPN info · overhang|Info lokácie / LPN · presah|Інфо локації / LPN · виступ|Info lokalizacji / LPN · nawis|Info locatie / LPN · overstek|Info Lagerplatz / LPN · Überstand|Info locație / LPN · depășire|Hely / LPN infó · túllógás|Thông tin vị trí / LPN · tràn
+Tisk štítků / packing listu|Print labels / packing list|Tlač štítkov / packing listu|Друк етикеток / пакувального листа|Drukuj etykiety / listę pakowania|Labels / paklijst printen|Etiketten / Packliste drucken|Tipărire etichete / listă de colete|Címkék / csomaglista nyomtatása|In nhãn / phiếu đóng gói
+Yard – vrátnice / rampa|Yard – gate / dock|Yard – vrátnica / rampa|Двір – прохідна / рампа|Plac – brama / rampa|Terrein – poort / dock|Hof – Pforte / Rampe|Curte – poartă / rampă|Udvar – porta / rámpa|Bãi xe – cổng / cửa dock
+Kde je zásilka?|Where is the shipment?|Kde je zásielka?|Де вантаж?|Gdzie jest przesyłka?|Waar is de zending?|Wo ist die Sendung?|Unde este expediția?|Hol van a küldemény?|Lô hàng ở đâu?
+Výjimka / foto|Exception / photo|Výnimka / foto|Виняток / фото|Wyjątek / zdjęcie|Uitzondering / foto|Ausnahme / Foto|Excepție / foto|Kivétel / fotó|Ngoại lệ / ảnh
+Nahlásit výjimku|Report exception|Nahlásiť výnimku|Повідомити виняток|Zgłoś wyjątek|Uitzondering melden|Ausnahme melden|Raportează excepția|Kivétel bejelentése|Báo ngoại lệ
+Co se stalo|What happened|Čo sa stalo|Що сталося|Co się stało|Wat is er gebeurd|Was ist passiert|Ce s-a întâmplat|Mi történt|Chuyện gì xảy ra
+Popis|Description|Popis|Опис|Opis|Omschrijving|Beschreibung|Descriere|Leírás|Mô tả
+Fotky|Photos|Fotky|Фото|Zdjęcia|Foto's|Fotos|Fotografii|Fotók|Ảnh
+Závažnost|Severity|Závažnosť|Серйозність|Waga|Ernst|Schweregrad|Gravitate|Súlyosság|Mức độ
+Nízká|Low|Nízka|Низька|Niska|Laag|Niedrig|Scăzută|Alacsony|Thấp
+Střední|Medium|Stredná|Середня|Średnia|Middel|Mittel|Medie|Közepes|Trung bình
+Vysoká|High|Vysoká|Висока|Wysoka|Hoog|Hoch|Ridicată|Magas|Cao
+Tiskárna|Printer|Tlačiareň|Принтер|Drukarka|Printer|Drucker|Imprimantă|Nyomtató|Máy in
+Co tisknout|What to print|Čo tlačiť|Що друкувати|Co drukować|Wat printen|Was drucken|Ce să tipărești|Mit nyomtassunk|In gì
+Kopií|Copies|Kópií|Копій|Kopii|Kopieën|Kopien|Copii|Példány|Bản sao
+Tisknout|Print|Tlačiť|Друкувати|Drukuj|Printen|Drucken|Tipărește|Nyomtatás|In
+Tisk|Print|Tlač|Друк|Druk|Printen|Drucken|Tipărire|Nyomtatás|In
+Kód|Code|Kód|Код|Kod|Code|Code|Cod|Kód|Mã
+Položka|Item|Položka|Позиція|Pozycja|Artikel|Artikel|Articol|Tétel|Mặt hàng
+Stav|Status|Stav|Статус|Status|Status|Status|Stare|Állapot|Trạng thái
+Umístění|Location|Umiestnenie|Розміщення|Lokalizacja|Locatie|Lagerort|Locație|Hely|Vị trí
+Lokace|Location|Lokácia|Локація|Lokalizacja|Locatie|Lagerplatz|Locație|Hely|Vị trí
+Množství|Quantity|Množstvo|Кількість|Ilość|Aantal|Menge|Cantitate|Mennyiség|Số lượng
+Klient|Client|Klient|Клієнт|Klient|Klant|Kunde|Client|Ügyfél|Khách hàng
+Klienti|Clients|Klienti|Клієнти|Klienci|Klanten|Kunden|Clienți|Ügyfelek|Khách hàng
+Datum|Date|Dátum|Дата|Data|Datum|Datum|Dată|Dátum|Ngày
+Číslo|Number|Číslo|Номер|Numer|Nummer|Nummer|Număr|Szám|Số
+Dodavatel|Supplier|Dodávateľ|Постачальник|Dostawca|Leverancier|Lieferant|Furnizor|Szállító|Nhà cung cấp
+Kdo|Who|Kto|Хто|Kto|Wie|Wer|Cine|Ki|Ai
+Kdy|When|Kedy|Коли|Kiedy|Wanneer|Wann|Când|Mikor|Khi nào
+Název|Name|Názov|Назва|Nazwa|Naam|Name|Nume|Név|Tên
+Akce|Actions|Akcie|Дії|Akcje|Acties|Aktionen|Acțiuni|Műveletek|Thao tác
+Stáhnout|Download|Stiahnuť|Завантажити|Pobierz|Downloaden|Herunterladen|Descarcă|Letöltés|Tải xuống
+Smazat|Delete|Zmazať|Видалити|Usuń|Verwijderen|Löschen|Șterge|Törlés|Xóa
+Upravit|Edit|Upraviť|Редагувати|Edytuj|Bewerken|Bearbeiten|Editează|Szerkesztés|Sửa
+Hledat|Search|Hľadať|Пошук|Szukaj|Zoeken|Suchen|Caută|Keresés|Tìm kiếm
+Obnovit|Refresh|Obnoviť|Оновити|Odśwież|Vernieuwen|Aktualisieren|Reîmprospătează|Frissítés|Làm mới
+Všechny|All|Všetky|Усі|Wszystkie|Alle|Alle|Toate|Összes|Tất cả
+Vše|All|Všetko|Усе|Wszystko|Alles|Alle|Tot|Mind|Tất cả
+Nový|New|Nový|Новий|Nowy|Nieuw|Neu|Nou|Új|Mới
+Hotovo|Done|Hotovo|Готово|Gotowe|Klaar|Erledigt|Gata|Kész|Xong
+Dokončeno|Completed|Dokončené|Завершено|Zakończone|Voltooid|Abgeschlossen|Finalizat|Befejezve|Đã hoàn tất
+Zrušená|Cancelled|Zrušená|Скасована|Anulowana|Geannuleerd|Storniert|Anulată|Törölve|Đã hủy
+Aktivní|Active|Aktívna|Активна|Aktywna|Actief|Aktiv|Activă|Aktív|Đang hoạt động
+Druh|Type|Druh|Тип|Rodzaj|Soort|Art|Tip|Típus|Loại
+Nalezeno|Found|Nájdené|Знайдено|Znaleziono|Gevonden|Gefunden|Găsit|Megtalálva|Đã tìm thấy
+Chybí|Missing|Chýba|Бракує|Brakuje|Ontbreekt|Fehlt|Lipsă|Hiányzik|Thiếu
+Přebývá|Surplus|Prebýva|Надлишок|Nadwyżka|Overschot|Überschuss|Surplus|Többlet|Dư
+Kdo dokončil|Finished by|Kto dokončil|Хто завершив|Kto zakończył|Voltooid door|Abgeschlossen von|Finalizat de|Befejezte|Người hoàn tất
+Dokončené a zrušené inventury|Finished and cancelled stocktakes|Dokončené a zrušené inventúry|Завершені та скасовані інвентаризації|Zakończone i anulowane inwentaryzacje|Voltooide en geannuleerde tellingen|Abgeschlossene und stornierte Inventuren|Inventare finalizate și anulate|Befejezett és törölt leltárak|Kiểm kê đã xong và đã hủy
+Zobrazit|Show|Zobraziť|Показати|Pokaż|Toon|Anzeigen|Afișează|Megjelenítés|Hiển thị
+Předchozí|Previous|Predchádzajúca|Попередня|Poprzednia|Vorige|Zurück|Anterior|Előző|Trước
+Další|Next|Ďalšia|Наступна|Następna|Volgende|Weiter|Următor|Következő|Tiếp
+Příjmy|Receipts|Príjmy|Приймання|Przyjęcia|Ontvangsten|Wareneingänge|Recepții|Bevételezések|Phiếu nhập
+Výdeje|Shipments|Výdaje|Відвантаження|Wydania|Verzendingen|Warenausgänge|Livrări|Kiadások|Phiếu xuất
+Zásoby|Stock|Zásoby|Запаси|Zapasy|Voorraad|Bestand|Stoc|Készlet|Tồn kho
+Obsazenost|Occupancy|Obsadenosť|Заповненість|Zajętość|Bezetting|Belegung|Grad de ocupare|Kihasználtság|Mức lấp đầy
+Přesnost zásob|Stock accuracy|Presnosť zásob|Точність запасів|Dokładność zapasów|Voorraadnauwkeurigheid|Bestandsgenauigkeit|Acuratețea stocului|Készletpontosság|Độ chính xác tồn kho
+Historie|History|História|Історія|Historia|Geschiedenis|Verlauf|Istoric|Előzmények|Lịch sử
+Skeny|Scans|Skeny|Скани|Skany|Scans|Scans|Scanări|Beolvasások|Lượt quét
+Výjimky|Exceptions|Výnimky|Винятки|Wyjątki|Uitzonderingen|Ausnahmen|Excepții|Kivételek|Ngoại lệ
+Fakturace|Billing|Fakturácia|Виставлення рахунків|Fakturowanie|Facturatie|Abrechnung|Facturare|Számlázás|Hóa đơn
+Šablony tisku|Print templates|Šablóny tlače|Шаблони друку|Szablony wydruku|Printsjablonen|Druckvorlagen|Șabloane de tipărire|Nyomtatási sablonok|Mẫu in
+Integrace|Integrations|Integrácie|Інтеграції|Integracje|Integraties|Integrationen|Integrări|Integrációk|Tích hợp
+Nastavení systému|System settings|Nastavenia systému|Системні налаштування|Ustawienia systemu|Systeeminstellingen|Systemeinstellungen|Setări sistem|Rendszerbeállítások|Cài đặt hệ thống
+Uživatelé|Users|Používatelia|Користувачі|Użytkownicy|Gebruikers|Benutzer|Utilizatori|Felhasználók|Người dùng
+Monitoring teplot|Temperature monitoring|Monitoring teplôt|Моніторинг температури|Monitoring temperatury|Temperatuurbewaking|Temperaturüberwachung|Monitorizare temperatură|Hőmérséklet-figyelés|Giám sát nhiệt độ
+Sklad, klienti, příjmy, výdeje|Warehouse, clients, receipts, shipments|Sklad, klienti, príjmy, výdaje|Склад, клієнти, приймання, відвантаження|Magazyn, klienci, przyjęcia, wydania|Magazijn, klanten, ontvangsten, verzendingen|Lager, Kunden, Eingänge, Ausgänge|Depozit, clienți, recepții, livrări|Raktár, ügyfelek, bevételezés, kiadás|Kho, khách hàng, nhập, xuất
+Seznamy majetku a výsledky inventur|Asset lists and stocktake results|Zoznamy majetku a výsledky inventúr|Списки майна та результати інвентаризацій|Listy majątku i wyniki inwentaryzacji|Activalijsten en telresultaten|Inventarlisten und Inventurergebnisse|Liste de active și rezultate inventar|Vagyonlisták és leltáreredmények|Danh sách tài sản và kết quả kiểm kê
+Čidla, alarmy, reporty (GDP)|Sensors, alarms, reports (GDP)|Čidlá, alarmy, reporty (GDP)|Датчики, тривоги, звіти (GDP)|Czujniki, alarmy, raporty (GDP)|Sensoren, alarmen, rapporten (GDP)|Sensoren, Alarme, Berichte (GDP)|Senzori, alarme, rapoarte (GDP)|Érzékelők, riasztások, jelentések (GDP)|Cảm biến, cảnh báo, báo cáo (GDP)
+Retrak simulátor|Reach truck simulator|Retrak simulátor|Симулятор річтрака|Symulator wózka wysokiego składowania|Reachtruck-simulator|Schubmaststapler-Simulator|Simulator stivuitor|Tolóoszlopos targonca szimulátor|Mô phỏng xe nâng reach truck
+Simulace provozu haly a retraků|Simulation of hall and reach trucks|Simulácia prevádzky haly a retrakov|Симуляція роботи складу та річтраків|Symulacja pracy hali i wózków|Simulatie van hal en reachtrucks|Simulation von Halle und Staplern|Simularea halei și a stivuitoarelor|Csarnok és targoncák szimulációja|Mô phỏng hoạt động kho và xe nâng
+Připojení a odesílání|Connection and sending|Pripojenie a odosielanie|З'єднання та надсилання|Połączenie i wysyłanie|Verbinding en verzenden|Verbindung und Senden|Conexiune și trimitere|Kapcsolat és küldés|Kết nối và gửi
+Odeslat teď|Send now|Odoslať teraz|Надіслати зараз|Wyślij teraz|Nu verzenden|Jetzt senden|Trimite acum|Küldés most|Gửi ngay
+Načíst nejnovější verzi scanneru|Load the latest scanner version|Načítať najnovšiu verziu skenera|Завантажити останню версію сканера|Wczytaj najnowszą wersję skanera|Nieuwste scannerversie laden|Neueste Scanner-Version laden|Încarcă cea mai nouă versiune|A legújabb verzió betöltése|Tải phiên bản mới nhất
+Dokončit inventuru?|Finish stocktake?|Dokončiť inventúru?|Завершити інвентаризацію?|Zakończyć inwentaryzację?|Telling voltooien?|Inventur abschließen?|Finalizezi inventarul?|Befejezed a leltárt?|Hoàn tất kiểm kê?
+Ukončit inventuru?|End stocktake?|Ukončiť inventúru?|Закінчити інвентаризацію?|Zakończyć inwentaryzację?|Telling beëindigen?|Inventur beenden?|Închei inventarul?|Lezárod a leltárt?|Kết thúc kiểm kê?
+Zpět ke skenování|Back to scanning|Späť ku skenovaniu|Назад до сканування|Wróć do skanowania|Terug naar scannen|Zurück zum Scannen|Înapoi la scanare|Vissza a beolvasáshoz|Quay lại quét
+Pokračovat v rozjeté|Continue the running one|Pokračovať v rozbehnutej|Продовжити розпочату|Kontynuuj rozpoczętą|Doorgaan met lopende|Laufende fortsetzen|Continuă cea începută|A folyamatban lévő folytatása|Tiếp tục phiên đang chạy
+Jiná lokace|Different location|Iná lokácia|Інша локація|Inna lokalizacja|Andere locatie|Anderer Lagerplatz|Altă locație|Másik hely|Vị trí khác
+Neznámý kód|Unknown code|Neznámy kód|Невідомий код|Nieznany kod|Onbekende code|Unbekannter Code|Cod necunoscut|Ismeretlen kód|Mã không xác định
+Položka již existuje|Item already exists|Položka už existuje|Позиція вже існує|Pozycja już istnieje|Artikel bestaat al|Artikel existiert bereits|Articolul există deja|A tétel már létezik|Mặt hàng đã tồn tại
+Režim skenování|Scan mode|Režim skenovania|Режим сканування|Tryb skanowania|Scanmodus|Scanmodus|Mod de scanare|Beolvasási mód|Chế độ quét
+Distribuční centrum|Distribution centre|Distribučné centrum|Розподільчий центр|Centrum dystrybucyjne|Distributiecentrum|Distributionszentrum|Centru de distribuție|Elosztóközpont|Trung tâm phân phối
+Vyber DC, ve kterém právě pracuješ.|Choose the DC you are working in.|Vyber DC, v ktorom práve pracuješ.|Виберіть DC, у якому працюєте.|Wybierz DC, w którym pracujesz.|Kies het DC waar je werkt.|Wähle das DC, in dem du arbeitest.|Alege DC-ul în care lucrezi.|Válaszd ki a DC-t, ahol dolgozol.|Chọn DC bạn đang làm việc.
+Nastavit jako moje výchozí DC|Set as my default DC|Nastaviť ako moje predvolené DC|Зробити моїм DC за замовчуванням|Ustaw jako moje domyślne DC|Instellen als mijn standaard-DC|Als mein Standard-DC festlegen|Setează ca DC implicit|Beállítás alapértelmezett DC-ként|Đặt làm DC mặc định
+Online|Online|Online|Онлайн|Online|Online|Online|Online|Online|Trực tuyến
+Offline|Offline|Offline|Офлайн|Offline|Offline|Offline|Offline|Offline|Ngoại tuyến
+Zapnuto|On|Zapnuté|Увімкнено|Włączone|Aan|An|Pornit|Be|Bật
+Vypnuto|Off|Vypnuté|Вимкнено|Wyłączone|Uit|Aus|Oprit|Ki|Tắt
+Úlohy WMS|WMS tasks|Úlohy WMS|Завдання WMS|Zadania WMS|WMS-taken|WMS-Aufgaben|Sarcini WMS|WMS feladatok|Tác vụ WMS
+Inventura ze serveru|Stocktake from server|Inventúra zo servera|Інвентаризація з сервера|Inwentaryzacja z serwera|Telling van server|Inventur vom Server|Inventar de pe server|Leltár szerverről|Kiểm kê từ máy chủ
+Mezinárodka (seznam i slepá)|International (list and blind)|Medzinárodka (zoznam aj slepá)|Міжнародна (список і сліпа)|Międzynarodowa (lista i na ślepo)|Internationaal (lijst en blind)|International (Liste und blind)|Internațional (listă și orb)|Nemzetközi (lista és vak)|Quốc tế (danh sách và mù)
+Ostatní|Other|Ostatné|Інше|Inne|Overig|Sonstiges|Altele|Egyéb|Khác
+Hlášení zapnout pro|Enable messages for|Hlásenia zapnúť pre|Увімкнути повідомлення для|Włącz komunikaty dla|Meldingen aan voor|Ansagen aktivieren für|Activează mesajele pentru|Üzenetek bekapcsolása|Bật thông báo cho
+Hub|Hub|Hub|Хаб|Hub|Hub|Hub|Hub|Hub|Trung tâm
+Žádná data k exportu|No data to export|Žiadne dáta na export|Немає даних для експорту|Brak danych do eksportu|Geen gegevens om te exporteren|Keine Daten zum Export|Nicio dată de exportat|Nincs exportálható adat|Không có dữ liệu để xuất
+Inventura zrušena|Stocktake cancelled|Inventúra zrušená|Інвентаризацію скасовано|Inwentaryzacja anulowana|Telling geannuleerd|Inventur storniert|Inventar anulat|Leltár törölve|Đã hủy kiểm kê
+Inventura ukončena|Stocktake finished|Inventúra ukončená|Інвентаризацію завершено|Inwentaryzacja zakończona|Telling afgerond|Inventur beendet|Inventar încheiat|Leltár lezárva|Đã kết thúc kiểm kê
+Zrušeno|Cancelled|Zrušené|Скасовано|Anulowano|Geannuleerd|Abgebrochen|Anulat|Megszakítva|Đã hủy
+Neplatný počet|Invalid quantity|Neplatný počet|Невірна кількість|Nieprawidłowa ilość|Ongeldig aantal|Ungültige Menge|Cantitate invalidă|Érvénytelen mennyiség|Số lượng không hợp lệ
+klepni na Start a vyber činnost|tap Start and choose a task|klepni na Štart a vyber činnosť|натисніть Старт і виберіть дію|naciśnij Start i wybierz zadanie|tik op Start en kies een taak|tippe auf Start und wähle eine Aufgabe|apasă Start și alege activitatea|koppints az Indításra és válassz feladatot|nhấn Bắt đầu và chọn công việc
+vyber činnost|choose a task|vyber činnosť|виберіть дію|wybierz zadanie|kies een taak|wähle eine Aufgabe|alege activitatea|válassz feladatot|chọn công việc
+Naskenuj lokaci nebo LPN|Scan location or LPN|Naskenuj lokáciu alebo LPN|Відскануйте локацію або LPN|Zeskanuj lokalizację lub LPN|Scan locatie of LPN|Lagerplatz oder LPN scannen|Scanează locația sau LPN|Olvasd be a helyet vagy LPN-t|Quét vị trí hoặc LPN
+Naskenuj LPN palety|Scan the pallet LPN|Naskenuj LPN palety|Відскануйте LPN палети|Zeskanuj LPN palety|Scan de pallet-LPN|Paletten-LPN scannen|Scanează LPN-ul paletului|Olvasd be a raklap LPN-jét|Quét LPN của pallet
+Naskenuj EAN produktu|Scan the product EAN|Naskenuj EAN produktu|Відскануйте EAN товару|Zeskanuj EAN produktu|Scan de product-EAN|Produkt-EAN scannen|Scanează EAN-ul produsului|Olvasd be a termék EAN-ját|Quét EAN sản phẩm
+Skenuj palety / zboží na lokaci|Scan pallets / goods at the location|Skenuj palety / tovar na lokácii|Скануйте палети / товар на локації|Skanuj palety / towar w lokalizacji|Scan pallets / goederen op de locatie|Paletten / Ware am Platz scannen|Scanează paleții / marfa din locație|Olvasd be a raklapokat / árut a helyen|Quét pallet / hàng tại vị trí
+Naskenuj obaly / palety při nakládce|Scan packages / pallets when loading|Naskenuj obaly / palety pri nakládke|Скануйте упаковки / палети під час завантаження|Skanuj opakowania / palety przy załadunku|Scan colli / pallets bij het laden|Packstücke / Paletten beim Verladen scannen|Scanează coletele / paleții la încărcare|Olvasd be a csomagokat / raklapokat rakodáskor|Quét kiện / pallet khi xếp hàng
+Uloženo v zařízení – odešle se po připojení|Saved on device – will be sent when online|Uložené v zariadení – odošle sa po pripojení|Збережено на пристрої – надішлеться після з'єднання|Zapisano w urządzeniu – wyśle się po połączeniu|Opgeslagen op apparaat – wordt verzonden zodra online|Auf dem Gerät gespeichert – wird online gesendet|Salvat pe dispozitiv – se trimite la conectare|Az eszközön mentve – kapcsolatkor elküldjük|Đã lưu trên máy – sẽ gửi khi có mạng
+CSV exportováno|CSV exported|CSV exportované|CSV експортовано|CSV wyeksportowano|CSV geëxporteerd|CSV exportiert|CSV exportat|CSV exportálva|Đã xuất CSV
+Vše vychystáno – potvrď odeslání|All picked – confirm dispatch|Všetko vychystané – potvrď odoslanie|Усе скомплектовано – підтвердіть відправлення|Wszystko skompletowane – potwierdź wysyłkę|Alles gepickt – bevestig verzending|Alles kommissioniert – Versand bestätigen|Totul pregătit – confirmă expedierea|Minden komissiózva – erősítsd meg a kiadást|Đã lấy đủ – xác nhận gửi
+Stiskni spoušť čtečky (boční tlačítko)|Press the scanner trigger (side button)|Stlač spúšť čítačky (bočné tlačidlo)|Натисніть курок сканера (бічна кнопка)|Naciśnij spust skanera (przycisk boczny)|Druk op de scannertrekker (zijknop)|Scanner-Auslöser drücken (Seitentaste)|Apasă trăgaciul scanerului (buton lateral)|Nyomd meg az olvasó ravaszát (oldalgomb)|Nhấn cò máy quét (nút bên)
+Zadej EAN ručně…|Enter EAN manually…|Zadaj EAN ručne…|Введіть EAN вручну…|Wpisz EAN ręcznie…|EAN handmatig invoeren…|EAN manuell eingeben…|Introdu EAN manual…|EAN kézi megadása…|Nhập EAN thủ công…
+Zvuky zapnuty|Sounds on|Zvuky zapnuté|Звуки увімкнено|Dźwięki włączone|Geluid aan|Töne an|Sunete pornite|Hangok bekapcsolva|Đã bật âm thanh
+Zvuky vypnuty|Sounds off|Zvuky vypnuté|Звуки вимкнено|Dźwięki wyłączone|Geluid uit|Töne aus|Sunete oprite|Hangok kikapcsolva|Đã tắt âm thanh
+Hlasová hlášení zapnuta|Voice messages on|Hlasové hlásenia zapnuté|Голосові повідомлення увімкнено|Komunikaty głosowe włączone|Gesproken meldingen aan|Sprachansagen an|Mesaje vocale pornite|Hangüzenetek bekapcsolva|Đã bật thông báo giọng nói
+Hlasová hlášení vypnuta|Voice messages off|Hlasové hlásenia vypnuté|Голосові повідомлення вимкнено|Komunikaty głosowe wyłączone|Gesproken meldingen uit|Sprachansagen aus|Mesaje vocale oprite|Hangüzenetek kikapcsolva|Đã tắt thông báo giọng nói
+Zvuky a vibrace|Sounds and vibration|Zvuky a vibrácie|Звуки та вібрація|Dźwięki i wibracje|Geluid en trillen|Töne und Vibration|Sunete și vibrații|Hangok és rezgés|Âm thanh và rung
+Hlášení zapnout pro:|Enable messages for:|Hlásenia zapnúť pre:|Увімкнути повідомлення для:|Włącz komunikaty dla:|Meldingen aan voor:|Ansagen aktivieren für:|Activează mesajele pentru:|Üzenetek bekapcsolása:|Bật thông báo cho:
+Ukládám…|Saving…|Ukladám…|Зберігаю…|Zapisuję…|Opslaan…|Speichere…|Se salvează…|Mentés…|Đang lưu…
+Dokončená|Finished|Dokončená|Завершена|Zakończona|Voltooid|Abgeschlossen|Finalizată|Befejezett|Đã xong
+Nahrané inventury|Uploaded stocktakes|Nahrané inventúry|Завантажені інвентаризації|Wgrane inwentaryzacje|Geüploade tellingen|Hochgeladene Inventuren|Inventare încărcate|Feltöltött leltárak|Kiểm kê đã tải lên
+Aktivní inventury|Active stocktakes|Aktívne inventúry|Активні інвентаризації|Aktywne inwentaryzacje|Actieve tellingen|Aktive Inventuren|Inventare active|Aktív leltárak|Kiểm kê đang chạy
+Položek|Items|Položiek|Позицій|Pozycji|Artikelen|Positionen|Articole|Tételek|Số mục
+Vytvořeno|Created|Vytvorené|Створено|Utworzono|Aangemaakt|Erstellt|Creat|Létrehozva|Đã tạo
+Postup|Progress|Postup|Прогрес|Postęp|Voortgang|Fortschritt|Progres|Haladás|Tiến độ
+Spuštěno|Started|Spustené|Запущено|Uruchomiono|Gestart|Gestartet|Pornit|Elindítva|Đã bắt đầu
+Kdo skenuje|Who is scanning|Kto skenuje|Хто сканує|Kto skanuje|Wie scant|Wer scannt|Cine scanează|Ki olvas be|Ai đang quét
+Žádné inventury čekající na spuštění|No stocktakes waiting to start|Žiadne inventúry čakajúce na spustenie|Немає інвентаризацій, що очікують запуску|Brak inwentaryzacji oczekujących na start|Geen tellingen die wachten op start|Keine Inventuren warten auf Start|Niciun inventar în așteptare|Nincs indításra váró leltár|Không có kiểm kê chờ bắt đầu
+Právě nikdo neskenuje|Nobody is scanning right now|Práve nikto neskenuje|Зараз ніхто не сканує|Nikt teraz nie skanuje|Er scant nu niemand|Gerade scannt niemand|Nimeni nu scanează acum|Most senki sem olvas be|Hiện không ai đang quét
+Zrušit filtry|Clear filters|Zrušiť filtre|Скинути фільтри|Wyczyść filtry|Filters wissen|Filter zurücksetzen|Șterge filtrele|Szűrők törlése|Xóa bộ lọc
+Oživit|Revive|Oživiť|Відновити|Przywróć|Heropenen|Wiederbeleben|Reactivează|Újraindítás|Khôi phục
+Inventura|Stocktake|Inventúra|Інвентаризація|Inwentaryzacja|Telling|Inventur|Inventar|Leltár|Kiểm kê
+Filtru nic neodpovídá|Nothing matches the filter|Filtru nič nezodpovedá|Нічого не відповідає фільтру|Nic nie pasuje do filtra|Niets voldoet aan het filter|Nichts entspricht dem Filter|Nimic nu corespunde filtrului|Semmi sem felel meg a szűrőnek|Không có kết quả phù hợp
+Zatím žádné dokončené inventury|No finished stocktakes yet|Zatiaľ žiadne dokončené inventúry|Ще немає завершених інвентаризацій|Brak zakończonych inwentaryzacji|Nog geen voltooide tellingen|Noch keine abgeschlossenen Inventuren|Încă niciun inventar finalizat|Még nincs befejezett leltár|Chưa có kiểm kê hoàn tất
+Stáří zásilek ve skladu|Age of shipments in stock|Vek zásielok na sklade|Вік вантажів на складі|Wiek przesyłek w magazynie|Ouderdom van zendingen|Alter der Sendungen im Lager|Vechimea expedițiilor în depozit|Küldemények kora a raktárban|Tuổi lô hàng trong kho
+Živě|Live|Naživo|Наживо|Na żywo|Live|Live|Live|Élő|Trực tiếp
+Hledat…|Search…|Hľadať…|Пошук…|Szukaj…|Zoeken…|Suchen…|Caută…|Keresés…|Tìm kiếm…
+Uložit nové heslo|Save new password|Uložiť nové heslo|Зберегти новий пароль|Zapisz nowe hasło|Nieuw wachtwoord opslaan|Neues Passwort speichern|Salvează parola nouă|Új jelszó mentése|Lưu mật khẩu mới
+`;
+  var DICT = {}, LOWER = {};
+  RAW.split('\n').forEach(function(l){
+    var p = l.split('|'); if (p.length < 10) return;
+    var k = p[0].trim(); DICT[k] = {}; ORDER.forEach(function(lg, i){ DICT[k][lg] = p[i + 1].trim(); });
+    LOWER[k.toLowerCase()] = k;
+  });
+
+  // hlasová hlášení
+  var VOICE = {
+    wrong_loc:    ['Špatná lokace','Wrong location','Zlá lokácia','Неправильна локація','Zła lokalizacja','Verkeerde locatie','Falscher Lagerplatz','Locație greșită','Rossz hely','Sai vị trí'],
+    not_in_list:  ['Není v seznamu','Not on the list','Nie je v zozname','Немає у списку','Nie ma na liście','Staat niet op de lijst','Nicht in der Liste','Nu este în listă','Nincs a listán','Không có trong danh sách'],
+    unknown_code: ['Kód neexistuje','Code does not exist','Kód neexistuje','Код не існує','Kod nie istnieje','Code bestaat niet','Code existiert nicht','Codul nu există','A kód nem létezik','Mã không tồn tại'],
+    bad_format:   ['Špatný formát kódu','Wrong code format','Zlý formát kódu','Неправильний формат коду','Zły format kodu','Verkeerd codeformaat','Falsches Codeformat','Format de cod greșit','Hibás kódformátum','Sai định dạng mã'],
+    dest_code:    ['Kód destinace, naskenuj horní kód','Destination code, scan the top code','Kód destinácie, naskenuj horný kód','Код призначення, скануйте верхній код','Kod miejsca docelowego, zeskanuj górny kod','Bestemmingscode, scan de bovenste code','Zielcode, oberen Code scannen','Cod de destinație, scanează codul de sus','Célkód, olvasd be a felső kódot','Mã điểm đến, hãy quét mã phía trên'],
+    duplicate:    ['Už naskenováno','Already scanned','Už naskenované','Вже відскановано','Już zeskanowano','Al gescand','Bereits gescannt','Deja scanat','Már beolvasva','Đã quét rồi'],
+    scan_location:['Nejdřív naskenuj lokaci','Scan the location first','Najprv naskenuj lokáciu','Спочатку відскануйте локацію','Najpierw zeskanuj lokalizację','Scan eerst de locatie','Zuerst Lagerplatz scannen','Scanează mai întâi locația','Először a helyet olvasd be','Hãy quét vị trí trước'],
+    too_many:     ['Kus navíc','Extra piece','Kus navyše','Зайва одиниця','Sztuka nadmiarowa','Extra stuk','Stück zu viel','Bucată în plus','Többlet darab','Thừa một kiện'],
+    wrong_item:   ['Špatná položka','Wrong item','Zlá položka','Неправильна позиція','Zła pozycja','Verkeerd artikel','Falscher Artikel','Articol greșit','Rossz tétel','Sai mặt hàng'],
+    not_expected: ['Neočekávaný kód','Unexpected code','Neočakávaný kód','Неочікуваний код','Nieoczekiwany kod','Onverwachte code','Unerwarteter Code','Cod neașteptat','Nem várt kód','Mã không mong đợi'],
+    print_fail:   ['Tisk selhal','Print failed','Tlač zlyhala','Помилка друку','Drukowanie nie powiodło się','Printen mislukt','Druck fehlgeschlagen','Tipărirea a eșuat','Nyomtatás sikertelen','In thất bại'],
+    error:        ['Chyba','Error','Chyba','Помилка','Błąd','Fout','Fehler','Eroare','Hiba','Lỗi'],
+    test:         ['Hlasová hlášení jsou zapnutá','Voice messages are on','Hlasové hlásenia sú zapnuté','Голосові повідомлення увімкнено','Komunikaty głosowe są włączone','Gesproken meldingen staan aan','Sprachansagen sind aktiv','Mesajele vocale sunt pornite','A hangüzenetek bekapcsolva','Thông báo giọng nói đã bật']
+  };
+  var CODES = ['cs'].concat(ORDER);
+
+  var lang = 'cs';
+  try { lang = localStorage.getItem('prg_lang') || 'cs'; } catch(e) {}
+  if (CODES.indexOf(lang) < 0) lang = 'cs';
+
+  var LETTER = /[A-Za-zÀ-žА-яЁёІіЇїЄєҐґ0-9]/;
+  function core(seg){
+    var i = 0, j = seg.length;
+    while (i < j && !LETTER.test(seg[i])) i++;
+    while (j > i && /[\s.:,…!?–\-]/.test(seg[j - 1]) && !(seg[j - 1] === '…' && DICT[seg.slice(i, j)])) j--;
+    return [seg.slice(0, i), seg.slice(i, j), seg.slice(j)];
+  }
+  function lookup(k){
+    if (DICT[k]) return DICT[k][lang];
+    var lk = LOWER[k.toLowerCase()];
+    if (lk) { var v = DICT[lk][lang]; return k === k.toUpperCase() && k !== k.toLowerCase() ? v.toUpperCase() : v; }
+    return null;
+  }
+  function tr(s){
+    if (lang === 'cs' || !s) return s;
+    var t = s.trim(); if (!t) return s;
+    var lead = s.slice(0, s.indexOf(t)), tail = s.slice(s.indexOf(t) + t.length);
+    var full = core(t), f = full[1] && lookup(full[1]);
+    if (!f) { var pre = full[0], rest = t.slice(pre.length), g = rest && lookup(rest); if (g) return lead + pre + g + tail; }
+    if (f) return lead + full[0] + f + full[2] + tail;
+    if (t.indexOf(' · ') < 0) return s;
+    var parts = t.split(' · '), hit = false;
+    parts = parts.map(function(p){ var c = core(p), v = c[1] && lookup(c[1]); if (v) { hit = true; return c[0] + v + c[2]; } var r = p.slice(c[0].length), w = r && lookup(r); if (w) { hit = true; return c[0] + w; } return p; });
+    return hit ? lead + parts.join(' · ') + tail : s;
+  }
+  var SKIP = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, CODE: 1, PRE: 1 };
+  var busy = false;
+  function doText(n){
+    var cur = n.nodeValue;
+    if (n.__i18nOut === cur) return;        // náš vlastní překlad
+    n.__i18nSrc = cur;
+    var out = tr(cur);
+    n.__i18nOut = out;
+    if (out !== cur) n.nodeValue = out;
+  }
+  function doEl(el){
+    ['placeholder', 'title', 'aria-label'].forEach(function(a){
+      if (!el.hasAttribute || !el.hasAttribute(a)) return;
+      var cur = el.getAttribute(a), key = '__i18n_' + a;
+      if (el[key + 'Out'] === cur) return;
+      el[key] = cur; var out = tr(cur); el[key + 'Out'] = out; if (out !== cur) el.setAttribute(a, out);
+    });
+  }
+  function walk(root){
+    if (!root) return;
+    if (root.nodeType === 3) { var p = root.parentNode; if (p && !SKIP[p.nodeName] && !(p.closest && p.closest('[data-noi18n]'))) doText(root); return; }
+    if (root.nodeType !== 1 || SKIP[root.nodeName] || root.hasAttribute('data-noi18n')) return;
+    doEl(root);
+    var w = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, {
+      acceptNode: function(n){ if (n.nodeType === 1 && (SKIP[n.nodeName] || n.hasAttribute('data-noi18n'))) return NodeFilter.FILTER_REJECT; return NodeFilter.FILTER_ACCEPT; } });
+    var n; while ((n = w.nextNode())) { if (n.nodeType === 3) doText(n); else doEl(n); }
+  }
+  function restore(root){
+    var w = document.createTreeWalker(root || document.body, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT), n;
+    while ((n = w.nextNode())) {
+      if (n.nodeType === 3) { if (n.__i18nSrc != null && n.__i18nOut === n.nodeValue) n.nodeValue = n.__i18nSrc; n.__i18nOut = null; }
+      else ['placeholder', 'title', 'aria-label'].forEach(function(a){ var k = '__i18n_' + a; if (n[k] != null && n[k + 'Out'] === n.getAttribute(a)) n.setAttribute(a, n[k]); n[k + 'Out'] = null; });
+    }
+  }
+  var obs = null;
+  function observe(){
+    if (obs || !window.MutationObserver || !document.body) return;
+    obs = new MutationObserver(function(muts){
+      if (lang === 'cs' || busy) return;
+      busy = true;
+      try {
+        muts.forEach(function(m){
+          if (m.type === 'characterData') walk(m.target);
+          else if (m.type === 'attributes') doEl(m.target);
+          else m.addedNodes.forEach(function(n){ walk(n); });
+        });
+      } finally { busy = false; }
+    });
+    obs.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title', 'aria-label'] });
+  }
+  function apply(){
+    if (!document.body) return;
+    document.documentElement.setAttribute('lang', lang);
+    busy = true;
+    try { restore(document.body); if (lang !== 'cs') walk(document.body); } finally { busy = false; }
+    observe();
+  }
+  function setLang(l){
+    if (CODES.indexOf(l) < 0) l = 'cs';
+    lang = l; try { localStorage.setItem('prg_lang', l); } catch(e) {}
+    apply();
+    try { window.dispatchEvent(new CustomEvent('prg-lang', { detail: l })); } catch(e) {}
+  }
+
+  // hlas
+  var lastSay = { k: '', t: 0 };
+  function voiceText(key){ var v = VOICE[key] || VOICE.error; return v[CODES.indexOf(lang)] || v[0]; }
+  function say(key){
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) return false;
+    var now = Date.now(); if (lastSay.k === key && now - lastSay.t < 1200) return true;   // neopakovat při rychlém skenování
+    lastSay = { k: key, t: now };
+    try {
+      var u = new SpeechSynthesisUtterance(voiceText(key)), bcp = LANGS[CODES.indexOf(lang)][3];
+      u.lang = bcp; u.rate = 1.05;
+      var vs = speechSynthesis.getVoices() || [], v = vs.find(function(x){ return x.lang && x.lang.toLowerCase().replace('_', '-') === bcp.toLowerCase(); }) || vs.find(function(x){ return x.lang && x.lang.slice(0, 2).toLowerCase() === lang; });
+      if (v) u.voice = v;
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
+      return true;
+    } catch(e) { return false; }
+  }
+  function hasVoice(l){
+    var vs = (window.speechSynthesis && speechSynthesis.getVoices()) || [];
+    return vs.some(function(x){ return x.lang && x.lang.slice(0, 2).toLowerCase() === (l || lang); });
+  }
+  // rozpoznání druhu chyby z textu hlášení (scanner)
+  function classify(text){
+    var s = String(text || '').toLowerCase();
+    if (/destinace/.test(s)) return 'dest_code';
+    if (/špatná lokace|máš být na|máš jít na|cíl je|jiná lokace/.test(s)) return 'wrong_loc';
+    if (/naskenuj lokaci/.test(s)) return 'scan_location';
+    if (/už bylo naskenováno|už je v sadě|už naskenov|duplic/.test(s)) return 'duplicate';
+    if (/není v seznamu|v seznamu není|není v exportu|nepatří|mimo seznam/.test(s)) return 'not_in_list';
+    if (/musí začínat|formát/.test(s)) return 'bad_format';
+    if (/kus navíc|přebýv/.test(s)) return 'too_many';
+    if (/není lpn|není .*sku|nemá$| sku \/ ean nemá/.test(s)) return 'wrong_item';
+    if (/nečeká|žádná úloha|nic takového|není otevřená/.test(s)) return 'not_expected';
+    if (/neexistuje|nenalezen|taková lokace ani|nikde nenalezeno|nemá/.test(s)) return 'unknown_code';
+    if (/tisk selhal/.test(s)) return 'print_fail';
+    return null;
+  }
+
+  window.PRG_I18N = { LANGS: LANGS, get lang(){ return lang; }, setLang: setLang, t: tr, apply: apply, say: say, voiceText: voiceText, classify: classify, hasVoice: hasVoice, VOICE_KEYS: Object.keys(VOICE) };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply); else apply();
+  if (window.speechSynthesis) { try { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = function(){}; } catch(e) {} }
+
+  // ── Setup na webu (jazyk + DC) ──
+  function esc(v){ return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  async function openSetup(){
+    var old = document.getElementById('prg-setup'); if (old) old.remove();
+    var curDc = ''; try { curDc = localStorage.getItem('prg_dc') || ''; } catch(e) {}
+    var list = [];
+    if (window.PRG_DC && PRG_DC.list().length) list = PRG_DC.list();
+    else if (window.supa) { try { var r = await supa.from('warehouses').select('id,code,name,is_active').order('code'); list = (r.data || []).filter(function(w){ return w.is_active !== false; }); } catch(e) {} }
+    var m = document.createElement('div'); m.id = 'prg-setup';
+    m.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,32,.45);z-index:1000;display:flex;align-items:center;justify-content:center;padding:16px';
+    m.innerHTML = '<div style="background:#fff;border-radius:14px;width:100%;max-width:520px;max-height:90vh;overflow:auto;padding:20px;box-shadow:0 20px 50px rgba(0,0,0,.25);font-family:inherit;color:#1c2430">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0;font-size:18px">⚙️ Setup</h3><button type="button" id="prg-setup-x" aria-label="Zavřít" style="border:none;background:#eef1f4;border-radius:8px;width:36px;height:36px;cursor:pointer;font-size:16px">✕</button></div>'
+      + '<div style="font-size:12px;font-weight:700;color:#5b6672;text-transform:uppercase;margin:16px 0 6px">Jazyk</div>'
+      + '<div id="prg-setup-langs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px">'
+      + LANGS.map(function(L){ return '<button type="button" data-l="' + L[0] + '" style="display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:9px;border:1.5px solid ' + (L[0] === lang ? '#0a7c4e' : '#dfe4ea') + ';background:' + (L[0] === lang ? '#e7f4ee' : '#fff') + ';cursor:pointer;font:inherit;font-size:14px;font-weight:600;text-align:left"><span style="font-size:18px">' + L[2] + '</span>' + L[1] + '</button>'; }).join('')
+      + '</div><div style="font-size:12px;color:#5b6672;margin-top:6px" data-noi18n>Překlad se postupně doplňuje – co ještě přeložené není, zůstane česky. / Untranslated texts stay in Czech.</div>'
+      + '<div style="font-size:12px;font-weight:700;color:#5b6672;text-transform:uppercase;margin:16px 0 6px">Distribuční centrum</div>'
+      + (list.length ? '<select id="prg-setup-dc" style="width:100%;padding:10px;border:1.5px solid #dfe4ea;border-radius:9px;font:inherit;font-size:14px">' + (list.length > 1 ? '<option value="">Všechna DC</option>' : '') + list.map(function(w){ return '<option value="' + esc(w.id) + '"' + (String(w.id) === curDc ? ' selected' : '') + '>' + esc(w.code) + ' – ' + esc(w.name || '') + '</option>'; }).join('') + '</select>' : '<div style="font-size:13px;color:#5b6672">Po přihlášení.</div>')
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px"><button type="button" id="prg-setup-ok" style="padding:10px 18px;border-radius:9px;border:none;background:#0a7c4e;color:#fff;font:inherit;font-weight:700;cursor:pointer">Uložit</button></div></div>';
+    document.body.appendChild(m);
+    var pick = lang;
+    m.querySelectorAll('[data-l]').forEach(function(b){ b.onclick = function(){ pick = b.getAttribute('data-l'); m.querySelectorAll('[data-l]').forEach(function(x){ var on = x === b; x.style.borderColor = on ? '#0a7c4e' : '#dfe4ea'; x.style.background = on ? '#e7f4ee' : '#fff'; }); }; });
+    m.querySelector('#prg-setup-x').onclick = function(){ m.remove(); };
+    m.onclick = function(e){ if (e.target === m) m.remove(); };
+    m.querySelector('#prg-setup-ok').onclick = function(){
+      var sel = m.querySelector('#prg-setup-dc'), dcChanged = false;
+      if (sel) { dcChanged = sel.value !== curDc; try { localStorage.setItem('prg_dc', sel.value); } catch(e) {} }
+      m.remove();
+      if (pick !== lang) setLang(pick);
+      if (dcChanged) window.location.reload();
+    };
+    if (lang !== 'cs') walk(m);
+  }
+  window.PRG_SETUP = { open: openSetup };
+})();
+
+</script>
 </head>
 <body>
 
@@ -476,13 +921,152 @@
     <div id="hub-hint" style="display:none;font-size:12.5px;color:var(--muted);margin:0 0 14px;line-height:1.5;text-align:left;background:var(--bg);border-radius:8px;padding:10px 12px"></div>
     <button class="mode-select-btn wms" onclick="hubChoose('wms')">
       <span class="msb-icon">🏭</span><span class="msb-title">PRG WMS</span>
-      <span class="msb-sub">Příjmy, výdeje a skladové operace · myDevices</span>
+      <span class="msb-sub">Příjmy, výdeje a skladové operace</span>
     </button>
     <button class="mode-select-btn inv" onclick="hubChoose('inventura')">
       <span class="msb-icon">📋</span><span class="msb-title">Inventory Tool</span>
-      <span class="msb-sub">Inventura ze serveru, EAN + lokace, jen EAN</span>
+      <span class="msb-sub">Inventura ze serveru, EAN + lokace, jen EAN, Mezinárodka</span>
+    </button>
+    <button class="mode-select-btn cust" onclick="hubChoose('zakaznici')">
+      <span class="msb-icon">🤝</span><span class="msb-title">Zákazníci</span>
+      <span class="msb-sub">Průša dobalování · myDevices</span>
+    </button>
+    <button class="mode-select-btn" style="background:linear-gradient(135deg,#34495e,#2c3e50)" onclick="openSetup()">
+      <span class="msb-icon">⚙️</span><span class="msb-title">Setup</span>
+      <span class="msb-sub" id="hub-setup-sub" data-noi18n>Jazyk, DC, hlasová hlášení</span>
     </button>
     <button class="modal-btn secondary" id="hub-exit" style="display:none" onclick="hubExit()">Odejít</button>
+  </div>
+</div>
+
+<!-- Modal: Setup (jazyk, DC, hlasová hlášení) -->
+<div class="modal-backdrop" id="modal-setup" style="display:none">
+  <div class="modal" style="text-align:left;max-width:400px">
+    <h2 style="text-align:center;color:#2c3e50">⚙️ Setup</h2>
+    <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Jazyk</div>
+    <div id="su-langs" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:14px"></div>
+    <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Distribuční centrum</div>
+    <button class="modal-btn secondary" id="su-dc" style="margin:0 0 14px" onclick="closeModal('modal-setup');openDcModal()">🏬 –</button>
+    <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Hlasová hlášení chyb</div>
+    <div style="font-size:12.5px;color:var(--muted);margin-bottom:6px" id="su-voice-hint">Hlášení zapnout pro:</div>
+    <div id="su-voice" style="display:flex;flex-direction:column;gap:2px;margin-bottom:8px"></div>
+    <button class="modal-btn secondary" style="margin:0 0 14px" onclick="voiceTest()">💬 Vyzkoušet hlas</button>
+    <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Zvuky</div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14.5px;margin-bottom:14px;min-height:36px"><input type="checkbox" id="su-sound" onchange="if(this.checked!==soundOn())toggleSound()" style="width:20px;height:20px"> 🔊 Zvuky a vibrace</label>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px" id="su-ver"></div>
+    <button class="modal-btn" style="background:#2c3e50" onclick="closeModal('modal-setup');openHub()">✅ Hotovo</button>
+  </div>
+</div>
+
+<!-- Modal: výjimka / foto -->
+<input type="file" id="photo-input" accept="image/*" capture="environment" multiple style="display:none" onchange="photoPicked(this)">
+<div class="modal-backdrop" id="modal-exc" style="display:none">
+  <div class="modal" style="text-align:left">
+    <h2 style="text-align:center;color:#8e44ad">⚠️ Výjimka / 📷 foto</h2>
+    <label style="font-size:13px;font-weight:700">Co se stalo</label>
+    <select id="exc-type" onchange="excTypeUi()" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;margin:4px 0 10px"></select>
+    <label style="font-size:13px;font-weight:700">Týká se (doklad / HB / kód)</label>
+    <input id="exc-ref" type="text" placeholder="např. HB 43M0017885 nebo prázdné" autocomplete="off" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;margin:4px 0 10px">
+    <div id="exc-extra">
+      <label style="font-size:13px;font-weight:700">Popis</label>
+      <textarea id="exc-note" rows="3" placeholder="Co přesně, kolik, kde…" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;margin:4px 0 10px;font-family:inherit"></textarea>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <div style="flex:1"><label style="font-size:13px;font-weight:700">Ks</label><input id="exc-qty" type="number" inputmode="numeric" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:15px"></div>
+        <div style="flex:1.4"><label style="font-size:13px;font-weight:700">Závažnost</label><select id="exc-sev" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:15px"><option value="low">Nízká</option><option value="medium">Střední</option><option value="high">Vysoká</option></select></div>
+      </div>
+      <label style="font-size:13px;display:flex;gap:6px;align-items:center;margin-bottom:10px"><input type="checkbox" id="exc-client" checked> vidí i zákazník v portálu</label>
+    </div>
+    <label style="font-size:13px;font-weight:700">Fotky</label>
+    <div id="exc-photos" style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 12px"></div>
+    <button class="modal-btn" id="exc-save" style="background:#8e44ad" onclick="excSave()">⚠️ Nahlásit výjimku</button>
+    <button class="modal-btn secondary" onclick="excClose()">Zpět</button>
+  </div>
+</div>
+
+<!-- Modal: Kde je zásilka? -->
+<div class="modal-backdrop" id="modal-where" style="display:none">
+  <div class="modal" style="text-align:left">
+    <h2 class="info" style="text-align:center">🔎 Kde je zásilka?</h2>
+    <p style="text-align:center">Naskenuj štítek nebo napiš HB / OH.</p>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input id="where-input" type="text" placeholder="např. 43M0017885" autocomplete="off" style="flex:1;min-width:0;padding:11px;border:1.5px solid var(--border);border-radius:10px;font-size:16px" onkeydown="if(event.key==='Enter'){event.preventDefault();whereLookup();}">
+      <button class="modal-btn info" style="width:auto;margin:0;padding:0 16px" onclick="whereLookup()">OK</button>
+    </div>
+    <div id="where-out" style="font-size:13.5px;line-height:1.45"></div>
+    <button class="modal-btn secondary" onclick="closeModal('modal-where');showInvMenu()">⬅️ Zpět</button>
+  </div>
+</div>
+
+<!-- Modal: tisk štítků / packing listu -->
+<div class="modal-backdrop" id="modal-print" style="display:none">
+  <div class="modal" style="text-align:left">
+    <h2 style="text-align:center;color:#2c3e50">🖨️ Tisk</h2>
+    <label style="font-size:13px;font-weight:700">Tiskárna</label>
+    <select id="pr-printer" onchange="prPrinterPicked()" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;margin:4px 0 4px"></select>
+    <div id="pr-agent" style="font-size:12px;color:var(--muted);margin-bottom:10px"></div>
+    <label style="font-size:13px;font-weight:700">Co tisknout</label>
+    <div id="pr-types" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:4px 0 10px"></div>
+    <label style="font-size:13px;font-weight:700" id="pr-in-label">Kód</label>
+    <div style="display:flex;gap:8px;margin:4px 0 6px">
+      <input id="pr-input" type="text" autocomplete="off" style="flex:1;min-width:0;padding:11px;border:1.5px solid var(--border);border-radius:10px;font-size:16px" onkeydown="if(event.key==='Enter'){event.preventDefault();prLookup();}">
+      <button class="modal-btn secondary" style="width:auto;margin:0;padding:0 14px" onclick="prLookup()">🔎</button>
+    </div>
+    <div id="pr-out" style="font-size:13.5px;line-height:1.45;min-height:22px;margin-bottom:8px"></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <span style="font-size:13px;font-weight:700">Kopií</span>
+      <button class="modal-btn secondary" style="width:44px;margin:0;padding:6px 0" onclick="prCopies(-1)">−</button>
+      <b id="pr-copies" style="font-size:20px;min-width:28px;text-align:center">1</b>
+      <button class="modal-btn secondary" style="width:44px;margin:0;padding:6px 0" onclick="prCopies(1)">+</button>
+    </div>
+    <button class="modal-btn" id="pr-go" style="background:#2c3e50" onclick="prPrint()">🖨️ Tisknout</button>
+    <button class="modal-btn secondary" onclick="closeModal('modal-print');if(!task)showWmsMenu()">⬅️ Zpět</button>
+  </div>
+</div>
+
+<!-- Modal: Yard – vrátnice / rampa -->
+<div class="modal-backdrop" id="modal-yard" style="display:none">
+  <div class="modal" style="text-align:left">
+    <h2 style="text-align:center;color:#2c3e50">🚛 Yard – vrátnice / rampa</h2>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <input id="yd-q" type="text" placeholder="SPZ, kontejner, kód rezervace, doklad" autocomplete="off" style="flex:1;min-width:0;padding:11px;border:1.5px solid var(--border);border-radius:10px;font-size:16px;text-transform:uppercase" oninput="ydRender()">
+      <button class="modal-btn secondary" style="width:auto;margin:0;padding:0 14px" onclick="ydLoad()">↻</button>
+    </div>
+    <div id="yd-list" style="font-size:14px;max-height:52vh;overflow:auto"></div>
+    <button class="modal-btn secondary" onclick="closeModal('modal-yard');if(!task)showWmsMenu()">⬅️ Zpět</button>
+  </div>
+</div>
+
+<!-- Modal: Mezinárodka – co chybí na lokaci -->
+<div class="modal-backdrop" id="modal-intl-missing" style="display:none">
+  <div class="modal" style="text-align:left">
+    <h2 class="info" style="text-align:center" id="intl-missing-title">📋 Chybí na lokaci</h2>
+    <div id="intl-missing-out" style="font-size:14px;line-height:1.5"></div>
+    <button class="modal-btn secondary" onclick="closeModal('modal-intl-missing')">Zavřít</button>
+  </div>
+</div>
+
+<!-- Modal: Zákazníci -->
+<div class="modal-backdrop" id="modal-cust" style="display:none">
+  <div class="modal">
+    <h2 style="color:#8e44ad">🤝 Zákazníci</h2>
+    <p>Vyber zákaznickou činnost:</p>
+    <button class="modal-btn" style="background:#8e44ad" onclick="custPick('prusa')">📦 Průša dobalování</button>
+    <button class="modal-btn info" onclick="custPick('mydev')">📱 myDevices</button>
+    <button class="modal-btn secondary" onclick="backToHub('modal-cust')">⬅️ Zpět do hlavního rozcestníku</button>
+  </div>
+</div>
+
+<!-- Modal: Průša – počet kódů -->
+<div class="modal-backdrop" id="modal-prusa-n" style="display:none">
+  <div class="modal">
+    <h2 style="color:#8e44ad">📦 Průša dobalování</h2>
+    <p>Kolik kódů skenuješ na jednu sadu?</p>
+    <div id="prusa-n-val" style="font-size:44px;font-weight:800;color:#8e44ad;line-height:1.1">3</div>
+    <input type="range" id="prusa-n" min="1" max="10" step="1" value="3" style="width:100%;margin:10px 0 2px;accent-color:#8e44ad;height:34px" oninput="document.getElementById('prusa-n-val').textContent=this.value">
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:12px"><span>1</span><span>5</span><span>10</span></div>
+    <p style="font-size:12.5px;color:var(--muted)">Každý kód musí začínat <b>SN</b> nebo <b>MAT</b>.</p>
+    <button class="modal-btn" style="background:#8e44ad" onclick="prusaStart()">▶ Začít</button>
+    <button class="modal-btn secondary" onclick="closeModal('modal-prusa-n');showCustMenu()">⬅️ Zpět</button>
   </div>
 </div>
 
@@ -526,8 +1110,10 @@
     <button class="modal-btn" onclick="tkStartRepl()">🔁 Doplnění pick lokací</button>
     <button class="modal-btn" onclick="tkOpenCounts()">📋 Cyklická inventura</button>
     <button class="modal-btn info" onclick="tkStartInfo()">🔎 Info lokace / LPN · přesah</button>
-    <button class="modal-btn info" onclick="closeModal('modal-wms-menu');openMyDevices()">📱 myDevices</button>
     <p style="font-size:12.5px;color:var(--muted);margin-top:4px">Inventury (seznam, EAN + lokace, jen EAN) najdeš v <b>Inventory Tool</b>.</p>
+    <button class="modal-btn secondary" style="color:#2c3e50" onclick="openYardScn()">🚛 Yard – vrátnice / rampa</button>
+    <button class="modal-btn secondary" style="color:#2c3e50" onclick="openPrint()">🖨️ Tisk štítků / packing listu</button>
+    <button class="modal-btn secondary" style="color:#8e44ad" onclick="closeModal('modal-wms-menu');openExc(null)">⚠️ Výjimka / 📷 foto</button>
     <button class="modal-btn secondary" onclick="backToHub('modal-wms-menu')">⬅️ Zpět do hlavního rozcestníku</button>
   </div>
 </div>
@@ -615,10 +1201,11 @@
     <input type="file" id="inv-excel-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="loadInvExcelFile(this)">
     <button class="modal-btn" data-inv="server" style="background:var(--accent)" onclick="invPick('server')">☁️ Inventura ze serveru (seznam)</button>
     <button class="modal-btn info" data-inv="ean_loc" onclick="invPick('ean_loc')">📍 EAN + lokace</button>
-    <button class="modal-btn info" data-inv="kit" onclick="invPick('kit')">🖨️ Printer + Flash + Doplněk <span style="font-weight:400;font-size:12px;opacity:.85">(3× S/N = 1 sada)</span></button>
     <button class="modal-btn info" data-inv="ean" onclick="invPick('ean')">🔢 Jen EAN</button>
-    <button class="modal-btn info" data-inv="intl" onclick="invPick('intl')">🌍 Mezinárodka – volné počítání <span style="font-weight:400;font-size:12px;opacity:.85">(43M0007578+0001 → 43M0007578)</span></button>
+    <button class="modal-btn info" data-inv="intl" onclick="invPick('intl')">🌍 Mezinárodka – slepá inventura</button>
     <button class="modal-btn secondary" data-inv="excel" onclick="invPick('excel')">📂 Seznam z Excelu/CSV v zařízení</button>
+    <button class="modal-btn secondary" onclick="closeModal('modal-inv-source');openWhere()">🔎 Kde je zásilka?</button>
+    <button class="modal-btn secondary" style="color:#8e44ad" onclick="closeModal('modal-inv-source');openExc(null)">⚠️ Výjimka / 📷 foto</button>
     <button class="modal-btn secondary" onclick="backToHub('modal-inv-source')">⬅️ Zpět do hlavního rozcestníku</button>
   </div>
 </div>
@@ -768,8 +1355,10 @@
   <div id="manual-row">
     <input id="manual-code" type="text" placeholder="⌨️ Zadat kód ručně…" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" onkeydown="if(event.key==='Enter'){event.preventDefault();manualSubmit();}">
     <button id="manual-ok" onclick="manualSubmit()">OK</button>
-    <button id="input-toggle" onclick="inputToggleClick()" title="Klepnutí: spustit. Podržení: přepnout kamera / čtečka">📷</button>
+    <button id="input-toggle" onclick="inputToggleClick()" title="Přepnout kamera / čtečka">📷</button>
     <button id="sound-btn" onclick="toggleSound()" title="Zvuky zap/vyp">🔊</button>
+    <button id="voice-btn" onclick="toggleVoice()" title="Hlasová hlášení pro tuto úlohu" aria-label="Hlasová hlášení" style="opacity:.45">💬</button>
+    <button id="exc-btn" onclick="openExc()" title="Fotka / výjimka (poškození, manko…)" style="color:#8e44ad">⚠️📷</button>
   </div>
   <input id="wedge-input" type="text" inputmode="none" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" tabindex="-1" aria-hidden="true" style="position:fixed;left:-2000px;top:0;width:10px;height:10px;opacity:0">
   <button id="manual-btn" onclick="manualEntry()" style="display:none;margin:6px 16px 0;padding:9px 14px;border:1.5px solid #e2e6ed;border-radius:9px;background:#fff;font-size:14px;font-weight:600;cursor:pointer">⌨️ Kód nejde přečíst – zadat ručně</button>
@@ -787,8 +1376,8 @@
 <div id="bottom-bar">
   <button id="scan-btn" disabled onclick="triggerScan()">📷 SKENOVAT</button>
   <div class="ctrl-row">
-    <button class="ctrl-btn start"  onclick="startCam()">▶ Start</button>
-    <button class="ctrl-btn stop"   onclick="stopCam()">⏹ Stop</button>
+    <button class="ctrl-btn go" id="startstop-btn" onclick="startStopClick()">▶ Start</button>
+    <button class="ctrl-btn home"   onclick="openHub()">🏠 Domů</button>
     <button class="ctrl-btn exp"    onclick="exportCSV()">📥 CSV</button>
     <button class="ctrl-btn rst"    onclick="resetData()">♻ Reset</button>
     <button class="ctrl-btn mydev" id="mode-action-btn" onclick="bottomModeBtn()">📱 myDev</button>
@@ -890,7 +1479,7 @@ function obRelogin() {
 function obRes(err) { if (!err) return { s: 'done' }; if (obIsNet(err)) return { s: 'net' }; if (obIsAuth(err)) return { s: 'auth', msg: err.message || String(err) }; return { s: 'fail', msg: err.message || String(err) }; }
 function obLogGet() { try { return JSON.parse(localStorage.getItem('prg_outbox_log') || '[]'); } catch(e) { return []; } }
 function obLog(kind, msg) { var l = obLogGet(); l.unshift({ t: new Date().toISOString(), kind: kind, msg: msg }); try { localStorage.setItem('prg_outbox_log', JSON.stringify(l.slice(0, 50))); } catch(e) {} }
-var OB_LABEL = { scan: 'sken', inv_found: 'inventura – nalezeno', inv_newloc_item: 'inventura – nové umístění', inv_newloc_extra: 'inventura – nové umístění', inv_extra: 'inventura – přebývá', inv_list_active: 'inventura – zahájení', inv_complete: 'inventura – uzavření', inv_ean_start: 'inventura EAN – zahájení', inv_ean_finish: 'inventura EAN – uzavření', rpc: 'WMS úloha' };
+var OB_LABEL = { scan: 'sken', inv_found: 'inventura – nalezeno', inv_newloc_item: 'inventura – nové umístění', inv_newloc_extra: 'inventura – nové umístění', inv_extra: 'inventura – přebývá', inv_list_active: 'inventura – zahájení', inv_complete: 'inventura – uzavření', inv_ean_start: 'inventura EAN – zahájení', inv_ean_finish: 'inventura EAN – uzavření', rpc: 'WMS úloha', exception: 'výjimka / foto', print: 'tisk' };
 
 async function obExec(op) {
   try {
@@ -953,6 +1542,11 @@ async function obExec(op) {
       else r = await supa.from('inventory_lists').update({ status: 'completed', completed_by: op.user, completed_at: op.at }).eq('session_uid', op.session_uid).neq('status', 'completed');
       return obRes(r.error);
     }
+    if (op.kind === 'exception') return await obExecException(op);
+    if (op.kind === 'print') {
+      r = await supa.from('print_jobs').upsert(op.row, { onConflict: 'client_uid', ignoreDuplicates: true });
+      return obRes(r.error);
+    }
     if (op.kind === 'rpc') {
       r = await supa.rpc(op.fn, op.args);
       if (r.error) { if (obIsNet(r.error)) return { s: 'net' }; return { s: 'fail', msg: tkErr(r.error.message || String(r.error)) }; }
@@ -1000,7 +1594,52 @@ async function obDoFlush() {
   await obBadgeRefresh();
   return results;
 }
-function obFlush() { OB.chain = OB.chain.then(obDoFlush, obDoFlush); return OB.chain; }
+function obFlush() { OB.chain = OB.chain.then(obDoFlush, obDoFlush); OB.chain.then(function(){ setTimeout(deviceBeat, 500); }); return OB.chain; }
+// ── Přehled zařízení (web Uživatelé → Zařízení): verze, neodeslané záznamy, poslední spojení ──
+var DEVICE_ID = (function(){ try { var d = localStorage.getItem('prg_device_id'); if (!d) { d = 'DEV-' + Math.random().toString(36).slice(2, 8).toUpperCase(); localStorage.setItem('prg_device_id', d); } return d; } catch(e) { return 'DEV-?'; } })();
+function deviceLabel() { try { return localStorage.getItem('prg_device_label') || ''; } catch(e) { return ''; } }
+var _beatAt = 0;
+// ── chybné skeny pro výkon pracovníků (odesílají se s heartbeatem) ──
+var _lastScan = '';
+function logScanErr(kind) {
+  try {
+    if (!currentUserId) return;
+    var a = JSON.parse(localStorage.getItem('prg_scan_err') || '[]');
+    a.push({ client_uid: obUid(), kind: kind, code: String(_lastScan || '').slice(0, 80), mode: String(appMode || '') + (task ? ':' + task.kind : '') + (eanIntl && eanCount ? ':intl' : ''),
+      user_id: currentUserId, user_name: currentUser || null, device_id: DEVICE_ID, dc_id: currentDcId, at: new Date().toISOString() });
+    localStorage.setItem('prg_scan_err', JSON.stringify(a.slice(-500)));
+  } catch(e) {}
+}
+async function flushScanErr() {
+  var a; try { a = JSON.parse(localStorage.getItem('prg_scan_err') || '[]'); } catch(e) { a = []; }
+  if (!a.length) return;
+  var batch = a.slice(0, 100);
+  var r = await supa.from('scan_errors').upsert(batch, { onConflict: 'client_uid', ignoreDuplicates: true });
+  if (r && !r.error) {
+    var sent = {}; batch.forEach(function(x){ sent[x.client_uid] = 1; });
+    var now; try { now = JSON.parse(localStorage.getItem('prg_scan_err') || '[]'); } catch(e) { now = []; }
+    try { localStorage.setItem('prg_scan_err', JSON.stringify(now.filter(function(x){ return !sent[x.client_uid]; }))); } catch(e) {}
+  } else if (r && r.error && /scan_errors|schema cache|does not exist/i.test(r.error.message || '')) {
+    try { localStorage.setItem('prg_scan_err', JSON.stringify(a.slice(-100))); } catch(e) {}   // SQL dávky E ještě neběželo
+  }
+}
+async function deviceBeat(force) {
+  if (!currentUserId || !navigator.onLine || OB.authLost) return;
+  if (!force && Date.now() - _beatAt < 20000) return;
+  _beatAt = Date.now();
+  try {
+    await supa.from('devices').upsert({ device_id: DEVICE_ID, label: deviceLabel() || null, user_id: currentUserId, user_name: currentUser, app_version: APP_VERSION,
+      input_mode: inputMode, pending: OB.count || 0, failed: obFailGet().length, dc_id: currentDcId, user_agent: String(navigator.userAgent || '').slice(0, 200), last_seen: new Date().toISOString() }, { onConflict: 'device_id' });
+  } catch(e) {}
+  try { await flushScanErr(); } catch(e) {}
+}
+setInterval(function(){ deviceBeat(true); }, 120000);
+function renameDevice() {
+  var v = prompt('Název tohoto zařízení (např. PRG-CN80-006):', deviceLabel());
+  if (v == null) return;
+  try { localStorage.setItem('prg_device_label', String(v).trim()); } catch(e) {}
+  renderNetModal(); deviceBeat(true);
+}
 // Uloží záznam do fronty a hned zkusí odeslat (ve správném pořadí). Vrací {s:'done'|'conflict'|'fail'|'queued', ...}
 // Inventura se na serveru označí jako aktivní až s prvním skenem (ne při pouhém otevření)
 var OB_DEFER = [];
@@ -1044,7 +1683,8 @@ async function renderNetModal() {
   var all = await obAll(), by = {};
   all.forEach(function(o){ var l = OB_LABEL[o.kind] || o.kind; by[l] = (by[l] || 0) + 1; });
   var log = obLogGet();
-  var h = '<p>Stav: <b>' + (navigator.onLine ? '🟢 připojeno' : '🔴 bez připojení') + '</b> · verze scanneru <b>' + APP_VERSION + '</b></p>';
+  var h = '<p>Stav: <b>' + (navigator.onLine ? '🟢 připojeno' : '🔴 bez připojení') + '</b> · verze scanneru <b>' + APP_VERSION + '</b></p>' +
+    '<p style="font-size:13px">Zařízení: <b>' + escHtml(deviceLabel() || DEVICE_ID) + '</b> <a href="#" onclick="renameDevice();return false" style="color:#2980b9">✏️ přejmenovat</a></p>';
   h += all.length ? ('<p>Čeká na odeslání: <b>' + all.length + '</b> (' + Object.keys(by).map(function(k){ return by[k] + '× ' + k; }).join(', ') + ').<br><span style="color:#7a8090;font-size:12.5px">Záznamy jsou uložené v tomto zařízení a odešlou se samy, jakmile bude signál. Nemaž data prohlížeče.</span></p>')
                   : '<p>✅ Vše je odesláno.</p>';
   if (log.length) h += '<p style="margin-top:10px"><b>Hlášení</b></p>' + log.slice(0, 15).map(function(l){ return '<div style="font-size:12.5px;padding:4px 0;border-top:1px solid #eef0f4;color:' + (l.kind === 'fail' ? '#c0392b' : '#b35a00') + '">' + new Date(l.t).toLocaleString('cs-CZ') + ' · ' + escHtml(l.msg) + '</div>'; }).join('');
@@ -1095,6 +1735,33 @@ function beep(freq, dur) {
     o.start(); o.stop(audioCtx.currentTime+dur);
   } catch(e){}
 }
+
+// Vlastní posuvník (jezdec) u oken, která se nevejdou na výšku – viditelný i v iPhonu
+function msbUpdate(m) {
+  var w = m._msb; if (!w) return;
+  var tr = w.firstChild, th = tr.firstChild, ch = m.clientHeight, sh = m.scrollHeight;
+  if (sh <= ch + 2) { w.style.display = 'none'; return; }
+  w.style.display = 'block';
+  var trackH = ch - 16; tr.style.height = trackH + 'px';
+  var thumbH = Math.max(28, trackH * ch / sh);
+  th.style.height = thumbH + 'px';
+  th.style.top = ((trackH - thumbH) * m.scrollTop / (sh - ch)) + 'px';
+}
+function msbAttach(m) {
+  if (!m._msb) {
+    var w = document.createElement('div'); w.className = 'msb';
+    w.innerHTML = '<div class="msb-track"><div class="msb-thumb"></div></div>';
+    m.insertBefore(w, m.firstChild); m._msb = w;
+    m.addEventListener('scroll', function(){ msbUpdate(m); }, { passive: true });
+  }
+  msbUpdate(m);
+}
+(function(){
+  function scan() { document.querySelectorAll('.modal-backdrop').forEach(function(b){ if (b.style.display === 'flex') { var m = b.querySelector('.modal'); if (m) { m.scrollTop = m.scrollTop; requestAnimationFrame(function(){ msbAttach(m); }); } } }); }
+  var mo = new MutationObserver(function(){ scan(); });
+  document.querySelectorAll('.modal-backdrop').forEach(function(b){ mo.observe(b, { attributes: true, attributeFilter: ['style'] }); });
+  window.addEventListener('resize', scan);
+})();
 function soundOn() { try { return localStorage.getItem('prg_sound') !== 'off'; } catch(e) { return true; } }
 function toggleSound() {
   var on = !soundOn();
@@ -1105,6 +1772,7 @@ function toggleSound() {
 function updateSoundBtn() { var b = document.getElementById('sound-btn'); if (b) b.textContent = soundOn() ? '🔊' : '🔇'; }
 // bzučák při chybě (špatná lokace, duplicita, kód mimo seznam…)
 function buzz() {
+  voiceHook(null);
   try { if (navigator.vibrate) navigator.vibrate([250, 120, 250]); } catch(e) {}
   if (!soundOn()) return;
   try {
@@ -1123,6 +1791,7 @@ function buzz() {
 });
 // „Není v seznamu“ – tři rychlé vysoké tóny
 function soundNotInList() {
+  logScanErr('not_in_list'); voiceHook('not_in_list');
   try { if (navigator.vibrate) navigator.vibrate([90, 60, 90, 60, 90]); } catch(e) {}
   if (!soundOn()) return;
   try {
@@ -1138,6 +1807,7 @@ function soundNotInList() {
 }
 // „Špatný kód“ (neznámý formát, kód destinace) – dlouhý hluboký tón
 function soundBadCode() {
+  logScanErr('bad_code'); voiceHook('bad_format');
   try { if (navigator.vibrate) navigator.vibrate([700]); } catch(e) {}
   if (!soundOn()) return;
   try {
@@ -1150,7 +1820,7 @@ function soundBadCode() {
   } catch(e) {}
 }
 function beepWarn()  { beep(600,0.18); }
-function beepError() { beep(300,0.25); setTimeout(function(){beep(300,0.25);},320); }
+function beepError() { logScanErr('error'); voiceHook('error'); beep(300,0.25); setTimeout(function(){beep(300,0.25);},320); }
 function beepOk()    { beep(1480,0.08); setTimeout(function(){beep(1760,0.1);},110); }
 
 // ── State ──────────────────────────────────────────────────
@@ -1158,7 +1828,7 @@ var currentUser = '';
 var useLocation = false;
 var eanIntl = false;
 var intlSeen = {}, intlFull = null; // Mezinárodka: už naskenované celé štítky (s +pořadím)    // Mezinárodka: z kódu se bere jen část před „+“ (číslo zásilky bez pořadí kusu)
-var APP_VERSION = '5-54';
+var APP_VERSION = '5-63';
 var eanCount = false;   // Inventory Tool: počítání EAN (s lokací nebo bez)
 var eanSession = null;  // session_uid volné inventury EAN – na serveru jako řádek inventory_lists (kind ean / ean_loc)
 var expectingLoc = false;
@@ -1194,7 +1864,7 @@ var locPill   = document.getElementById('loc-pill');
 var devPill   = document.getElementById('dev-pill');
 var statusBar = document.getElementById('status-bar');
 
-function setStatus(m) { statusBar.textContent = m; }
+function setStatus(m) { statusBar.textContent = m; if (VOICE_PEND) voiceFromStatus(m); }
 function setCamSt(m)  { camSt.textContent = m; }
 function closeModal(id) { document.getElementById(id).style.display='none'; }
 
@@ -1359,7 +2029,8 @@ function updateDcBadge() {
   currentDcCode = c ? c.code : '';
   if (!c) { b.style.display = 'none'; return; }
   l.textContent = c.code;
-  b.style.display = 'flex';
+  b.style.display = 'none';   // DC se přepíná v Setupu (hlavní rozcestník)
+  hubSetupSub();
   b.style.cursor = dcList.length > 1 ? 'pointer' : 'default';
 }
 function openDcModal(forcePick) {
@@ -1412,6 +2083,7 @@ async function dcApply() {
 }
 
 async function onLoggedIn(user) {
+  setTimeout(function(){ deviceBeat(true); }, 4000);
   currentUserId = user.id;
   // Get profile name
   var prof = await supa.from('profiles').select('name,username,role,is_active,allowed_apps').eq('id', user.id).single();
@@ -1518,6 +2190,7 @@ function openHub() {
   hint.innerHTML = '';
   hint.style.display = 'none';   // rozjetá inventura se hlásí až po klepnutí na danou položku
   document.getElementById('hub-exit').style.display = 'block';
+  hubSetupSub();
   document.getElementById('mode-select-screen').style.display = 'flex';
 }
 function hubClose() {
@@ -1535,7 +2208,7 @@ function invRunType() {
 }
 function invRunName() {
   return intlV ? ('Mezinárodka ' + intlV.name) : invList.length ? (invListMeta ? invListMeta.name : 'z Excelu v telefonu') :
-    (kitMode ? 'Printer + Flash + Doplněk' : eanIntl ? 'Mezinárodka' : (useLocation ? 'EAN + lokace' : 'jen EAN')) + ' (' + rows.length + ' řádků)';
+    (kitMode ? 'Průša dobalování' : eanIntl ? 'Mezinárodka' : (useLocation ? 'EAN + lokace' : 'jen EAN')) + ' (' + rows.length + ' řádků)';
 }
 function markInvMenu() {
   var rt = invRunType();
@@ -1558,17 +2231,563 @@ function invPick(type) {
   }
   if (type === 'server') openInvServerPick();
   else if (type === 'ean_loc') startEanCount(true);
-  else if (type === 'kit') startEanCount(false, false, false, true);
+  else if (type === 'kit') custPick('prusa');
   else if (type === 'ean') startEanCount(false);
   else if (type === 'intl') startEanCount(false, true);
   else if (type === 'excel') document.getElementById('inv-excel-input').click();
 }
 function showInvMenu() { markInvMenu(); document.getElementById('modal-inv-source').style.display = 'flex'; }
 function showWmsMenu() { document.getElementById('modal-wms-menu').style.display = 'flex'; try { tkCounts(); } catch(e) {} }
+// ── Kde je zásilka? ──
+function openWhere() {
+  document.getElementById('where-input').value = '';
+  document.getElementById('where-out').innerHTML = '<span style="color:var(--muted)">Ukáže poslední skeny (lokace, kdo, kdy) a v jakém exportu/importu zásilka je.</span>';
+  document.getElementById('modal-where').style.display = 'flex';
+  setTimeout(focusWedge, 100);
+}
+function whereOpen() { return document.getElementById('modal-where').style.display === 'flex'; }
+async function whereLookup(code) {
+  var v = String(code != null ? code : document.getElementById('where-input').value).trim().toUpperCase();
+  if (!v) return;
+  if (isDestCode(v)) { soundBadCode(); document.getElementById('where-out').innerHTML = '⛔ ' + escHtml(v) + ' je kód destinace – naskenuj horní kód.'; return; }
+  document.getElementById('where-input').value = v;
+  var out = document.getElementById('where-out');
+  if (!navigator.onLine) { out.innerHTML = '📴 Bez signálu – hledání potřebuje připojení.'; return; }
+  out.innerHTML = '⏳ Hledám…';
+  try {
+    var r = await supa.rpc('wms_where_shipment', { p_code: v });
+    if (r.error) throw r.error;
+    var d = r.data || {}, seen = d.seen || [], lists = d.lists || [];
+    if (!seen.length && !lists.length) { soundNotInList(); out.innerHTML = '❓ <b>' + escHtml(d.code || v) + '</b> – nikde nenalezeno (není v žádném exportu/importu ani skenu).'; return; }
+    beepOk();
+    var h = '<div style="font-size:16px;font-weight:700;margin-bottom:6px">' + escHtml(d.code || v) + '</div>';
+    if (seen.length) {
+      var s0 = seen[0];
+      h += '<div style="background:#e8f6ef;border-radius:10px;padding:10px;margin-bottom:8px">📍 Naposledy viděno: <b style="font-size:18px">' + escHtml(s0.loc || '–') + '</b><br>' + escHtml(s0.by || '') + ' · ' + new Date(s0.at).toLocaleString('cs-CZ') + '<br><span style="color:var(--muted)">' + escHtml(s0.list || '') + '</span></div>';
+      if (seen.length > 1) h += '<div style="color:var(--muted);margin-bottom:8px">Dřív: ' + seen.slice(1, 5).map(function(x){ return escHtml(x.loc || '–') + ' (' + new Date(x.at).toLocaleDateString('cs-CZ') + ')'; }).join(', ') + '</div>';
+    } else h += '<div style="background:#fff8e6;border-radius:10px;padding:10px;margin-bottom:8px">Zatím nenaskenováno v žádné inventuře.</div>';
+    lists.slice(0, 4).forEach(function(x){
+      h += '<div style="border-top:1px solid var(--border);padding:6px 0">' + (x.type === 'import' ? '📥 Import' : '📤 Export') + ': <b>' + escHtml(x.list) + '</b>' + (x.list_status === 'completed' ? ' (dokončená)' : '') +
+        '<br>PUT lokace: <b>' + escHtml(x.loc || '–') + '</b>' + (x.new_loc ? ' · nalezeno: <b>' + escHtml(x.new_loc) + '</b>' : '') + ' · ' + (x.found || 0) + '/' + (x.exp || 0) + ' ks' +
+        ((x.dest || x.consignee) ? '<br><span style="color:var(--muted)">' + escHtml([x.dest, x.consignee].filter(Boolean).join(' · ')) + '</span>' : '') + '</div>';
+    });
+    out.innerHTML = h;
+  } catch(e) { out.innerHTML = '⚠️ ' + escHtml(e.message || String(e)) + (/wms_where_shipment/.test(String(e.message)) ? ' – spusť v Supabase intl_b_setup-01.sql' : ''); }
+}
+// ── ⚙️ Setup: jazyk, DC, hlasová hlášení ──
+var VOICE_MODES = [['wms', '🏭 Úlohy WMS'], ['server', '☁️ Inventura ze serveru'], ['intl', '🌍 Mezinárodka (seznam i slepá)'], ['ean_loc', '📍 EAN + lokace'], ['ean', '🔢 Jen EAN'], ['prusa', '📦 Průša dobalování'], ['other', '📋 Ostatní']];
+function voiceModes() { try { return JSON.parse(localStorage.getItem('prg_voice_modes') || '{}'); } catch(e) { return {}; } }
+function voiceSetModes(m) { try { localStorage.setItem('prg_voice_modes', JSON.stringify(m)); } catch(e) {} updateVoiceBtn(); }
+function voiceCtx() {
+  if (task) return 'wms';
+  if (intlV || (eanCount && eanIntl)) return 'intl';
+  if (invMode && invList.length) return 'server';
+  if (eanCount && kitMode) return 'prusa';
+  if (eanCount && useLocation) return 'ean_loc';
+  if (eanCount) return 'ean';
+  return 'other';
+}
+function voiceOn() { return !!voiceModes()[voiceCtx()]; }
+function updateVoiceBtn() {
+  var b = document.getElementById('voice-btn'); if (!b) return;
+  var on = voiceOn(); b.style.opacity = on ? '1' : '.45'; b.style.borderColor = on ? '#2980b9' : ''; b.style.background = on ? '#eaf3fb' : '';
+  b.title = on ? 'Hlasová hlášení: zapnuto pro tuto úlohu' : 'Hlasová hlášení: vypnuto pro tuto úlohu';
+}
+function toggleVoice() {
+  var m = voiceModes(), k = voiceCtx(); m[k] = !m[k]; voiceSetModes(m);
+  var name = (VOICE_MODES.find(function(x){ return x[0] === k; }) || [, ''])[1].replace(/^\S+\s/, '');
+  setStatus(m[k] ? '💬 Hlasová hlášení zapnuta · ' + name : '💬 Hlasová hlášení vypnuta · ' + name);
+  if (m[k]) { if (!PRG_I18N.say('test')) setStatus('⚠️ Toto zařízení neumí číst nahlas'); }
+}
+function voiceTest() { if (!PRG_I18N.say('test')) alert('Toto zařízení / prohlížeč neumí číst nahlas.'); else if (!PRG_I18N.hasVoice()) setStatus('⚠️ Pro zvolený jazyk není v zařízení nainstalovaný hlas – použije se výchozí'); }
+// po chybovém zvuku: druh chyby z textu hlášení (setStatus), jinak výchozí podle zvuku
+var VOICE_PEND = null;
+function voiceHook(def) {
+  if (!voiceOn()) return;
+  if (VOICE_PEND) clearTimeout(VOICE_PEND.t);
+  VOICE_PEND = { def: def, t: setTimeout(function(){ var p = VOICE_PEND; VOICE_PEND = null; if (p && p.def) PRG_I18N.say(p.def); }, 150) };
+}
+function voiceFromStatus(m) {
+  if (!VOICE_PEND) return;
+  var k = PRG_I18N.classify(m) || VOICE_PEND.def;
+  clearTimeout(VOICE_PEND.t); VOICE_PEND = null;
+  if (k) PRG_I18N.say(k);
+}
+function openSetup() {
+  closeModal('mode-select-screen');
+  var cur = PRG_I18N.lang;
+  document.getElementById('su-langs').innerHTML = PRG_I18N.LANGS.map(function(L){
+    var on = L[0] === cur;
+    return '<button onclick="setupLang(\'' + L[0] + '\')" style="display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;border:1.5px solid ' + (on ? '#0a7c4e' : 'var(--border)') + ';background:' + (on ? '#e7f4ee' : '#fff') + ';font-size:14px;font-weight:600;text-align:left;min-height:44px" data-noi18n><span style="font-size:18px">' + L[2] + '</span>' + L[1] + '</button>';
+  }).join('');
+  var c = currentDcId != null ? dcById(currentDcId) : null;
+  document.getElementById('su-dc').textContent = '🏬 ' + (c ? c.code + ' – ' + (c.name || '') : '–') + (dcList.length > 1 ? '  ▸' : '');
+  var vm = voiceModes();
+  document.getElementById('su-voice').innerHTML = VOICE_MODES.map(function(x){
+    return '<label style="display:flex;gap:8px;align-items:center;font-size:14.5px;min-height:36px"><input type="checkbox" ' + (vm[x[0]] ? 'checked ' : '') + 'onchange="var m=voiceModes();m[\'' + x[0] + '\']=this.checked;voiceSetModes(m)" style="width:20px;height:20px"> ' + x[1] + '</label>';
+  }).join('');
+  document.getElementById('su-sound').checked = soundOn();
+  document.getElementById('su-ver').textContent = 'Verze ' + APP_VERSION + (window.speechSynthesis ? '' : ' · zařízení neumí číst nahlas');
+  document.getElementById('modal-setup').style.display = 'flex';
+}
+function setupLang(l) { PRG_I18N.setLang(l); openSetup(); }
+function hubSetupSub() {
+  var L = PRG_I18N.LANGS.find(function(x){ return x[0] === PRG_I18N.lang; }) || PRG_I18N.LANGS[0];
+  var c = currentDcId != null ? dcById(currentDcId) : null;
+  var el = document.getElementById('hub-setup-sub'); if (el) el.textContent = L[2] + ' ' + L[1] + (c ? ' · ' + c.code : '');
+}
+// ── 🚛 Yard: odbavení na vrátnici a rampě ──
+var YD = { rows: [], open: null };
+var YD_ST = { planned: 'Plánováno', arrived: 'Přijel', at_door: 'U rampy', done: 'Hotovo', departed: 'Odjel', cancelled: 'Zrušeno' };
+var YD_NEXT = { planned: ['arrived', '✅ Přijel'], arrived: ['at_door', '🚪 K rampě'], at_door: ['done', '📦 Hotovo'], done: ['departed', '👋 Odjel'] };
+var YD_TS = { arrived: 'arrived_at', at_door: 'door_at', done: 'done_at', departed: 'departed_at' };
+function yardOpen() { var m = document.getElementById('modal-yard'); return !!m && m.style.display === 'flex'; }
+function openYardScn() { closeModal('modal-wms-menu'); YD.open = null; document.getElementById('yd-q').value = ''; document.getElementById('modal-yard').style.display = 'flex'; ydLoad(); setTimeout(function(){ if (inputMode === 'reader') focusWedge(); }, 100); }
+async function ydLoad() {
+  var el = document.getElementById('yd-list');
+  if (!navigator.onLine) { el.innerHTML = '📴 Yard potřebuje připojení.'; return; }
+  el.innerHTML = '⏳ Načítám…';
+  var from = new Date(); from.setHours(0, 0, 0, 0); var to = new Date(from.getTime() + 2 * 864e5); from = new Date(from.getTime() - 864e5);
+  var q = supa.from('yard_visits').select('*').gte('appointment_at', from.toISOString()).lt('appointment_at', to.toISOString()).not('status', 'in', '(departed,cancelled)').order('appointment_at');
+  if (currentDcId != null) q = q.eq('dc_id', currentDcId);
+  var r = await q;
+  if (r.error) { el.innerHTML = '⚠️ ' + escHtml(r.error.message); return; }
+  YD.rows = r.data || []; ydRender();
+}
+function ydRender() {
+  var el = document.getElementById('yd-list'), q = document.getElementById('yd-q').value.trim().toUpperCase().replace(/\s+/g, '');
+  var list = YD.rows.filter(function(x){ return !q || [x.plate, x.container, x.booking_code, x.doc_ref, x.carrier].some(function(v){ return String(v || '').toUpperCase().replace(/\s+/g, '').indexOf(q) >= 0; }); });
+  if (!list.length) { el.innerHTML = '<div style="color:var(--muted);padding:8px 0">' + (q ? 'Nic nenalezeno pro ' + escHtml(q) + '.' : 'Dnes žádná auta v plánu.') + '</div>'; return; }
+  el.innerHTML = list.map(function(x){
+    var t = new Date(x.appointment_at), hm = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2), nx = YD_NEXT[x.status], op = YD.open === x.id || list.length === 1;
+    return '<div style="border:1.5px solid ' + (op ? '#2c3e50' : 'var(--border)') + ';border-radius:10px;padding:9px 10px;margin-bottom:7px" onclick="YD.open=' + x.id + ';ydRender()">'
+      + '<div style="display:flex;justify-content:space-between;gap:6px"><b>' + hm + ' ' + (x.direction === 'in' ? '⬇' : '⬆') + ' ' + escHtml(x.plate || x.container || '–') + '</b><span style="font-size:12px;background:#eef1f5;border-radius:8px;padding:1px 7px">' + escHtml(YD_ST[x.status] || x.status) + '</span></div>'
+      + '<div style="font-size:12.5px;color:var(--muted)">' + escHtml([x.carrier, x.container && x.plate ? x.container : '', x.doc_ref, x.door ? 'rampa ' + x.door : '', x.booking_code ? 'kód ' + x.booking_code : ''].filter(Boolean).join(' · ')) + '</div>'
+      + (op && nx ? '<div style="display:flex;gap:6px;margin-top:8px"><button class="modal-btn" style="margin:0;flex:2;background:#2c3e50" onclick="event.stopPropagation();ydSet(' + x.id + ',\'' + nx[0] + '\')">' + nx[1] + '</button>'
+        + (x.status === 'planned' ? '<button class="modal-btn secondary" style="margin:0;flex:1" onclick="event.stopPropagation();ydSet(' + x.id + ',\'cancelled\')">Zrušit</button>' : '') + '</div>' : '')
+      + '</div>';
+  }).join('');
+}
+async function ydSet(id, st) {
+  var x = YD.rows.find(function(r){ return r.id === id; }); if (!x) return;
+  var p = { status: st, updated_at: new Date().toISOString() };
+  if (st === 'at_door') { var d = prompt('Na kterou rampu?', x.door || ''); if (!d) return; p.door = d.trim().toUpperCase(); }
+  if (st === 'cancelled' && !confirm('Zrušit příjezd ' + (x.plate || x.container || '') + '?')) return;
+  if (YD_TS[st]) p[YD_TS[st]] = new Date().toISOString();
+  var r = await supa.from('yard_visits').update(p).eq('id', id);
+  if (r.error) { buzz(); setStatus('⚠️ ' + r.error.message); return; }
+  beepOk(); setStatus('🚛 ' + (x.plate || x.container || '') + ' → ' + (YD_ST[st] || st) + (p.door ? ' (' + p.door + ')' : ''));
+  Object.assign(x, p); if (st === 'departed' || st === 'cancelled') YD.rows = YD.rows.filter(function(r){ return r.id !== id; });
+  ydRender();
+}
+// ── 🖨️ Tisk štítků a packing listu na síťové tiskárny (ZPL přes tiskového agenta na PC) ──
+var PR = { type: 'lpn', copies: 1, printers: [], data: null, code: '' };
+var PR_TYPES = [ ['lpn', '🏷️ LPN / paleta', 'LPN palety'], ['loc', '📍 Lokace', 'Kód lokace'], ['sku', '📦 Položka (SKU)', 'SKU nebo EAN'],
+  ['hb', '🚚 HB / zásilka', 'HB (horní kód zásilky)'], ['pl', '📄 Packing list – štítek', 'Číslo výdeje'], ['pla4', '🖨️ Packing list A4', 'Číslo výdeje'], ['carrier', '📦 Štítek dopravce (UPS/FedEx)', 'Číslo výdeje'] ];
+function printOpen() { var m = document.getElementById('modal-print'); return !!m && m.style.display === 'flex'; }
+function prGet(k, d) { try { var v = localStorage.getItem(k); return v == null ? d : v; } catch(e) { return d; } }
+function prSet(k, v) { try { localStorage.setItem(k, v); } catch(e) {} }
+async function openPrint(type, code) {
+  closeModal('modal-wms-menu');
+  PR.type = type || prGet('prg_print_type', 'lpn'); PR.copies = 1; PR.data = null; PR.code = '';
+  document.getElementById('pr-copies').textContent = '1';
+  document.getElementById('pr-types').innerHTML = PR_TYPES.map(function(t){
+    return '<button id="pr-t-' + t[0] + '" onclick="prType(\'' + t[0] + '\')" style="padding:10px 6px;border-radius:10px;border:1.5px solid var(--border);background:#fff;font-size:13.5px;font-weight:600;text-align:left">' + t[1] + '</button>';
+  }).join('');
+  // kontext: rozdělaný výdej → packing list
+  if (!code && task && (task.kind === 'pick' || task.kind === 'pack' || task.kind === 'load') && !task.wave && task.doc) { if (!type) PR.type = 'pl'; code = task.doc.delivery_number; }
+  prType(PR.type, true);
+  document.getElementById('pr-input').value = code || '';
+  document.getElementById('modal-print').style.display = 'flex';
+  await prLoadPrinters();
+  if (code) prLookup(code); else setTimeout(function(){ if (inputMode === 'reader') focusWedge(); else document.getElementById('pr-input').focus(); }, 100);
+}
+function prType(t, quiet) {
+  PR.type = t; prSet('prg_print_type', t); PR.data = null;
+  PR_TYPES.forEach(function(x){ var b = document.getElementById('pr-t-' + x[0]); if (!b) return; var on = x[0] === t; b.style.background = on ? '#2c3e50' : '#fff'; b.style.color = on ? '#fff' : 'inherit'; b.style.borderColor = on ? '#2c3e50' : 'var(--border)'; });
+  var ti = PR_TYPES.find(function(x){ return x[0] === t; });
+  document.getElementById('pr-in-label').textContent = ti[2] + ' – naskenuj nebo napiš';
+  document.getElementById('pr-printer').disabled = t === 'pla4';
+  document.getElementById('pr-go').textContent = t === 'pla4' ? '🖨️ Otevřít tisk A4' : (t === 'carrier' ? '📦 Vytvořit zásilku a tisknout' : '🖨️ Tisknout');
+  if (!quiet) { var v = document.getElementById('pr-input').value.trim(); document.getElementById('pr-out').innerHTML = ''; if (v) prLookup(v); }
+}
+function prCopies(d) { PR.copies = Math.max(1, Math.min(50, PR.copies + d)); document.getElementById('pr-copies').textContent = PR.copies; }
+async function prLoadPrinters() {
+  var sel = document.getElementById('pr-printer'), ag = document.getElementById('pr-agent');
+  var cache = []; try { cache = JSON.parse(prGet('prg_printers', '[]')); } catch(e) {}
+  PR.printers = cache;
+  if (navigator.onLine) {
+    try {
+      var r = await supa.from('printers').select('id,name,ip,port,dc_id,label_w_mm,label_h_mm,dpi,kind').eq('is_active', true).order('name');
+      if (!r.error) { PR.printers = r.data || []; prSet('prg_printers', JSON.stringify(PR.printers)); }
+      else if (/printers/.test(r.error.message || '')) ag.innerHTML = '⚠️ Tisk není nastavený – spusť v Supabase printq_setup-01.sql';
+      var a = await supa.from('print_agents').select('agent,last_seen').order('last_seen', { ascending: false }).limit(1);
+      if (!a.error) {
+        var s = a.data && a.data[0], age = s ? (Date.now() - new Date(s.last_seen).getTime()) / 1000 : 1e9;
+        ag.innerHTML = !s ? '⚠️ Tiskový agent na PC ještě nikdy neběžel – úlohy počkají ve frontě' :
+          age < 60 ? '🟢 Tiskový agent běží (' + escHtml(s.agent) + ')' : '🔴 Tiskový agent na PC neběží (naposledy ' + new Date(s.last_seen).toLocaleString('cs-CZ') + ') – úlohy počkají ve frontě';
+      }
+    } catch(e) {}
+  } else ag.textContent = '📴 Bez signálu – úloha se odešle po připojení';
+  var mine = PR.printers.filter(function(p){ return currentDcId == null || p.dc_id == null || String(p.dc_id) === String(currentDcId); });
+  if (!mine.length) mine = PR.printers;
+  var last = prGet('prg_printer', '');
+  sel.innerHTML = mine.length ? mine.map(function(p){ return '<option value="' + p.id + '">' + escHtml(p.name) + ' · ' + p.label_w_mm + '×' + p.label_h_mm + ' mm</option>'; }).join('') : '<option value="">– žádná tiskárna (přidej ji v Nastavení systému) –</option>';
+  if (last && mine.some(function(p){ return String(p.id) === last; })) sel.value = last;
+}
+function prPrinterPicked() { prSet('prg_printer', document.getElementById('pr-printer').value); }
+function prPrinter() { var id = document.getElementById('pr-printer').value; return PR.printers.find(function(p){ return String(p.id) === id; }) || null; }
+
+async function prLookup(code) {
+  var v = String(code != null ? code : document.getElementById('pr-input').value).trim();
+  if (!v) return;
+  if (PR.type !== 'pl' && PR.type !== 'pla4' && PR.type !== 'carrier') v = v.toUpperCase();
+  if (PR.type === 'hb') v = intlCode(v);
+  document.getElementById('pr-input').value = v; PR.code = v; PR.data = null;
+  var out = document.getElementById('pr-out');
+  if (PR.type === 'hb' && isDestCode(v)) { soundBadCode(); out.innerHTML = '⛔ ' + escHtml(v) + ' je kód destinace – naskenuj horní kód.'; return; }
+  if (!navigator.onLine) { PR.data = { offline: true }; out.innerHTML = '📴 Bez signálu – vytiskne se jen kód <b>' + escHtml(v) + '</b>' + (PR.type === 'pl' || PR.type === 'pla4' ? ' (packing list potřebuje připojení)' : ''); return; }
+  out.innerHTML = '⏳ Hledám…';
+  try {
+    var r, d = null;
+    if (PR.type === 'lpn') {
+      r = await supa.from('stock_balances').select('sku,description,units_total,lot,location_code,client_id,customer,expiry_date,dc_id').eq('lpn', v);
+      if (r.error) throw r.error;
+      var rows = (r.data || []).filter(function(b){ return currentDcId == null || b.dc_id == null || String(b.dc_id) === String(currentDcId); });
+      if (!rows.length) rows = r.data || [];
+      d = { rows: rows };
+      out.innerHTML = rows.length ? '✅ <b>' + escHtml(rows[0].sku) + '</b> · ' + Number(rows[0].units_total) + ' ks · ' + escHtml(rows[0].location_code || '') + (rows.length > 1 ? ' <b>(+' + (rows.length - 1) + ' další SKU – smíšená paleta)</b>' : '')
+        : '⚠️ LPN <b>' + escHtml(v) + '</b> není na skladě – vytiskne se jen kód.';
+    } else if (PR.type === 'loc') {
+      r = await supa.from('locations').select('code,zone_type,dc_id').eq('code', v).limit(5);
+      if (r.error) throw r.error;
+      d = { loc: (r.data || [])[0] || null };
+      out.innerHTML = d.loc ? '✅ Lokace <b>' + escHtml(v) + '</b>' + (d.loc.zone_type ? ' · ' + escHtml(d.loc.zone_type) : '') : '⚠️ Lokace <b>' + escHtml(v) + '</b> není v kmenových datech – vytiskne se i tak.';
+    } else if (PR.type === 'sku') {
+      r = await supa.from('stock_items').select('sku,ean,description,client_id,units_per_carton').or('sku.eq.' + v + ',ean.eq.' + v).limit(1);
+      if (r.error) throw r.error;
+      d = { item: (r.data || [])[0] || null };
+      out.innerHTML = d.item ? '✅ <b>' + escHtml(d.item.sku) + '</b> · ' + escHtml(d.item.description || '') + (d.item.ean ? ' · EAN ' + escHtml(d.item.ean) : '') : '⚠️ Položka <b>' + escHtml(v) + '</b> nenalezena – vytiskne se jen kód.';
+    } else if (PR.type === 'hb') {
+      r = await supa.rpc('wms_where_shipment', { p_code: v });
+      var li = !r.error && r.data && r.data.lists && r.data.lists[0];
+      d = { hb: li || null };
+      out.innerHTML = li ? '✅ HB <b>' + escHtml(v) + '</b> · ' + escHtml([li.oh, li.dest, li.consignee].filter(Boolean).join(' · ')) + ' · ' + (li.exp || 0) + ' ks' : '✅ HB <b>' + escHtml(v) + '</b> (není v exportu/importu – jen kód)';
+    } else {
+      r = await supa.from('deliveries').select('id,delivery_number,status,carrier,tracking_no,ship_to_name,ship_to_city,ship_to_country').eq('delivery_number', v).limit(1);
+      if (r.error) throw r.error;
+      var dl = (r.data || [])[0];
+      if (!dl) { soundNotInList(); out.innerHTML = '❓ Výdej <b>' + escHtml(v) + '</b> nenalezen.'; return; }
+      d = { delivery: dl };
+      if (PR.type === 'carrier') {
+        var pk = await supa.from('packages').select('id,weight_kg').eq('delivery_id', dl.id);
+        var np = (pk.data || []).length, nw = (pk.data || []).filter(function(p){ return !(Number(p.weight_kg) > 0); }).length;
+        out.innerHTML = '✅ Výdej <b>' + escHtml(dl.delivery_number) + '</b> · ' + escHtml(dl.carrier || 'dopravce podle účtu') + ' · ' + escHtml([dl.ship_to_name, dl.ship_to_city, dl.ship_to_country].filter(Boolean).join(', ') || '⚠️ chybí adresa')
+          + '<br>' + np + ' balíků' + (nw ? ' · <b style="color:var(--danger)">' + nw + ' bez váhy</b>' : '') + (dl.tracking_no ? '<br>⚠️ Už má zásilku <b>' + escHtml(dl.tracking_no) + '</b> – tisk vytvoří další' : '');
+        PR.data = d; beepOk(); return;
+      }
+      if (PR.type === 'pl') {
+        await prEnsureLib();
+        d.ctx = await PRG_PRINT._loadDelivery(supa, dl.id, 'packing_list');
+        out.innerHTML = '✅ Výdej <b>' + escHtml(dl.delivery_number) + '</b> · ' + escHtml(d.ctx.doc.client || '') + ' · ' + d.ctx.totals.lines + ' řádků · ' + d.ctx.totals.qty + ' ks · ' + prPlPages(d.ctx, prPrinter()) + ' štítků';
+      } else out.innerHTML = '✅ Výdej <b>' + escHtml(dl.delivery_number) + '</b> – otevře se tisk A4 (systémová tiskárna / AirPrint).';
+    }
+    PR.data = d; beepOk();
+  } catch(e) { out.innerHTML = '⚠️ ' + escHtml(e.message || String(e)); }
+}
+function prEnsureLib() {
+  if (window.PRG_PRINT) return Promise.resolve();
+  return new Promise(function(res, rej){ var s = document.createElement('script'); s.src = 'wms_print.js?v=' + APP_VERSION; s.onload = res; s.onerror = function(){ rej(new Error('Nepodařilo se načíst wms_print.js')); }; document.head.appendChild(s); });
+}
+
+// ── ZPL ──
+function zAscii(s) { return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\x20-\x7E]/g, '').replace(/[\^~]/g, ' '); }
+function zCut(s, n) { s = zAscii(s); return s.length > n ? s.slice(0, n - 1) + '.' : s; }
+function zGeo(p) { var dpi = (p && p.dpi) || 203, w = (p && p.label_w_mm) || 100, h = (p && p.label_h_mm) || 150; return { W: Math.round(w / 25.4 * dpi), H: Math.round(h / 25.4 * dpi), k: dpi / 203 }; }
+function zText(x, y, h, txt, W, align) { return '^FO' + Math.round(x) + ',' + Math.round(y) + (W ? '^FB' + Math.round(W) + ',1,0,' + (align || 'C') + ',0' : '') + '^A0N,' + Math.round(h) + ',' + Math.round(h) + '^FD' + zAscii(txt) + '^FS'; }
+function zBar(g, y, h, code, maxW) {
+  code = zAscii(code); var W = maxW || g.W, by = 4;
+  var num = /^\d+$/.test(code) && code.length % 2 === 0, mods = num ? (code.length / 2) * 11 + 35 : code.length * 11 + 35;
+  while (by > 1 && mods * by > W - 40) by--;
+  var x = Math.max(20, Math.round((g.W - mods * by) / 2));
+  return '^BY' + by + ',3^FO' + x + ',' + Math.round(y) + '^BCN,' + Math.round(h) + ',Y,N,N^FD' + (num ? '>;' : '') + code + '^FS';
+}
+function zHead(g) { return '^XA^CI0^PW' + g.W + '^LL' + g.H + '^LH0,0'; }
+function zFoot(g, k) { var dc = (typeof currentDcCode === 'string' && currentDcCode) || ''; return zText(20, g.H - 40 * k, 22 * k, 'PRG ' + dc + '  ' + new Date().toLocaleString('cs-CZ') + '  ' + (currentUser || ''), g.W - 40, 'L') + '^XZ'; }
+function zplFor(type, code, d, p) {
+  var g = zGeo(p), k = Math.min(g.W / 812, g.H / 1218) || g.k, z = zHead(g), y = 30 * k;
+  d = d || {};
+  if (type === 'loc') {
+    var hh = Math.min(g.W / Math.max(3, code.length) * 1.5, g.H * 0.35);
+    z += zText(0, y, hh, code, g.W); y += hh + 40 * k;
+    z += zBar(g, y, Math.min(260 * k, g.H * 0.3), code); return z + zFoot(g, k);
+  }
+  if (type === 'sku') {
+    var it = d.item || { sku: code };
+    z += zText(20, y, 90 * k, it.sku, g.W - 40); y += 110 * k;
+    if (it.description) { z += '^FO20,' + Math.round(y) + '^FB' + (g.W - 40) + ',2,0,C,0^A0N,' + Math.round(40 * k) + ',' + Math.round(40 * k) + '^FD' + zCut(it.description, 80) + '^FS'; y += 100 * k; }
+    z += zBar(g, y, 200 * k, it.sku); y += 290 * k;
+    if (it.ean && it.ean !== it.sku) { z += zText(20, y, 30 * k, 'EAN', g.W - 40); y += 40 * k; z += zBar(g, y, 160 * k, it.ean); }
+    return z + zFoot(g, k);
+  }
+  if (type === 'hb') {
+    var h = d.hb || {};
+    z += zText(20, y, 110 * k, code, g.W - 40); y += 140 * k;
+    z += zBar(g, y, 260 * k, code); y += 350 * k;
+    [['OH', h.oh], ['Destinace', h.dest], ['Prijemce', h.consignee], ['Kusu', h.exp], ['Lokace', h.new_loc || h.loc]].forEach(function(x){
+      if (x[1] == null || x[1] === '') return; z += zText(30, y, 40 * k, x[0] + ': ' + zCut(x[1], 34), g.W - 60, 'L'); y += 55 * k;
+    });
+    return z + zFoot(g, k);
+  }
+  // LPN / paleta
+  var rows = d.rows || [], b = rows[0] || {};
+  z += zText(20, y, 36 * k, 'PALETA / LPN', g.W - 40); y += 50 * k;
+  z += zText(20, y, 90 * k, code, g.W - 40); y += 115 * k;
+  z += zBar(g, y, 230 * k, code); y += 320 * k;
+  if (rows.length) {
+    z += '^FO20,' + Math.round(y) + '^GB' + (g.W - 40) + ',3,3^FS'; y += 20 * k;
+    rows.slice(0, 4).forEach(function(r){
+      z += zText(30, y, 56 * k, zCut(r.sku, 20) + '   ' + Number(r.units_total) + ' ks', g.W - 60, 'L'); y += 64 * k;
+      var sub = [r.description && zCut(r.description, 40), r.lot && 'LOT ' + r.lot, r.expiry_date && 'EXP ' + new Date(r.expiry_date).toLocaleDateString('cs-CZ')].filter(Boolean).join('  ');
+      if (sub) { z += zText(30, y, 30 * k, sub, g.W - 60, 'L'); y += 42 * k; }
+    });
+    if (rows.length > 4) { z += zText(30, y, 30 * k, '+ dalsi ' + (rows.length - 4) + ' SKU', g.W - 60, 'L'); y += 42 * k; }
+    var cl = b.customer || ''; if (cl) { z += zText(30, y + 10 * k, 36 * k, 'Klient: ' + zCut(cl, 30), g.W - 60, 'L'); y += 50 * k; }
+    if (b.location_code) z += zText(30, y + 10 * k, 36 * k, 'Lokace: ' + b.location_code, g.W - 60, 'L');
+  }
+  return z + zFoot(g, k);
+}
+function prPlPerPage(p) { var g = zGeo(p), k = Math.min(g.W / 812, g.H / 1218) || 1; return Math.max(3, Math.floor((g.H - 470 * k - 60 * k) / (70 * k))); }
+function prPlPages(ctx, p) { return Math.max(1, Math.ceil((ctx.items.length || 1) / prPlPerPage(p))); }
+function zplPackingList(ctx, p) {
+  var g = zGeo(p), k = Math.min(g.W / 812, g.H / 1218) || 1, per = prPlPerPage(p), n = prPlPages(ctx, p), out = '', doc = ctx.doc;
+  for (var pg = 0; pg < n; pg++) {
+    var z = zHead(g), y = 25 * k;
+    z += zText(20, y, 44 * k, 'PACKING LIST', g.W - 40, 'L') + zText(20, y, 30 * k, 'Strana ' + (pg + 1) + '/' + n, g.W - 40, 'R'); y += 58 * k;
+    z += zText(20, y, 64 * k, doc.number, g.W - 40, 'L'); y += 78 * k;
+    z += zBar(g, y, 110 * k, doc.number); y += 160 * k;
+    z += zText(20, y, 30 * k, zCut([doc.client, doc.dc, doc.carrier].filter(Boolean).join(' | '), 52), g.W - 40, 'L'); y += 40 * k;
+    z += zText(20, y, 26 * k, zCut(['Radku ' + ctx.totals.lines, 'Kusu ' + ctx.totals.qty, ctx.totals.packages ? 'Baliku ' + ctx.totals.packages : '', ctx.totals.weight ? ctx.totals.weight + ' kg' : ''].filter(Boolean).join(' | '), 60), g.W - 40, 'L'); y += 40 * k;
+    z += '^FO20,' + Math.round(y) + '^GB' + (g.W - 40) + ',3,3^FS'; y += 14 * k;
+    ctx.items.slice(pg * per, pg * per + per).forEach(function(r){
+      z += zText(20, y, 34 * k, zCut(r.sku, 22), g.W * 0.7, 'L') + zText(20, y, 38 * k, String(Number(r.qty)) + ' ks', g.W - 40, 'R'); y += 38 * k;
+      z += zText(20, y, 24 * k, zCut([r.description, r.lot && 'LOT ' + r.lot].filter(Boolean).join(' '), 60), g.W - 40, 'L'); y += 32 * k;
+    });
+    out += z + zFoot(g, k) + '\n';
+  }
+  return out;
+}
+
+async function prPrint() {
+  var v = document.getElementById('pr-input').value.trim();
+  if (!v) { setStatus('🖨️ Naskenuj nebo napiš kód'); document.getElementById('pr-out').innerHTML = '⚠️ Nejdřív naskenuj nebo napiš kód.'; return; }
+  if (PR.code !== (PR.type === 'pl' || PR.type === 'pla4' || PR.type === 'carrier' ? v : (PR.type === 'hb' ? intlCode(v.toUpperCase()) : v.toUpperCase())) || !PR.data) { await prLookup(v); if (!PR.data) return; }
+  if (PR.type === 'pla4') {
+    try { await prEnsureLib(); await PRG_PRINT.printDocument(supa, 'packing_list', PR.data.delivery.id, { user: currentUser, userId: currentUserId, copies: PR.copies }); setStatus('🖨️ Packing list A4 otevřen k tisku'); }
+    catch(e) { document.getElementById('pr-out').innerHTML = '⚠️ ' + escHtml(e.message || String(e)); }
+    return;
+  }
+  if (PR.type === 'carrier') {
+    var cp = prPrinter(); if (!cp) { document.getElementById('pr-out').innerHTML = '⚠️ Vyber tiskárnu.'; return; }
+    if (!navigator.onLine) { document.getElementById('pr-out').innerHTML = '📴 Zásilka u dopravce potřebuje připojení.'; return; }
+    if (PR.data.delivery.tracking_no && !confirm('Výdej už má zásilku ' + PR.data.delivery.tracking_no + '. Vytvořit další?')) return;
+    var go = document.getElementById('pr-go'); go.disabled = true; go.textContent = '⏳ Zakládám zásilku…';
+    try {
+      var rr = await supa.functions.invoke('prg-carrier', { body: { action: 'ship', delivery_id: PR.data.delivery.id, printer_id: cp.id } });
+      var em = null; if (rr.error) { em = rr.error.message || String(rr.error); try { var jj = await rr.error.context.json(); if (jj && jj.error) em = jj.error; } catch(e) {} }
+      if (!em && rr.data && rr.data.error) em = rr.data.error;
+      if (em) throw new Error(em);
+      beepOk(); document.getElementById('pr-out').innerHTML = '✅ ' + (rr.data.carrier === 'ups' ? 'UPS' : 'FedEx') + ' zásilka <b>' + escHtml(rr.data.tracking) + '</b> · tisknu ' + rr.data.printed + ' štítků na ' + escHtml(cp.name);
+      setStatus('📦 ' + rr.data.tracking + ' → ' + cp.name);
+      document.getElementById('pr-input').value = ''; PR.code = ''; PR.data = null;
+    } catch(e) { buzz(); document.getElementById('pr-out').innerHTML = '❌ ' + escHtml(e.message || String(e)); }
+    go.disabled = false; prType(PR.type, true);
+    return;
+  }
+  var p = prPrinter();
+  if (!p) { document.getElementById('pr-out').innerHTML = '⚠️ Vyber tiskárnu (přidává se v Nastavení systému → 🖨️ Tiskárny).'; return; }
+  if (PR.type === 'pl' && !PR.data.ctx) { document.getElementById('pr-out').innerHTML = '📴 Packing list potřebuje připojení.'; return; }
+  var payload = PR.type === 'pl' ? zplPackingList(PR.data.ctx, p) : zplFor(PR.type, PR.code, PR.data, p);
+  var uid = obUid(), label = (PR_TYPES.find(function(t){ return t[0] === PR.type; }) || [, ''])[1].replace(/^\S+\s/, '') + ' ' + PR.code;
+  var op = { kind: 'print', row: { client_uid: uid, printer_id: p.id, payload: payload, fmt: 'zpl', copies: PR.copies, ref_label: label, created_by: currentUser || null, device_id: DEVICE_ID } };
+  prSet('prg_printer', String(p.id));
+  var r = await obSubmit(op);
+  var out = document.getElementById('pr-out');
+  if (r && r.s === 'done') { beepOk(); out.innerHTML = '⏳ Odesláno na <b>' + escHtml(p.name) + '</b> – čekám na tiskárnu…'; setStatus('🖨️ ' + label + ' → ' + p.name); prWatch(uid, p.name); }
+  else if (r && r.s === 'queued') { out.innerHTML = '📴 Uloženo v zařízení – vytiskne se po připojení.'; setStatus('📴 Tisk ve frontě: ' + label); }
+  else out.innerHTML = '⚠️ Nepodařilo se odeslat: ' + escHtml((r && r.msg) || '');
+  document.getElementById('pr-input').value = ''; PR.code = ''; PR.data = null; PR.copies = 1; document.getElementById('pr-copies').textContent = '1';
+  if (r && r.s !== 'fail') setTimeout(function(){ if (printOpen() && inputMode === 'reader') focusWedge(); }, 50);
+}
+async function prWatch(uid, name) {
+  for (var i = 0; i < 12; i++) {
+    await new Promise(function(res){ setTimeout(res, 1500); });
+    try {
+      var r = await supa.from('print_jobs').select('status,error').eq('client_uid', uid).limit(1);
+      var j = r.data && r.data[0]; if (!j) continue;
+      var out = document.getElementById('pr-out');
+      if (j.status === 'done') { if (printOpen()) out.innerHTML = '✅ Vytištěno na <b>' + escHtml(name) + '</b>'; setStatus('✅ Vytištěno'); return; }
+      if (j.status === 'error') { buzz(); if (printOpen()) out.innerHTML = '❌ Tisk selhal: ' + escHtml(j.error || ''); setStatus('❌ Tisk selhal: ' + (j.error || '')); return; }
+    } catch(e) { return; }
+  }
+  if (printOpen()) document.getElementById('pr-out').innerHTML = '⏳ Úloha čeká ve frontě – běží tiskový agent na PC?';
+}
+// ── Mezinárodka: co ještě chybí na aktuální lokaci ──
+function intlMissingHere() {
+  var here = intlKey(invRoom); if (!intlV || !here) return [];
+  return intlV.items.filter(function(i){ return i.locs.indexOf(here) >= 0 && i.found < i.exp; });
+}
+function intlShowMissing() {
+  var here = intlKey(invRoom), m = intlMissingHere();
+  document.getElementById('intl-missing-title').textContent = '📋 Chybí na ' + (here || '–') + ': ' + m.length + ' HB';
+  document.getElementById('intl-missing-out').innerHTML = m.length ? m.map(function(i){
+    return '<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding:6px 0"><b>' + escHtml(i.code) + '</b><span>' + i.found + '/' + i.exp + ' ks</span></div>' + (i.name ? '<div style="font-size:12px;color:var(--muted);margin:-2px 0 4px">' + escHtml(i.name) + '</div>' : '');
+  }).join('') : '✅ Všechno, co tu podle exportu má být, je naskenované.';
+  document.getElementById('modal-intl-missing').style.display = 'flex';
+}
+// ── 📷 Fotky + ⚠️ výjimky (poškození, manko, přebytek…) ──
+var EXC = { ctx: null, photos: [] };
+var EXC_TYPES = [ ['damage', '💥 Poškození'], ['shortage', '➖ Manko (chybí kusy)'], ['overage', '➕ Přebytek'], ['wrong_location', '📍 Jiná lokace'],
+  ['missing_label', '🏷️ Chybí / špatný štítek'], ['other', '❓ Jiné'], ['photo', '📷 Jen foto – dokumentace'] ];
+function excContext() {
+  if (task && task.kind === 'receipt') return { kind: 'receipt', id: String(task.id), label: 'Příjem ' + (task.doc && task.doc.receipt_number || task.id), client_id: task.doc && task.doc.client_id };
+  if (task && (task.kind === 'pick' || task.kind === 'pack' || task.kind === 'load') && !task.wave) return { kind: 'delivery', id: String(task.id), label: 'Výdej ' + (task.doc && task.doc.delivery_number || task.id), client_id: task.doc && task.doc.client_id };
+  if (intlV && intlV.log.length) { var e = intlV.log[intlV.log.length - 1]; return { kind: 'hb', id: e.base, label: 'HB ' + e.base, location: e.loc }; }
+  if (eanCount && rows.length) { var r = rows.slice().sort(function(a, b){ return (b._t || 0) - (a._t || 0); })[0]; return { kind: 'hb', id: r.ean, label: (eanIntl ? 'HB ' : 'Kód ') + r.ean, location: r.loc }; }
+  return null;
+}
+function openExc(ctx) {
+  EXC.ctx = ctx === undefined ? excContext() : ctx; EXC.photos = [];
+  var sel = document.getElementById('exc-type');
+  sel.innerHTML = EXC_TYPES.map(function(t){ return '<option value="' + t[0] + '">' + t[1] + '</option>'; }).join('');
+  sel.value = EXC.ctx && EXC.ctx.kind === 'hb' && intlV ? 'damage' : 'damage';
+  document.getElementById('exc-ref').value = EXC.ctx ? EXC.ctx.label : '';
+  document.getElementById('exc-note').value = ''; document.getElementById('exc-qty').value = '';
+  document.getElementById('exc-sev').value = 'medium'; document.getElementById('exc-client').checked = true;
+  excTypeUi(); excRenderPhotos();
+  document.getElementById('modal-exc').style.display = 'flex';
+}
+function excTypeUi() {
+  var ph = document.getElementById('exc-type').value === 'photo';
+  document.getElementById('exc-extra').style.display = ph ? 'none' : 'block';
+  document.getElementById('exc-save').textContent = ph ? '💾 Uložit fotky' : '⚠️ Nahlásit výjimku';
+}
+function excRenderPhotos() {
+  document.getElementById('exc-photos').innerHTML = EXC.photos.map(function(p, i){
+    return '<div style="position:relative;width:72px;height:72px;border-radius:8px;overflow:hidden;border:1px solid var(--border)"><img src="' + p + '" style="width:100%;height:100%;object-fit:cover"><button onclick="EXC.photos.splice(' + i + ',1);excRenderPhotos()" style="position:absolute;top:2px;right:2px;border:none;border-radius:50%;width:22px;height:22px;background:rgba(0,0,0,.6);color:#fff;font-size:12px">✕</button></div>';
+  }).join('') + '<button onclick="excAddPhoto(false)" aria-label="Vyfotit" style="width:72px;height:72px;border-radius:8px;border:2px dashed #8e44ad;background:#faf5fd;font-size:22px;color:#8e44ad;line-height:1.1">📷<br><span style="font-size:10.5px;font-weight:700">Vyfotit</span></button>'
+    + '<button onclick="excAddPhoto(true)" aria-label="Z galerie" style="width:72px;height:72px;border-radius:8px;border:2px dashed #b9a3c9;background:#fff;font-size:22px;color:#8e44ad;line-height:1.1">🖼️<br><span style="font-size:10.5px;font-weight:700">Galerie</span></button>';
+}
+// focení: vždy fotoaparát zařízení (nezávisle na režimu kamera/čtečka); běžící skenovací kamera se na chvíli uspí
+var EXC_CAM_PAUSED = false;
+function excAddPhoto(gallery) {
+  var inp = document.getElementById('photo-input'); inp.value = '';
+  if (gallery) inp.removeAttribute('capture'); else inp.setAttribute('capture', 'environment');
+  if (inputMode === 'camera' && cameraReady && !EXC_CAM_PAUSED) { try { stopCam(); EXC_CAM_PAUSED = true; } catch(e) {} }
+  inp.click();
+}
+function excClose() {
+  closeModal('modal-exc');
+  if (EXC_CAM_PAUSED) { EXC_CAM_PAUSED = false; try { initCamera(); } catch(e) {} }
+  else if (inputMode === 'reader' && cameraReady) setTimeout(focusWedge, 80);
+}
+function photoCompress(file) {
+  return new Promise(function(res, rej){
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function(){
+      var m = 1600, w = img.naturalWidth, h = img.naturalHeight, k = Math.min(1, m / Math.max(w, h));
+      var c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      res(c.toDataURL('image/jpeg', 0.72));
+    };
+    img.onerror = function(){ URL.revokeObjectURL(url); rej(new Error('fotku nejde načíst')); };
+    img.src = url;
+  });
+}
+async function photoPicked(inp) {
+  var files = Array.prototype.slice.call(inp.files || []);
+  for (var i = 0; i < files.length; i++) { try { EXC.photos.push(await photoCompress(files[i])); } catch(e) { setStatus('⚠️ ' + e.message); } }
+  excRenderPhotos();
+}
+function excRefParse(txt) {
+  txt = String(txt || '').trim();
+  if (EXC.ctx && txt === EXC.ctx.label) return EXC.ctx;
+  if (!txt) return null;
+  var c = txt.replace(/^(HB|Kód)\s+/i, '').trim().toUpperCase();
+  return { kind: 'hb', id: intlCode(c), label: 'HB ' + intlCode(c) };
+}
+async function excSave() {
+  var type = document.getElementById('exc-type').value, ref = excRefParse(document.getElementById('exc-ref').value);
+  var note = document.getElementById('exc-note').value.trim();
+  if (type === 'photo' && !EXC.photos.length) { setStatus('📷 Přidej aspoň jednu fotku'); return; }
+  if (type !== 'photo' && !note && !EXC.photos.length) { alert('Napiš krátký popis nebo přidej fotku.'); return; }
+  var uid = obUid(), cl = ref && ref.client_id || null;
+  var op = { kind: 'exception', uid: uid, photoOnly: type === 'photo', photos: EXC.photos.slice(), user: currentUser, device: DEVICE_ID,
+    ref: ref, client_id: cl,
+    row: type === 'photo' ? null : {
+      dc_id: currentDcId, client_id: cl, type: type, severity: document.getElementById('exc-sev').value,
+      title: (EXC_TYPES.find(function(t){ return t[0] === type; }) || ['', 'Výjimka'])[1].replace(/^\S+\s/, '') + (ref ? ' – ' + ref.label : ''),
+      description: note || null, ref_kind: ref ? ref.kind : null, ref_id: ref ? ref.id : null, ref_label: ref ? ref.label : null,
+      qty: document.getElementById('exc-qty').value ? Number(document.getElementById('exc-qty').value) : null,
+      location: (ref && ref.location) || intlKey(invRoom) || null, reported_by: currentUser, source: 'manual', source_key: 'scn:' + uid,
+      visible_to_client: document.getElementById('exc-client').checked } };
+  excClose();
+  setStatus('⏳ Ukládám ' + (op.photoOnly ? 'fotky' : 'výjimku') + '…');
+  var r = await obSubmit(op);
+  if (r && r.s === 'done') { beepOk(); setStatus(op.photoOnly ? '📷 Uloženo ' + op.photos.length + ' fotek' + (ref ? ' k ' + ref.label : '') : '⚠️ Výjimka nahlášena' + (op.photos.length ? ' (' + op.photos.length + ' fotek)' : '')); }
+  else if (r && r.s === 'queued') setStatus('📴 Uloženo v zařízení – odešle se po připojení');
+  else if (r && r.s === 'fail') setStatus('⚠️ Nepodařilo se uložit: ' + (r.msg || ''));
+}
+function dataUrlToBlob(d) { var p = d.split(','), b = atob(p[1]), a = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return new Blob([a], { type: 'image/jpeg' }); }
+async function obExecException(op) {
+  var excId = null, r;
+  if (op.row) {
+    r = await supa.from('exceptions').select('id').eq('source_key', op.row.source_key).limit(1);
+    if (r.error) return obRes(r.error);
+    if (r.data && r.data.length) excId = r.data[0].id;
+    else {
+      r = await supa.from('exceptions').insert(op.row).select('id').single();
+      if (r.error) return obRes(r.error);
+      excId = r.data.id;
+    }
+  }
+  var ref = op.ref || {};
+  for (var i = 0; i < (op.photos || []).length; i++) {
+    var puid = op.uid.slice(0, 33) + ('00' + i.toString(16)).slice(-3);   // platné UUID odvozené od výjimky
+    var path = (op.client_id || 0) + '/' + (op.row ? 'exception' : (ref.kind || 'other')) + '/' + String(excId || ref.id || 'bez').replace(/[^A-Za-z0-9_-]/g, '_') + '/' + op.uid + '-' + i + '.jpg';
+    var up = await supa.storage.from('prg-photos').upload(path, dataUrlToBlob(op.photos[i]), { contentType: 'image/jpeg', upsert: true });
+    if (up.error && !/exists|Duplicate/i.test(up.error.message || '')) return obRes(up.error);
+    r = await supa.from('photos').upsert({ path: path, kind: op.row ? 'exception' : (ref.kind || 'other'), ref_id: ref.id || null, ref_label: ref.label || null, client_id: op.client_id || null,
+      exception_id: excId, taken_by: op.user, device_id: op.device, client_uid: puid }, { onConflict: 'client_uid', ignoreDuplicates: true });
+    if (r.error) return obRes(r.error);
+  }
+  return { s: 'done', data: { id: excId } };
+}
+
+function showCustMenu() { document.getElementById('modal-cust').style.display = 'flex'; }
+function custPick(what) {
+  closeModal('modal-cust');
+  if (what === 'mydev') { if (appMode !== 'wms') switchAppMode('wms'); openMyDevices(); return; }
+  var rt = invRunType();
+  if (appMode !== 'inventura') switchAppMode('inventura');
+  closeModal('modal-inv-source');
+  if (rt) { invPick('kit'); return; }
+  var n = 3; try { n = parseInt(localStorage.getItem('prg_prusa_n') || '3', 10) || 3; } catch(e) {}
+  document.getElementById('prusa-n').value = n; document.getElementById('prusa-n-val').textContent = n;
+  document.getElementById('modal-prusa-n').style.display = 'flex';
+}
+function prusaStart() {
+  var n = parseInt(document.getElementById('prusa-n').value, 10) || 3;
+  try { localStorage.setItem('prg_prusa_n', String(n)); } catch(e) {}
+  closeModal('modal-prusa-n');
+  kitSetN(n);
+  startEanCount(false, false, false, true);
+}
 function backToHub(modalId) { closeModal(modalId); openHub(); }
 function hubChoose(mode) {
   if (!hubOpenedManually) { selectAppMode(mode); return; }   // první výběr po přihlášení
   hubClose();
+  if (mode === 'zakaznici') { showCustMenu(); return; }
   if (mode === 'wms') { if (appMode !== 'wms') switchAppMode('wms'); if (!task && !myDevMode) showWmsMenu(); return; }
   // Inventory: vždy nejdřív nabídka; rozjetá inventura se ohlásí až po klepnutí na položku
   if (appMode !== 'inventura') switchAppMode('inventura');
@@ -1600,6 +2819,7 @@ function hubInvOther() {
 }
 
 function selectAppMode(mode) {
+  if (mode === 'zakaznici') { closeModal('mode-select-screen'); appMode = 'inventura'; refreshModeUI(); showCustMenu(); return; }
   appMode = mode;
   closeModal('mode-select-screen');
   refreshModeUI();
@@ -1621,7 +2841,7 @@ function refreshModeUI() {
   } else {
     badge.style.display = myDevMode ? 'flex' : 'none';
     badge.textContent = '📱 myDevices';
-    if (btn) btn.textContent = '📱 myDev';
+    if (btn) btn.textContent = myDevMode ? '📱 myDev' : '🏭 Menu';
     if (swLabel) swLabel.textContent = 'Inventura';
   }
   if (typeof updateRoomPill === 'function') updateRoomPill();
@@ -1666,7 +2886,8 @@ function bottomModeBtn() {
   if (appMode === 'inventura' && !invMode && eanCount) { openInvEnd(); return; }
   if (appMode === 'inventura' && !invMode) { showInvMenu(); return; }
   if (appMode === 'inventura') finishInventura();
-  else openMyDevices();
+  else if (myDevMode) openMyDevices();
+  else showWmsMenu();
 }
 
 async function doLogout() {
@@ -2813,6 +4034,7 @@ function renderIntlTable() {
   });
   tbody.innerHTML = html;
   document.getElementById('table-area').scrollTop = 0;
+  try { updateSnPill(); var cw = document.getElementById('cam-wrap'), sp = document.getElementById('sn-pill'); cw.classList.toggle('haspill', document.getElementById('room-pill').style.display === 'block' || sp.style.display === 'block'); } catch(e) {}
 }
 
 function intlSummary() {
@@ -2845,8 +4067,8 @@ function openInvEnd() {
       (s.over ? ' · ' + s.over + ' s kusy navíc' : '') + (s.loc ? ' · ' + s.loc + ' na jiné lokaci' : '') + (s.extra ? ' · ' + s.extra + ' mimo export' : '') +
       '<br>Kusy: <b>' + s.pcs + ' / ' + s.pcsExp + '</b>';
   } else if (kitOn()) {
-    var full = kitSets.filter(function(x){ return Object.keys(x.parts).length === 3; }).length;
-    html = '🖨️ Printer + Flash + Doplněk<br><b>' + full + '</b> kompletních sad' + (kitSets.length > full ? '<br>⚠️ <b>' + (kitSets.length - full) + '</b> neúplná sada – chybí díl' : '');
+    var full = kitSets.filter(function(x){ return Object.keys(x.parts).length === KIT_PARTS.length; }).length;
+    html = '📦 Průša dobalování (' + KIT_PARTS.length + ' kódů / sada)<br><b>' + full + '</b> kompletních sad' + (kitSets.length > full ? '<br>⚠️ <b>' + (kitSets.length - full) + '</b> neúplná sada – chybí díl' : '');
   } else {
     var pcs = rows.reduce(function(a, r){ return a + r.qty; }, 0);
     html = eanLabel() + '<br>Naskenováno <b>' + rows.length + '</b> řádků, <b>' + pcs + '</b> ks.';
@@ -2950,11 +4172,20 @@ function updateSnPill() {
   var p = document.getElementById('sn-pill'); if (!p) return;
   if (kitOn()) { updateKitPill(); return; }
   p.classList.remove('kit');
+  if (intlV && appMode === 'inventura') {
+    if (!invRoom) { p.style.display = 'none'; return; }
+    var mh = intlMissingHere();
+    p.style.display = 'block';
+    p.textContent = mh.length ? '📋 Chybí zde: ' + mh.length + ' HB' : '✅ Lokace hotová';
+    p.classList.toggle('empty', mh.length > 0);
+    return;
+  }
   p.style.display = (appMode === 'inventura' && snOn()) ? 'block' : 'none';
   p.textContent = '📦 ' + (snProduct || 'Produkt: naskenuj EAN');
   p.classList.toggle('empty', !snProduct);
 }
 function snPillClick() {
+  if (intlV) { intlShowMissing(); return; }
   var v = prompt('Produkt (EAN) – napiš nebo nech prázdné a naskenuj:', snProduct || '');
   if (v == null) return;
   v = String(v).trim().toUpperCase();
@@ -3055,17 +4286,20 @@ function exportSnCSV() {
 
 // ── 🖨️ Printer + Flash + Doplněk (bez lokace) ──
 // 3 skeny za sebou = 1 sada: S/N tiskárny → S/N flash → S/N doplňku. Každé S/N smí být jen jednou.
-var KIT_PARTS = [ { k: 'PRINTER', t: 'Printer', i: '🖨️' }, { k: 'FLASH', t: 'Flash', i: '💾' }, { k: 'DOPLNEK', t: 'Doplněk', i: '🧩' } ];
+var KIT_PARTS = [];
+function kitSetN(n) { n = Math.max(1, Math.min(10, n | 0)); KIT_PARTS = []; for (var i = 1; i <= n; i++) KIT_PARTS.push({ k: 'P' + i, t: 'Kód ' + i, i: '#' + i }); }
+kitSetN(3);
+function kitCodeOk(c) { return /^(SN|MAT)/i.test(c); }
 var kitMode = false, kitCur = null, kitSets = [], kitSeen = {};
 function kitOn() { return eanCount && kitMode && !intlV; }
 function kitStep() { return kitCur ? KIT_PARTS.filter(function(p){ return kitCur.parts[p.k]; }).length : 0; }
-function kitSyncRows() { rows = kitSets.map(function(s){ return { ean: s.parts.PRINTER || '', loc: '', qty: Object.keys(s.parts).length, user: currentUser, timestamps: [] }; }); }
+function kitSyncRows() { rows = kitSets.map(function(s){ return { ean: s.parts.P1 || '', loc: '', qty: Object.keys(s.parts).length, user: currentUser, timestamps: [] }; }); }
 function updateKitPill() {
   var p = document.getElementById('sn-pill'); if (!p) return;
   if (!(appMode === 'inventura' && kitOn())) return;
   var nx = KIT_PARTS[kitStep()];
   p.style.display = 'block';
-  p.textContent = 'Další: ' + nx.i + ' ' + nx.t.toUpperCase() + (kitCur ? '  (sada #' + kitCur.no + ')' : '');
+  p.textContent = 'Další: ' + nx.t.toUpperCase() + ' z ' + KIT_PARTS.length + (kitCur ? '  (sada #' + kitCur.no + ')' : '');
   p.classList.add('kit');
   document.getElementById('cam-wrap').classList.add('haspill');
   p.classList.toggle('empty', kitStep() > 0);
@@ -3076,17 +4310,18 @@ function kitSend(set, part, sn, qty) {
 async function handleKitCode(code) {
   var c = String(code || '').trim().toUpperCase();
   if (!c) return;
-  if (kitSeen[c]) { buzz(); setStatus('⚠️ S/N ' + c + ' už je v sadě #' + kitSeen[c].no + ' (' + kitSeen[c].t + ') – nepočítá se znovu'); return; }
+  if (!kitCodeOk(c)) { soundBadCode(); setStatus('⛔ ' + c + ' – kód musí začínat SN nebo MAT'); return; }
+  if (kitSeen[c]) { buzz(); setStatus('⚠️ Kód ' + c + ' už je v sadě #' + kitSeen[c].no + ' (' + kitSeen[c].t + ') – nepočítá se znovu'); return; }
   if (!kitCur) { kitCur = { id: obUid(), no: kitSets.length ? kitSets[kitSets.length - 1].no + 1 : 1, parts: {}, _t: Date.now() }; kitSets.push(kitCur); }
   var part = KIT_PARTS[kitStep()];
   kitCur.parts[part.k] = c; kitCur._t = Date.now();
   kitSeen[c] = { no: kitCur.no, t: part.t };
   kitSend(kitCur, part.k, c, 1);
   if (kitStep() === KIT_PARTS.length) {
-    beepOk(); setStatus('✅ Sada #' + kitCur.no + ' kompletní · naskenuj další 🖨️ PRINTER');
+    beepOk(); setStatus('✅ Sada #' + kitCur.no + ' kompletní' + (KIT_PARTS.length > 1 ? ' · naskenuj KÓD 1 další sady' : ''));
     kitCur = null;
   } else {
-    setStatus(part.i + ' ' + part.t + ': ' + c + ' · teď naskenuj ' + KIT_PARTS[kitStep()].i + ' ' + KIT_PARTS[kitStep()].t.toUpperCase());
+    setStatus(part.t + ': ' + c + ' · teď naskenuj ' + KIT_PARTS[kitStep()].t.toUpperCase());
   }
   kitSyncRows(); renderTable(); refreshModeUI();
 }
@@ -3115,12 +4350,12 @@ function kitDelete(no) {
 }
 function renderKitTable() {
   var empty = document.getElementById('empty-state'), table = document.getElementById('main-table'), tbody = document.getElementById('tableBody');
-  document.getElementById('table-head-row').innerHTML = '<th>#</th><th>Printer / Flash / Doplněk</th><th style="text-align:right"><button class="qty-btn" title="Vrátit poslední sken" onclick="kitUndo()">↩️</button></th>';
+  document.getElementById('table-head-row').innerHTML = '<th>#</th><th>Kódy (' + KIT_PARTS.length + ' / sada)</th><th style="text-align:right"><button class="qty-btn" title="Vrátit poslední sken" onclick="kitUndo()">↩️</button></th>';
   if (!kitSets.length) { empty.style.display = 'block'; table.style.display = 'none'; updateKitPill(); return; }
   empty.style.display = 'none'; table.style.display = 'table';
   tbody.innerHTML = kitSets.slice().sort(function(a, b){ return b._t - a._t; }).map(function(s){
     var done = Object.keys(s.parts).length === KIT_PARTS.length;
-    var lines = KIT_PARTS.map(function(p){ return '<div style="white-space:nowrap">' + p.i + ' ' + (s.parts[p.k] ? escHtml(s.parts[p.k]) : '<span style="color:var(--warning)">— chybí —</span>') + '</div>'; }).join('');
+    var lines = KIT_PARTS.map(function(p){ return '<div style="white-space:nowrap">' + (KIT_PARTS.length > 1 ? '<b style="color:var(--muted)">' + p.i + '</b> ' : '') + (s.parts[p.k] ? escHtml(s.parts[p.k]) : '<span style="color:var(--warning)">— chybí —</span>') + '</div>'; }).join('');
     return '<tr style="background:' + (done ? '#e8f6ef' : '#fff8e6') + '"><td class="qty-cell">' + s.no + '</td><td class="ean-cell" style="font-size:13px;line-height:1.5">' + lines + '</td>' +
       '<td class="acts-cell"><button class="qty-btn minus" onclick="kitDelete(' + s.no + ')">−</button></td></tr>';
   }).join('');
@@ -3130,13 +4365,13 @@ function renderKitTable() {
 function exportKitCSV() {
   if (!kitSets.length) { setStatus('⚠️ Žádná data k exportu'); return; }
   var q = function(v){ return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
-  var csv = 'Sada,Printer,Flash,Doplnek,Kompletni,Uzivatel\n';
-  kitSets.forEach(function(s){ csv += [s.no, q(s.parts.PRINTER), q(s.parts.FLASH), q(s.parts.DOPLNEK), Object.keys(s.parts).length === 3 ? 'ano' : 'ne', q(currentUser)].join(',') + '\n'; });
-  downloadCSV('﻿' + csv, 'printer_flash_doplnek');
+  var csv = 'Sada,' + KIT_PARTS.map(function(p){ return p.t; }).join(',') + ',Kompletni,Uzivatel\n';
+  kitSets.forEach(function(s){ csv += [s.no].concat(KIT_PARTS.map(function(p){ return q(s.parts[p.k]); })).concat([Object.keys(s.parts).length === KIT_PARTS.length ? 'ano' : 'ne', q(currentUser)]).join(',') + '\n'; });
+  downloadCSV('﻿' + csv, 'prusa_dobalovani');
   setStatus('📥 CSV exportováno (' + kitSets.length + ' sad)');
 }
 
-function eanLabel() { if (intlV) return intlLabel(); if (snOn()) return '🏷️ EAN + lok. + S/N'; if (kitOn()) return '🖨️ ' + kitSets.filter(function(x){ return Object.keys(x.parts).length === 3; }).length + ' sad'; return eanIntl ? '🌍 Mezinárodka' : (useLocation ? '📍 EAN + lokace' : '🔢 Jen EAN'); }
+function eanLabel() { if (intlV) return intlLabel(); if (snOn()) return '🏷️ EAN + lok. + S/N'; if (kitOn()) return '📦 Průša ' + kitSets.filter(function(x){ return Object.keys(x.parts).length === KIT_PARTS.length; }).length + ' sad'; return eanIntl ? '🌍 Mezinárodka' : (useLocation ? '📍 EAN + lokace' : '🔢 Jen EAN'); }
 // Mezinárodka: 43M0007578+0001 -> 43M0007578. Kód začínající „+“ se nemění.
 function intlCode(code) {
   code = String(code == null ? '' : code).trim();
@@ -3162,14 +4397,14 @@ function startEanCount(withLoc, intl, sn, kit) {
   if (snMode) { setRoom(''); loadFreeLocs(); loadSnProducts(); updateSnPill(); setTimeout(function(){ openRoomModal(); }, 300); }
   if (intl) { setRoom(''); loadFreeLocs(); loadFreeExport(); setTimeout(function(){ openRoomModal(); }, 300); }
   renderTableHead(); renderTable(); refreshModeUI(); updateScanBtn();
-  setStatus((kitMode ? '🖨️ Printer + Flash + Doplněk · naskenuj S/N tiskárny' : snMode ? '🏷️ EAN + lokace + S/N · naskenuj LOKACI, pak EAN a sériová čísla' : eanIntl ? '🌍 Mezinárodka · naskenuj LOKACI, pak jen zásilky' : (withLoc ? '📍 Inventura EAN + lokace' : '🔢 Inventura – jen EAN')) + ' · spouštím kameru');
+  setStatus((kitMode ? '📦 Průša dobalování · ' + KIT_PARTS.length + ' kódů na sadu · naskenuj KÓD 1' : snMode ? '🏷️ EAN + lokace + S/N · naskenuj LOKACI, pak EAN a sériová čísla' : eanIntl ? '🌍 Mezinárodka · naskenuj LOKACI, pak jen zásilky' : (withLoc ? '📍 Inventura EAN + lokace' : '🔢 Inventura – jen EAN')) + ' · spouštím kameru');
   initCamera();
 }
 function eanSessionStart(withLoc) {
   eanSession = obUid();
   var d = new Date();
-  var row = { session_uid: eanSession, kind: kitMode ? 'kit3' : snMode ? 'ean_loc_sn' : (withLoc ? 'ean_loc' : 'ean'), status: 'active',
-    name: (kitMode ? 'Printer + Flash + Doplněk' : snMode ? 'EAN + lokace + S/N' : eanIntl ? 'Mezinárodka' : (withLoc ? 'EAN + lokace' : 'Jen EAN')) + ' · ' + currentUser + ' · ' + d.toLocaleString('cs-CZ', { day:'numeric', month:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+  var row = { session_uid: eanSession, kind: kitMode ? 'prusa' : snMode ? 'ean_loc_sn' : (withLoc ? 'ean_loc' : 'ean'), status: 'active',
+    name: (kitMode ? 'Průša dobalování (' + KIT_PARTS.length + ' kódů)' : snMode ? 'EAN + lokace + S/N' : eanIntl ? 'Mezinárodka' : (withLoc ? 'EAN + lokace' : 'Jen EAN')) + ' · ' + currentUser + ' · ' + d.toLocaleString('cs-CZ', { day:'numeric', month:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
     started_by: currentUser, started_at: d.toISOString() };
   if (currentDcId != null) row.dc_id = currentDcId;
   var sid = eanSession;
@@ -3291,7 +4526,10 @@ function anyModalOpen() {
 function readerActive() { return inputMode === 'reader' && cameraReady && !!currentUserId; }
 function roomModalOpen() { return document.getElementById('modal-inv-room').style.display === 'flex'; }
 function focusWedge() {
-  if (!readerActive() || (anyModalOpen() && !roomModalOpen())) return;
+  if (!readerActive() || (anyModalOpen() && !roomModalOpen() && !whereOpen() && !printOpen() && !yardOpen())) return;
+  if (whereOpen() && document.activeElement && document.activeElement.id === 'where-input') return;
+  if (printOpen() && document.activeElement && document.activeElement.id === 'pr-input') return;
+  if (yardOpen() && document.activeElement && document.activeElement.id === 'yd-q') return;
   var a = document.activeElement;
   if (a && a !== document.body && a.id !== 'wedge-input' && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) return;   // uživatel píše jinde
   try { document.getElementById('wedge-input').focus({ preventScroll: true }); } catch(e) {}
@@ -3306,14 +4544,12 @@ var itPress = null, itLong = false;
 function inputToggleClick() {
   if (itLong) { itLong = false; return; }      // dlouhé podržení už přepnulo režim
   // čtečka (CN80…): klepnutí ji spustí, přepnutí na kameru podržením; mobil: klepnutí přepíná kamera ⇄ čtečka
-  if (IS_READER_DEVICE && inputMode === 'reader') {
-    if (!cameraReady) { initCamera(); } else { focusWedge(); setStatus('🔫 Čtečka připravena – stiskni spoušť'); }
-    return;
-  }
+  // tlačítko ukazuje DRUHÝ režim (přepínač): kamera běží → „Čtečka“, čtečka → „Kamera“
   toggleInputMode();
 }
 function updateInputToggle() {
-  var b = document.getElementById('input-toggle'); if (b) b.textContent = inputMode === 'reader' ? '🔫 Čtečka' : '📷 Kamera';
+  var b = document.getElementById('input-toggle'); if (b) { b.textContent = inputMode === 'reader' ? '📷 Kamera' : '🔫 Čtečka'; b.title = inputMode === 'reader' ? 'Přepnout na kameru' : 'Přepnout na čtečku'; }
+  updateVoiceBtn();
   document.body.classList.toggle('reader-on', inputMode === 'reader' && cameraReady && !isAsleep);
   updateSoundBtn();
 }
@@ -3345,8 +4581,12 @@ var wedgeTimer = null, kb = { buf: '', last: 0, timer: null };
 function submitWedge(v) {
   v = String(v || '').replace(/[\r\n\t]+/g, '').trim();
   if (v.length < 2 || !readerActive()) return;
+  _lastScan = v;
   if (roomModalOpen()) { var other = Array.prototype.some.call(document.querySelectorAll('.modal-backdrop'), function(m){ return m.id !== 'modal-inv-room' && m.style.display === 'flex'; });
     if (!other) { document.getElementById('inv-room-input').value = v.toUpperCase(); beepOk(); saveInvRoom(); return; } }
+  if (whereOpen()) { beep(); whereLookup(v); return; }
+  if (printOpen()) { beep(); document.getElementById('pr-input').value = v; prLookup(v); return; }
+  if (yardOpen()) { beep(); document.getElementById('yd-q').value = v.toUpperCase(); YD.open = null; ydRender(); return; }
   if (anyModalOpen()) return;
   resetIdleTimer();
   flashScreen(); beep();
@@ -3578,6 +4818,7 @@ async function loadFreeExport() {
   } catch(e) {}
 }
 async function handleScannedCode(code) {
+  _lastScan = code;
   if (appMode === 'inventura' && kitOn() && !invMode && !myDevMode) { await handleKitCode(code); return; }
   if (appMode === 'inventura' && snOn() && !invMode && !myDevMode) { await handleSnCode(code); return; }
   if (appMode === 'inventura' && eanCount && eanIntl && isDestCode(code)) { soundBadCode(); setStatus('↷ ' + String(code).trim() + ' je kód DESTINACE (spodní část štítku) – naskenuj horní kód zásilky'); return; }
@@ -4556,8 +5797,15 @@ function resetData() {
 }
 
 // ── Helpers ───────────────────────────────────────────────
+function startStopClick() { if (cameraReady) stopCam(); else startCam(); }
+function updateStartStop() {
+  var b = document.getElementById('startstop-btn'); if (!b) return;
+  if (cameraReady) { b.className = 'ctrl-btn halt'; b.textContent = '⏹ Stop'; }
+  else { b.className = 'ctrl-btn go'; b.textContent = '▶ Start'; }
+}
 function updateScanBtn() {
   _updateScanBtn();
+  updateStartStop();
   document.body.classList.toggle('reader-on', inputMode === 'reader' && cameraReady && !isAsleep);
   if (inputMode === 'reader' && cameraReady && !isAsleep) {
     scanBtn.textContent = '🔫 ' + scanBtn.textContent.replace(/^[^A-Za-zÁ-Žá-ž]+/, '').replace('SKENOVAT', 'ČTEČKA:');

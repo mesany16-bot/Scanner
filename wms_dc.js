@@ -39,19 +39,13 @@
 
   function render(){
     var old=document.getElementById('dc-switch');if(old)old.remove();
-    if(state.list.length<=1){
-      /* jediné DC – přepínač se nezobrazuje, jen malý štítek */
-      if(state.list.length===1){var tb0=document.querySelector('.topbar');
-        if(tb0){var chip=document.createElement('span');chip.id='dc-switch';chip.className='dc-chip';chip.textContent='DC: '+state.list[0].code;tb0.appendChild(chip);}}
-      return;
-    }
-    var tb=document.querySelector('.topbar');if(!tb)return;
-    var w=document.createElement('label');w.id='dc-switch';w.className='dc-switch';
-    var opts='<option value="">Všechna DC</option>'+state.list.map(function(d){return '<option value="'+esc(d.id)+'"'+(sid(d.id)===state.current?' selected':'')+'>'+esc(d.code)+' – '+esc(d.name)+'</option>';}).join('');
-    w.innerHTML='<span>DC</span><select>'+opts+'</select>';
-    if(state.current==='')w.querySelector('select').value='';
-    w.querySelector('select').addEventListener('change',function(e){lsSet(e.target.value);window.location.reload();});
-    tb.appendChild(w);
+    /* DC se přepíná v Setupu (⚙️ → Jazyk a DC); v horní liště zůstane jen štítek se zvoleným DC, klik otevře Setup */
+    var tb=document.querySelector('.topbar,#prg-bar');if(!tb||!state.list.length)return;
+    var cur=state.current===''?null:byId(state.current);
+    var chip=document.createElement('button');chip.type='button';chip.id='dc-switch';chip.className='dc-chip';
+    chip.title='Změnit DC';chip.textContent='🏬 '+(cur?cur.code:'Všechna DC')+(state.list.length>1?' ▾':'');
+    chip.onclick=function(){if(window.PRG_SETUP)PRG_SETUP.open();};
+    var ref=tb.querySelector('#prg-user');if(ref)tb.insertBefore(chip,ref);else tb.appendChild(chip);
   }
 
   /* filtr dotazu: zvolené DC, nebo (u omezeného uživatele při volbě „Všechna DC“) jen povolená DC */
@@ -71,7 +65,7 @@
   var st=document.createElement('style');
   st.textContent='.dc-switch{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--muted,#667);}'
    +'.dc-switch select{padding:6px 8px;border:1.5px solid var(--border,#dde);border-radius:7px;font-size:13px;font-family:inherit;background:#fff;color:var(--text,#222);max-width:200px;}'
-   +'.dc-chip{margin-left:auto;padding:4px 10px;border-radius:14px;background:var(--accent-light,#e8f7f1);color:var(--accent,#0a7c4e);font-size:12px;font-weight:700;}';
+   +'.dc-chip{margin-left:auto;padding:5px 11px;border-radius:14px;border:none;background:var(--accent-light,#e8f7f1);color:var(--accent,#0a7c4e);font-size:12.5px;font-weight:700;font-family:inherit;cursor:pointer;}';
   document.head.appendChild(st);
 
   window.PRG_DC={init:init,apply:apply,currentId:currentId,currentDc:currentDc,list:list,allWarehouses:allWarehouses,restricted:restricted,render:render};

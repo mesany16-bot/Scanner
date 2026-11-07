@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rezervace rampy – PRG</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--accent:#0a7c4e;--border:#d9dee5;--muted:#6b7684;--bg:#f2f4f7;--danger:#c0392b}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:#1c2430}
+.wrap{max-width:640px;margin:0 auto;padding:16px}
+.card{background:#fff;border-radius:14px;padding:18px;margin-bottom:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:0 0 10px}
+label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin:10px 0 4px;text-transform:uppercase}
+input,select,textarea{width:100%;padding:11px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:15px;font-family:inherit}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.slots{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px}
+.slot{padding:10px 6px;border-radius:9px;border:1.5px solid var(--border);background:#fff;font-size:14px;font-weight:600;cursor:pointer;text-align:center}
+.slot small{display:block;font-weight:400;font-size:11px;color:var(--muted)}
+.slot.on{background:var(--accent);border-color:var(--accent);color:#fff}.slot.on small{color:#e5f4ec}
+.slot[disabled]{opacity:.4;cursor:not-allowed;text-decoration:line-through}
+.btn{width:100%;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-size:16px;font-weight:700;cursor:pointer;margin-top:14px}
+.btn.sec{background:#e8ecf1;color:#1c2430}
+.muted{color:var(--muted);font-size:13px}.err{color:var(--danger);font-size:14px;margin-top:8px}
+.ok{background:#e8f6ef;border-radius:12px;padding:16px;text-align:center}.ok b{font-size:28px;letter-spacing:3px}
+.dir{display:flex;gap:8px}.dir button{flex:1;padding:11px;border-radius:9px;border:1.5px solid var(--border);background:#fff;font-size:14px;font-weight:600;cursor:pointer}.dir button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+@media (max-width:420px){.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card"><h1 id="t-title">Rezervace času na rampě</h1><div class="muted" id="t-sub">Načítám…</div></div>
+  <div id="main" style="display:none">
+    <div class="card">
+      <h2>1. Příjezd, nebo nakládka?</h2>
+      <div class="dir"><button id="d-in" class="on" onclick="setDir('in')">⬇ Vykládka (dovážím)</button><button id="d-out" onclick="setDir('out')">⬆ Nakládka (odvážím)</button></div>
+      <h2 style="margin-top:16px">2. Den a čas</h2>
+      <input type="date" id="day" onchange="loadSlots()">
+      <div id="slots" class="slots" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <h2>3. Údaje</h2>
+      <div class="row"><div><label>SPZ *</label><input id="plate" autocomplete="off" style="text-transform:uppercase"></div><div><label>Kontejner / návěs</label><input id="cont" autocomplete="off" style="text-transform:uppercase"></div></div>
+      <div class="row"><div><label>Dopravce</label><input id="carrier"></div><div><label>Číslo zakázky / dokladu</label><input id="doc"></div></div>
+      <div class="row"><div><label>Kontakt (jméno, telefon) *</label><input id="contact"></div><div><label>E-mail</label><input id="email" type="email"></div></div>
+      <label>Poznámka</label><textarea id="note" rows="2"></textarea>
+      <div id="err" class="err"></div>
+      <button class="btn" id="go" onclick="book()">✅ Rezervovat</button>
+    </div>
+    <div class="card"><h2>Zrušit rezervaci</h2><div class="row"><input id="ccode" placeholder="Kód rezervace" style="text-transform:uppercase"><button class="btn sec" style="margin:0" onclick="cancelB()">Zrušit</button></div><div id="cmsg" class="muted" style="margin-top:6px"></div></div>
+  </div>
+  <div id="done" class="card" style="display:none"></div>
+</div>
+<script>
+var SUPA_URL="https://ujvqanqqhmnfxsfeqixc.supabase.co";var SUPA_KEY="sb_publishable_5o19BnZUEi8j-rU5DDAgBA_HwKB7V-v";
+var supa=supabase.createClient(SUPA_URL,SUPA_KEY,{auth:{persistSession:false}});
+var TOKEN=new URLSearchParams(location.search).get('t')||'',INFO=null,SLOT=null,DIR='in';
+var ERR={SLOT_FULL:'Tento čas se mezitím obsadil – vyber prosím jiný.',PLATE_REQUIRED:'Vyplň SPZ nebo kontejner.',CONTACT_REQUIRED:'Vyplň kontakt.',BAD_TOKEN:'Odkaz na rezervace není platný.',TOO_MANY:'Příliš mnoho rezervací – zavolej prosím na sklad.',NOT_FOUND:'Rezervace s tímto kódem nebyla nalezena (nebo už je zpracovaná).'};
+function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function pad(n){return n<10?'0'+n:''+n;}
+function localDay(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function msg(e){var m=String((e&&e.message)||e||'');return ERR[m]||m;}
+function setDir(d){DIR=d;document.getElementById('d-in').classList.toggle('on',d==='in');document.getElementById('d-out').classList.toggle('on',d==='out');}
+async function init(){
+  if(!TOKEN){document.getElementById('t-sub').textContent='Chybí odkaz na rezervace. Požádej sklad o správný odkaz.';return;}
+  var r=await supa.rpc('wms_yard_booking_info',{p_token:TOKEN});
+  if(r.error||!r.data){document.getElementById('t-sub').textContent='Rezervace nejsou dostupné (neplatný nebo vypnutý odkaz).';return;}
+  INFO=r.data;
+  document.getElementById('t-title').textContent='Rezervace rampy – '+(INFO.dc_name||INFO.dc||'sklad');
+  document.getElementById('t-sub').innerHTML=esc(INFO.company||'')+' · '+esc(INFO.dc||'')+'<br>Provoz '+INFO.open_from+':00–'+INFO.open_to+':00, časové okno '+INFO.slot_min+' min'+(INFO.note?'<br>'+esc(INFO.note):'');
+  var d=document.getElementById('day'),t=new Date(),mx=new Date(Date.now()+INFO.days_ahead*864e5);d.min=localDay(t);d.max=localDay(mx);d.value=localDay(new Date(Date.now()+864e5));
+  document.getElementById('main').style.display='block';loadSlots();
+}
+async function loadSlots(){SLOT=null;var el=document.getElementById('slots');el.innerHTML='<span class="muted">Načítám…</span>';
+  var r=await supa.rpc('wms_yard_slots',{p_token:TOKEN,p_day:document.getElementById('day').value});
+  if(r.error){el.innerHTML='<span class="err">'+esc(msg(r.error))+'</span>';return;}
+  var s=r.data||[];if(!s.length){el.innerHTML='<span class="muted">V tento den nejsou volné časy.</span>';return;}
+  el.innerHTML=s.map(function(x,i){var d=new Date(x.slot);return '<button class="slot" data-i="'+i+'" data-slot="'+esc(x.slot)+'" '+(x.free>0?'':'disabled')+' onclick="pick(this)">'+pad(d.getHours())+':'+pad(d.getMinutes())+'<small>'+(x.free>0?'volno '+x.free+'/'+x.total:'obsazeno')+'</small></button>';}).join('');}
+function pick(b){document.querySelectorAll('.slot').forEach(function(x){x.classList.remove('on');});b.classList.add('on');SLOT=b.getAttribute('data-slot');}
+async function book(){var e=document.getElementById('err');e.textContent='';
+  if(!SLOT){e.textContent='Vyber čas.';return;}
+  var p={p_token:TOKEN,p_slot:SLOT,p_direction:DIR,p_carrier:document.getElementById('carrier').value,p_plate:document.getElementById('plate').value,p_container:document.getElementById('cont').value,
+    p_doc_ref:document.getElementById('doc').value,p_contact:document.getElementById('contact').value,p_email:document.getElementById('email').value,p_note:document.getElementById('note').value};
+  var b=document.getElementById('go');b.disabled=true;b.textContent='Ukládám…';
+  var r=await supa.rpc('wms_yard_book',p);b.disabled=false;b.textContent='✅ Rezervovat';
+  if(r.error){e.textContent=msg(r.error);if(r.error.message==='SLOT_FULL')loadSlots();return;}
+  var d=new Date(r.data.slot);
+  document.getElementById('main').style.display='none';var dn=document.getElementById('done');dn.style.display='block';
+  dn.innerHTML='<div class="ok">✅ Rezervováno<br><div style="font-size:18px;margin:8px 0">'+d.toLocaleDateString('cs-CZ',{weekday:'long',day:'numeric',month:'numeric'})+' v '+pad(d.getHours())+':'+pad(d.getMinutes())+'</div>Kód rezervace<br><b>'+esc(r.data.code)+'</b><div class="muted" style="margin-top:8px">Kód si poznamenej – nahlas ho na vrátnici, slouží i ke zrušení.</div></div><button class="btn sec" onclick="location.reload()">Nová rezervace</button>';}
+async function cancelB(){var c=document.getElementById('ccode').value.trim(),m=document.getElementById('cmsg');if(!c){m.textContent='Zadej kód.';return;}
+  var r=await supa.rpc('wms_yard_cancel_booking',{p_token:TOKEN,p_code:c});m.textContent=r.error?msg(r.error):'Rezervace zrušena.';if(!r.error)loadSlots();}
+init();
+</script>
+</body>
+</html>

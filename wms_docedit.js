@@ -105,6 +105,8 @@
       +'<div id="save-btns" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-primary" type="button" id="btn-save">💾 Uložit</button></div></div></div>'
       +'<div class="card" id="work-card" style="display:none"><div class="card-header"><h3 id="work-title"></h3><span id="work-sum" style="font-size:13px;color:var(--muted)"></span></div><div style="overflow-x:auto" id="work-body"></div></div>';
     var side='<div><div class="card" style="margin-bottom:16px"><div class="card-header"><h3>Stav dokladu</h3></div><div class="de-st" id="st-body"><span class="badge badge-gray">Nový (neuložený)</span><div class="acts" id="st-acts"></div></div></div>'
+      +(O.kind==='delivery'?'<div class="card" id="cr-card" style="display:none;margin-bottom:16px"><div class="card-header"><h3>🚚 Doprava a štítky</h3></div><div id="cr-body" style="padding:10px 16px"></div></div>':'')
+      +'<div class="card" id="ph-card" style="display:none"><div class="card-header"><h3>📷 Fotky a výjimky</h3></div><div id="ph-body" style="padding:10px 16px"></div></div>'
       +'<div class="card"><div class="card-header"><h3>🕘 Historie</h3></div><div style="padding:6px 16px 10px;max-height:420px;overflow:auto" id="tl-body"><div style="color:var(--muted);font-size:13px;padding:8px 0">Po uložení se tu objeví průběh dokladu.</div></div></div></div>';
     root.innerHTML='<div class="de-grid"><div>'+head+tbl+'</div>'+side+'</div>';
     if(doc){
@@ -384,6 +386,79 @@
       else act(x);};});
     await work();
     F().timeline(O.supa,K,doc.id,g('tl-body'));
+    photosBox();
+    carrierBox();
+  }
+  async function photosBox(){
+    var card=g('ph-card'),body=g('ph-body'),K=O.kind;if(!card)return;
+    try{
+      var ex=await O.supa.from('exceptions').select('*').eq('ref_kind',K).eq('ref_id',String(doc.id)).order('created_at',{ascending:false});
+      if(ex.error){card.style.display='none';return;}
+      var ids=(ex.data||[]).map(function(x){return x.id;});
+      var ph=await O.supa.from('photos').select('*').eq('kind',K).eq('ref_id',String(doc.id)).order('taken_at');
+      var P=ph.data||[],X=ex.data||[];
+      if(ids.length){var ph2=await O.supa.from('photos').select('*').in('exception_id',ids).order('taken_at');P=P.concat(ph2.data||[]);}
+      if(!P.length&&!X.length){card.style.display='none';return;}
+      var urls={};if(P.length){var su=await O.supa.storage.from('prg-photos').createSignedUrls(P.map(function(p){return p.path;}),3600);(su.data||[]).forEach(function(u){urls[u.path]=u.signedUrl;});}
+      var ST={open:'🔴 otevřená',in_progress:'🟠 řeší se',resolved:'🟢 vyřešená',closed:'⚪ uzavřená'};
+      card.style.display='block';
+      body.innerHTML=X.map(function(x){return '<div style="font-size:13px;padding:6px 0;border-bottom:1px solid var(--border)"><a href="wms_exceptions.html" style="font-weight:700">⚠️ '+esc(x.title)+'</a> · '+(ST[x.status]||esc(x.status))+(x.description?'<br><span style="color:var(--muted)">'+esc(String(x.description).slice(0,140))+'</span>':'')+'</div>';}).join('')
+        +(P.length?'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">'+P.map(function(p){var u=urls[p.path]||'';return '<a href="'+u+'" target="_blank"><img src="'+u+'" title="'+esc((p.taken_by||'')+' '+new Date(p.taken_at).toLocaleString('cs-CZ'))+'" style="width:96px;height:96px;object-fit:cover;border-radius:8px;border:1px solid var(--border)"></a>';}).join('')+'</div>':'');
+    }catch(e){card.style.display='none';}
+  }
+  // ── doprava: adresa příjemce, zásilky UPS / FedEx, štítky ──
+  var CR_SV={ups:[['11','UPS Standard'],['65','UPS Express Saver'],['07','UPS Express'],['54','UPS Express Plus'],['08','UPS Expedited']],fedex:[['FEDEX_REGIONAL_ECONOMY','FedEx Regional Economy'],['INTERNATIONAL_ECONOMY','FedEx International Economy'],['FEDEX_INTERNATIONAL_PRIORITY','FedEx International Priority']]};
+  function crTrack(c,t){return c==='ups'?'https://www.ups.com/track?tracknum='+encodeURIComponent(t):'https://www.fedex.com/fedextrack/?trknbr='+encodeURIComponent(t);}
+  async function crInvoke(body){var r=await O.supa.functions.invoke('prg-carrier',{body:body});if(r.error){var m=r.error.message||String(r.error);try{var j=await r.error.context.json();if(j&&j.error)m=j.error;}catch(e){}throw new Error(m);}if(r.data&&r.data.error)throw new Error(r.data.error);return r.data;}
+  async function carrierBox(){
+    var card=g('cr-card'),body=g('cr-body');if(!card||!doc)return;
+    if(card.contains(document.activeElement)&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))return;   // uživatel právě píše
+    try{
+      var sh=await O.supa.from('carrier_shipments').select('*').eq('delivery_id',doc.id).order('id',{ascending:false});
+      if(sh.error){card.style.display='none';return;}
+      var ac=(await O.supa.from('carrier_accounts').select('id,carrier,name,default_service,client_id,dc_id').eq('is_active',true).order('name')).data||[];
+      ac=ac.filter(function(a){return (a.client_id==null||a.client_id===doc.client_id)&&(a.dc_id==null||String(a.dc_id)===String(doc.warehouse_id));});
+      var pr=(await O.supa.from('printers').select('id,name').eq('is_active',true).order('name')).data||[];
+      var S=sh.data||[],live=S.filter(function(x){return x.status==='created';});
+      var lastPr='';try{lastPr=localStorage.getItem('prg_web_printer')||'';}catch(e){}
+      var want=/fedex/i.test(doc.carrier||'')?'fedex':(/ups/i.test(doc.carrier||'')?'ups':'');
+      var acSel=(ac.find(function(a){return a.carrier===want;})||ac[0]||{}).id;
+      var inp=function(id,ph,v,w){return '<input id="'+id+'" placeholder="'+ph+'" value="'+esc(v||'')+'" style="width:'+(w||'100%')+';padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;margin-bottom:6px;box-sizing:border-box">';};
+      card.style.display='block';
+      body.innerHTML='<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Příjemce</div>'
+        +inp('cr-name','Firma / jméno',doc.ship_to_name)+inp('cr-street','Ulice a číslo',doc.ship_to_street)
+        +'<div style="display:flex;gap:6px">'+inp('cr-zip','PSČ',doc.ship_to_zip,'34%')+inp('cr-city','Město',doc.ship_to_city,'46%')+inp('cr-cc','Země',doc.ship_to_country||'CZ','20%')+'</div>'
+        +'<div style="display:flex;gap:6px">'+inp('cr-contact','Kontakt',doc.ship_to_contact,'50%')+inp('cr-phone','Telefon',doc.ship_to_phone,'50%')+'</div>'+inp('cr-email','E-mail',doc.ship_to_email)
+        +'<button class="btn btn-secondary btn-sm" type="button" id="cr-save">💾 Uložit adresu</button>'
+        +'<div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin:12px 0 4px">Zásilka u dopravce</div>'
+        +(ac.length?'<select id="cr-acc" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;margin-bottom:6px">'+ac.map(function(a){return '<option value="'+a.id+'" data-c="'+a.carrier+'"'+(a.id===acSel?' selected':'')+'>'+esc(a.name)+'</option>';}).join('')+'</select>'
+          +'<select id="cr-svc" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;margin-bottom:6px"></select>'
+          +'<select id="cr-pr" style="width:100%;padding:7px 9px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;margin-bottom:6px"><option value="">– netisknout, jen založit –</option>'+pr.map(function(p){return '<option value="'+p.id+'"'+(String(p.id)===lastPr?' selected':'')+'>🖨️ '+esc(p.name)+'</option>';}).join('')+'</select>'
+          +'<button class="btn btn-primary btn-sm" type="button" id="cr-ship" style="width:100%">🚚 Vytvořit zásilku a vytisknout štítky</button>'
+          :'<div style="font-size:13px;color:var(--muted)">Žádný účet dopravce – nastav ho v <a href="wms_integrations.html">Integrace → Dopravci</a>.</div>')
+        +'<div id="cr-msg" style="font-size:12.5px;margin-top:6px"></div>'
+        +(S.length?'<div style="margin-top:10px">'+S.map(function(x){var st={created:'🟢',requested:'⏳',error:'🔴',voided:'⚪'}[x.status]||'';
+            return '<div style="font-size:13px;padding:6px 0;border-top:1px solid var(--border)">'+st+' <b>'+(x.carrier==='ups'?'UPS':'FedEx')+'</b> '+(x.tracking_main?'<a href="'+crTrack(x.carrier,x.tracking_main)+'" target="_blank">'+esc(x.tracking_main)+'</a>':'')+(x.status==='voided'?' (stornováno)':'')
+              +(x.pieces&&x.pieces.length>1?'<div style="font-size:12px;color:var(--muted)">'+x.pieces.length+' balíky: '+x.pieces.map(function(p){return esc(p.tracking);}).join(', ')+'</div>':'')
+              +(x.track_status?'<div style="font-size:12px;color:var(--muted)">'+esc(x.track_status)+(x.delivered_at?' · doručeno':'')+'</div>':'')+(x.error?'<div style="font-size:12px;color:var(--danger)">'+esc(x.error)+'</div>':'')
+              +(x.status==='created'?'<div style="margin-top:4px;display:flex;gap:6px"><button class="btn btn-secondary btn-sm" type="button" data-rp="'+x.id+'">🖨️ Znovu tisk</button><button class="btn btn-secondary btn-sm" type="button" data-vd="'+x.id+'">✕ Storno</button></div>':'')+'</div>';}).join('')+'</div>':'');
+      var fillSvc=function(){var a=g('cr-acc');if(!a)return;var c=a.options[a.selectedIndex].getAttribute('data-c'),acc=ac.find(function(x){return String(x.id)===a.value;})||{},cur=doc.carrier_service||acc.default_service||'';
+        g('cr-svc').innerHTML=(CR_SV[c]||[]).map(function(s){return '<option value="'+s[0]+'"'+(s[0]===cur?' selected':'')+'>'+s[1]+'</option>';}).join('');};
+      if(g('cr-acc')){g('cr-acc').onchange=fillSvc;fillSvc();}
+      var msg=function(t,bad){g('cr-msg').innerHTML='<span style="color:'+(bad?'var(--danger)':'var(--accent)')+'">'+esc(t)+'</span>';};
+      g('cr-save').onclick=async function(){var u={ship_to_name:g('cr-name').value.trim()||null,ship_to_street:g('cr-street').value.trim()||null,ship_to_zip:g('cr-zip').value.replace(/\s+/g,'')||null,ship_to_city:g('cr-city').value.trim()||null,
+          ship_to_country:(g('cr-cc').value.trim().toUpperCase()||null),ship_to_contact:g('cr-contact').value.trim()||null,ship_to_phone:g('cr-phone').value.trim()||null,ship_to_email:g('cr-email').value.trim()||null};
+        if(u.ship_to_country&&!/^[A-Z]{2}$/.test(u.ship_to_country)){msg('Země = 2 písmena (CZ, DE, SK…)',true);return;}
+        var r=await O.supa.from('deliveries').update(u).eq('id',doc.id);if(r.error){msg(r.error.message,true);return;}Object.assign(doc,u);msg('Adresa uložena');};
+      if(g('cr-ship'))g('cr-ship').onclick=async function(){var b=this;if(live.length&&!confirm('Výdej už má zásilku '+live[0].tracking_main+'. Vytvořit další?'))return;
+        try{localStorage.setItem('prg_web_printer',g('cr-pr').value);}catch(e){}
+        b.disabled=true;b.textContent='⏳ Zakládám zásilku…';
+        try{var d=await crInvoke({action:'ship',delivery_id:doc.id,account_id:Number(g('cr-acc').value),service:g('cr-svc').value,printer_id:g('cr-pr').value?Number(g('cr-pr').value):null});
+          toast('Zásilka '+d.tracking+(d.printed?' · tisknu '+d.printed+' štítků':''));await carrierBox();}
+        catch(e){msg(e.message||String(e),true);b.disabled=false;b.textContent='🚚 Vytvořit zásilku a vytisknout štítky';}};
+      body.querySelectorAll('[data-rp]').forEach(function(b){b.onclick=async function(){var p=g('cr-pr')&&g('cr-pr').value;if(!p){msg('Vyber tiskárnu',true);return;}try{var d=await crInvoke({action:'reprint',shipment_id:Number(b.getAttribute('data-rp')),printer_id:Number(p)});msg('Tisknu '+d.printed+' štítků');}catch(e){msg(e.message,true);}};});
+      body.querySelectorAll('[data-vd]').forEach(function(b){b.onclick=async function(){if(!confirm('Stornovat zásilku u dopravce?'))return;try{await crInvoke({action:'void',shipment_id:Number(b.getAttribute('data-vd'))});toast('Zásilka stornována');await carrierBox();}catch(e){msg(e.message,true);}};});
+    }catch(e){card.style.display='none';}
   }
   async function work(){
     var card=g('work-card'),K=O.kind;

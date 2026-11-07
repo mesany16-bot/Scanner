@@ -150,6 +150,7 @@ setTimeout(function(){
     <button class="mode-select-btn inv" id="btn-inv" onclick="enterMode('inventura')"><span class="msb-icon">📋</span><span class="msb-title">Inventory Tool</span><span class="msb-sub">Seznamy majetku a výsledky inventur</span></button>
     <button class="mode-select-btn sim" id="btn-temp" onclick="enterMode('teploty')" style="background:linear-gradient(135deg,#c0392b,#e67e22)"><span class="msb-icon">🌡️</span><span class="msb-title">Monitoring teplot</span><span class="msb-sub">Čidla, alarmy, reporty (GDP)</span></button>
     <button class="mode-select-btn sim" id="btn-sim" onclick="enterMode('simulator')"><span class="msb-icon">🚜</span><span class="msb-title">Retrak simulátor</span><span class="msb-sub">Simulace provozu haly a retraků</span></button>
+    <button class="mode-select-btn" id="btn-setup" onclick="if(window.PRG_SETUP)PRG_SETUP.open()" style="background:linear-gradient(135deg,#34495e,#2c3e50)"><span class="msb-icon">⚙️</span><span class="msb-title">Setup</span><span class="msb-sub">Jazyk a DC</span></button>
   </div>
 </div>
 <div id="app" style="display:none">

@@ -1,6 +1,8 @@
 /* PRG WMS – sdílené boční menu. Stránka má <nav id="wms-nav" data-active="klíč"></nav>.
    Nová stránka WMS se přidává jen sem (ITEMS). Nastavení a utility patří do skupiny Setup (group:'setup'). */
 (function(){
+  /* jazyky a Setup (prg_i18n.js) – načte se na každé stránce s menu */
+  if(!window.PRG_I18N&&!document.getElementById('prg-i18n-js')){var sc=document.createElement('script');sc.id='prg-i18n-js';sc.src='prg_i18n.js?v=1';(document.head||document.documentElement).appendChild(sc);}
   var ITEMS=[
     {k:'hub',      i:'📊', t:'Hub',        u:'wms_dashboard.html'},
     {k:'wms',      i:'🏭', t:'PRG WMS',    u:'wms_dashboard.html?app=wms'},
@@ -15,12 +17,15 @@
     {k:'deliveries',i:'📤',t:'Výdeje',     u:'wms_deliveries.html'},
     {k:'yard',     i:'🚛', t:'Yard',       u:'wms_yard.html'},
     {k:'scans',    i:'📱', t:'Skeny',      u:'wms_scans.html'},
+    {k:'exceptions', i:'⚠️', t:'Výjimky',  u:'wms_exceptions.html'},
     {k:'billing',  i:'💰', t:'Fakturace',  u:'wms_billing.html', admin:true},
     {group:'setup', i:'⚙️', t:'Setup', items:[
+      {k:'prefs',    i:'🌐', t:'Jazyk a DC',     fn:'PRG_SETUP.open()'},
       {k:'stock',    i:'🏷️', t:'SKU Setup',     u:'wms_stock.html'},
       {k:'dc',       i:'🏬', t:'DC',            u:'wms_warehouses.html'},
       {k:'locations',i:'📍', t:'Lokace',        u:'wms_locations.html'},
       {k:'print',    i:'🖨️', t:'Šablony tisku', u:'wms_print.html', admin:true},
+      {k:'integrations', i:'🔗', t:'Integrace', u:'wms_integrations.html', admin:true},
       {k:'settings', i:'🔧', t:'Nastavení systému', u:'wms_settings.html', admin:true}
     ]},
     {sep:true},
@@ -31,7 +36,8 @@
   function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
   function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
   function item(it,act,sub){
-    return '<div class="nav-item'+(it.k===act?' active':'')+(it.admin?' admin-only':'')+'" onclick="go(\''+it.u+'\')"'+(sub?' style="padding-left:34px;font-size:13.5px"':'')+'><span class="nav-icon">'+it.i+'</span> '+it.t+'</div>';
+    var click=it.fn?"if(window.PRG_SETUP)"+it.fn:"go('"+it.u+"')";
+    return '<div class="nav-item'+(it.k===act?' active':'')+(it.admin?' admin-only':'')+'" onclick="'+click+'"'+(sub?' style="padding-left:34px;font-size:13.5px"':'')+'><span class="nav-icon">'+it.i+'</span> '+it.t+'</div>';
   }
   function build(){
     var nav=document.getElementById('wms-nav');if(!nav)return;
@@ -150,8 +156,8 @@
     'wms_dashboard.html':function(){return hasFn('loadDashboard')&&loadDashboard();},
     'wms_balances.html':'load','wms_clients.html':'load','wms_receipts.html':'load','wms_deliveries.html':'load',
     'wms_scans.html':'load','wms_locations.html':'load','wms_warehouses.html':'load','wms_yard.html':'load',
-    'wms_stock.html':'load','wms_users.html':'load','wms_occupancy.html':'load','wms_temp.html':'refresh','wms_kpi.html':'load','wms_accuracy.html':'load',
-    'wms_adjustments.html':'loadHistory',
+    'wms_stock.html':'load','wms_users.html':'refresh','wms_exceptions.html':'load','wms_occupancy.html':'load','wms_temp.html':'refresh','wms_kpi.html':'load','wms_accuracy.html':'load',
+    'wms_adjustments.html':'loadHistory','wms_integrations.html':'load',
     'wms_history.html':function(){return hVal('h-q')&&hasFn('runSearch')&&runSearch();},
     'wms_inventura.html':function(){return hasFn('loadInvPage')&&loadInvPage(true);},
     'wms_receipt.html':function(){return window.PRG_DOCEDIT&&PRG_DOCEDIT.refreshLive();},

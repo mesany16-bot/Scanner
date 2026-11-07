@@ -56,7 +56,11 @@ body{overflow-x:hidden;}
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center"><select id="k-range" onchange="load()" style="padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"><option value="7">Posledních 7 dní</option><option value="30" selected>Posledních 30 dní</option><option value="90">Posledních 90 dní</option></select><span style="font-size:12px;color:var(--muted)" id="k-info"></span></div>
 <div id="kpis" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:16px"></div>
 <div class="card"><div class="card-header"><h3>📈 Výkon po dnech</h3></div><div style="padding:14px;height:300px"><canvas id="k-chart"></canvas></div></div>
-<div class="card"><div class="card-header"><h3>👷 Produktivita lidí (sken. úkony)</h3></div><div style="overflow-x:auto"><table><thead><tr><th>Skladník</th><th>Úkonů</th><th>Vychystání</th><th>Zaskladnění</th><th>Úkonů / hod</th></tr></thead><tbody id="k-users"></tbody></table></div></div>
+<div class="card"><div class="card-header"><h3>👷 Výkon pracovníků</h3><button class="btn btn-secondary btn-sm" onclick="wkCsv()">⬇️ CSV</button></div><div style="overflow-x:auto"><table><thead><tr>
+<th style="cursor:pointer" onclick="wkSort('name')">Pracovník</th><th style="cursor:pointer;text-align:right" onclick="wkSort('events')">Úkonů</th><th style="cursor:pointer;text-align:right" onclick="wkSort('per_hour')">Úkonů / hod</th><th style="cursor:pointer;text-align:right" onclick="wkSort('active_h')">Aktivně h</th>
+<th style="text-align:right">Příjem</th><th style="text-align:right">Zaskl.</th><th style="text-align:right">Vychyst.</th><th style="text-align:right">Balení</th><th style="text-align:right">Nakl.</th><th style="text-align:right">Inventura</th>
+<th style="cursor:pointer;text-align:right" onclick="wkSort('prusa_sets')">Průša sad</th><th style="text-align:right">s / sadu</th><th style="cursor:pointer;text-align:right" onclick="wkSort('error_pct')">Chybovost</th><th style="text-align:right">Výjimky</th></tr></thead><tbody id="k-users"></tbody></table></div>
+<div style="padding:8px 16px 12px;font-size:12px;color:var(--muted)">Úkon = sken příjmu, zaskladnění, vychystání, balíku, nakládky nebo inventury (Průša = 1 sada). Aktivní čas = součet mezer mezi úkony do 10 minut. Chybovost = chybné skeny (není v seznamu, špatný kód, chyba úlohy) / všechny skeny. Kliknutím na záhlaví seřadíš.</div></div>
 </div>
 </div>
 </div>
@@ -77,7 +81,20 @@ function closeModal(id){document.getElementById(id).style.display='none';}
 function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
 supa.auth.getSession().then(function(res){if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}else{window.location.href='wms_dashboard.html';}});
 
-var chart=null;
+var chart=null,WK=null,WK_SORT={k:'events',d:-1};
+function wkSort(k){WK_SORT=WK_SORT.k===k?{k:k,d:-WK_SORT.d}:{k:k,d:k==='name'?1:-1};wkRender();}
+function wkRender(){if(!WK)return;var a=WK.slice().sort(function(x,y){var p=x[WK_SORT.k],q=y[WK_SORT.k];if(WK_SORT.k==='name')return String(p).localeCompare(String(q),'cs')*WK_SORT.d;return ((Number(p)||0)-(Number(q)||0))*WK_SORT.d;});
+  var mx=Math.max.apply(null,a.map(function(u){return Number(u.per_hour)||0;}).concat([1]));
+  document.getElementById('k-users').innerHTML=a.map(function(u){var ep=u.error_pct==null?'–':nf(u.error_pct)+' %',ec=u.error_pct>=5?'var(--danger)':(u.error_pct>=2?'var(--warning)':'inherit');
+    return '<tr><td><b>'+esc(u.name)+'</b>'+(u.days?'<div style="font-size:11px;color:var(--muted)">'+u.days+' dní</div>':'')+'</td><td style="text-align:right">'+nf(u.events,0)+'</td>'
+      +'<td style="text-align:right;min-width:110px"><div style="display:flex;align-items:center;gap:6px;justify-content:flex-end"><div style="height:6px;border-radius:3px;background:var(--accent);width:'+Math.round(50*(Number(u.per_hour)||0)/mx)+'px"></div><b>'+nf(u.per_hour)+'</b></div></td>'
+      +'<td style="text-align:right">'+nf(u.active_h)+'</td><td style="text-align:right">'+nf(u.receive,0)+'</td><td style="text-align:right">'+nf(u.putaway,0)+'</td><td style="text-align:right">'+nf(u.pick,0)+(u.shorts?' <span style="color:var(--warning)" title="vychystání s mankem">('+u.shorts+' short)</span>':'')+'</td><td style="text-align:right">'+nf(u.pack,0)+'</td><td style="text-align:right">'+nf(u.load,0)+'</td><td style="text-align:right">'+nf(u.inventory,0)+'</td>'
+      +'<td style="text-align:right">'+nf(u.prusa_sets,0)+'</td><td style="text-align:right">'+(u.prusa_sec_per_set!=null?nf(u.prusa_sec_per_set,0):'–')+'</td>'
+      +'<td style="text-align:right;color:'+ec+'" title="není v seznamu: '+(u.not_in_list||0)+' · špatný kód: '+(u.bad_code||0)+'">'+ep+(u.errors?' <span style="font-size:11px;color:var(--muted)">('+u.errors+')</span>':'')+'</td><td style="text-align:right">'+nf(u.exceptions,0)+'</td></tr>';}).join('')||'<tr class="empty-row"><td colspan="14">Zatím žádné úkony v období</td></tr>';}
+function wkCsv(){if(!WK||!WK.length){toast('Žádná data');return;}var cols=['name','events','per_hour','active_h','receive','putaway','pick','shorts','pack','load','inventory','prusa_sets','prusa_sec_per_set','errors','not_in_list','bad_code','error_pct','exceptions','days','first_at','last_at'];
+  var head=['Pracovník','Úkonů','Úkonů/hod','Aktivně h','Příjem','Zaskladnění','Vychystání','Short','Balení','Nakládka','Inventura','Průša sad','s/sadu','Chyb','Není v seznamu','Špatný kód','Chybovost %','Výjimky','Dní','Od','Do'];
+  var csv='\ufeff'+head.join(';')+'\n'+WK.map(function(u){return cols.map(function(c){var v=u[c];if(v==null)return '';if(typeof v==='number')return String(v).replace('.',',');return '"'+String(v).replace(/"/g,'""')+'"';}).join(';');}).join('\n');
+  var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='vykon_pracovniku_'+new Date().toISOString().slice(0,10)+'.csv';document.body.appendChild(a);a.click();setTimeout(function(){a.remove();},300);}
 function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function nf(v,d){return v==null?'–':Number(v).toLocaleString('cs-CZ',{maximumFractionDigits:d==null?1:d});}
 async function afterLogin(){try{await supa.rpc('wms_stock_snapshot',{});}catch(e){}load();}
@@ -101,7 +118,9 @@ async function load(){
   if(window.Chart){if(chart)chart.destroy();chart=new Chart(document.getElementById('k-chart'),{type:'bar',data:{labels:bd.map(function(x){return new Date(x.day).toLocaleDateString('cs-CZ',{day:'numeric',month:'numeric'});}),
     datasets:[{label:'Výdeje',data:bd.map(function(x){return x.deliveries;}),backgroundColor:'#0a7c4e'},{label:'Příjmy',data:bd.map(function(x){return x.receipts;}),backgroundColor:'#2980b9'},{label:'Kusy odeslané',data:bd.map(function(x){return x.units;}),type:'line',borderColor:'#e67e22',yAxisID:'y2',pointRadius:2}]},
     options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{y:{beginAtZero:true,title:{display:true,text:'doklady'}},y2:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false},title:{display:true,text:'ks'}}}}});}
-  document.getElementById('k-users').innerHTML=(k.by_user||[]).map(function(u){return '<tr><td><b>'+esc(u.name)+'</b></td><td>'+nf(u.actions,0)+'</td><td>'+nf(u.picks,0)+'</td><td>'+nf(u.putaways,0)+'</td><td>'+nf(u.per_hour)+'</td></tr>';}).join('')||'<tr class="empty-row"><td colspan="5">Zatím žádné skenované úkony v období</td></tr>';
+  var w=await supa.rpc('wms_worker_kpi',{p_dc:dc,p_from:from.toISOString(),p_to:to.toISOString()});
+  if(w.error){WK=null;document.getElementById('k-users').innerHTML='<tr class="empty-row"><td colspan="14">'+esc(/wms_worker_kpi|schema cache/.test(w.error.message)?'Spusť v Supabase e_setup-01.sql (výkon pracovníků)':w.error.message)+'</td></tr>';}
+  else{WK=w.data||[];wkRender();}
   document.getElementById('k-info').textContent='aktualizováno '+new Date().toLocaleTimeString('cs-CZ');
 }
 </script></body></html>

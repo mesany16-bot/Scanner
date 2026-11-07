@@ -106,6 +106,16 @@ nav{flex:1;padding:10px 0;overflow-y:auto;}
     <tbody id="tbody"><tr class="empty-row"><td colspan="5">Načítám…</td></tr></tbody></table>
     </div>
   </div>
+  <div class="card" style="margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <h3 style="margin:0;font-size:16px">📱 Zařízení scanneru</h3>
+      <span id="dev-note" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div style="overflow-x:auto;">
+    <table><thead><tr><th>Zařízení</th><th>Uživatel</th><th>Verze</th><th>Neodeslané</th><th>Odmítnuté</th><th>Poslední spojení</th><th>Vstup</th></tr></thead>
+    <tbody id="dev-tbody"><tr class="empty-row"><td colspan="7">Načítám…</td></tr></tbody></table>
+    </div>
+  </div>
 </div>
 <div class="modal-backdrop" id="modal" style="display:none">
   <div class="modal-box">
@@ -149,8 +159,9 @@ supa.auth.getSession().then(function(res){
 var data=[],editId=null;
 async function afterLogin(){
   if(currentProfile&&currentProfile.role!=='admin'){toast('⚠️ Přístup pouze pro administrátory');setTimeout(function(){go('wms_dashboard.html');},1500);return;}
-  load();
+  load(); loadDevices();
 }
+function refresh(){ load(); loadDevices(); }
 function isPending(u){return u.role!=='admin'&&u.role!=='client'&&u.is_active!==false&&Array.isArray(u.allowed_apps)&&u.allowed_apps.length===0;}
 var dcList=[];
 async function load(){
@@ -184,6 +195,27 @@ async function load(){
         +(u.id!==currentUser.id?'<button class="btn btn-danger btn-sm" onclick="removeUser(\''+u.id+'\',\''+esc(u.name)+'\')">🗑 Odebrat</button>':'')
       +'</td>'
     +'</tr>';
+  }).join('');
+}
+function verNum(v){ var m=String(v||'').match(/(\d+)-(\d+)/); return m?(+m[1])*1000+(+m[2]):0; }
+function ago(t){ if(!t)return '–'; var s=(Date.now()-new Date(t).getTime())/1000; if(s<90)return 'před chvílí'; if(s<3600)return 'před '+Math.round(s/60)+' min'; if(s<86400)return 'před '+Math.round(s/3600)+' h'; return 'před '+Math.round(s/86400)+' dny'; }
+async function loadDevices(){
+  var tb=document.getElementById('dev-tbody'); if(!tb)return;
+  var r=await supa.from('devices').select('*').order('last_seen',{ascending:false});
+  if(r.error){tb.innerHTML='<tr class="empty-row"><td colspan="7">'+(/devices/.test(r.error.message)?'Přehled zařízení zatím není zapnutý – spusť rls_setup-02.sql':'❌ '+r.error.message)+'</td></tr>';return;}
+  var d=r.data||[]; if(!d.length){tb.innerHTML='<tr class="empty-row"><td colspan="7">Zatím se žádné zařízení neozvalo (scanner verze 5-57 a novější)</td></tr>';return;}
+  var latest=d.reduce(function(m,x){return Math.max(m,verNum(x.app_version));},0), latestTxt=(d.find(function(x){return verNum(x.app_version)===latest;})||{}).app_version;
+  document.getElementById('dev-note').textContent='Nejnovější verze v provozu: '+(latestTxt||'–');
+  tb.innerHTML=d.map(function(x){
+    var old=verNum(x.app_version)<latest, stale=(Date.now()-new Date(x.last_seen).getTime())>86400000;
+    return '<tr>'+
+      '<td data-label="Zařízení"><b>'+(x.label||x.device_id)+'</b>'+(x.label?'<br><span style="font-size:11px;color:var(--muted)">'+x.device_id+'</span>':'')+'</td>'+
+      '<td data-label="Uživatel">'+(x.user_name||'–')+'</td>'+
+      '<td data-label="Verze">'+(old?'<span class="badge badge-red">'+x.app_version+' – stará</span>':'<span class="badge badge-green">'+(x.app_version||'–')+'</span>')+'</td>'+
+      '<td data-label="Neodeslané">'+(x.pending?'<span class="badge badge-orange">'+x.pending+'</span>':'0')+'</td>'+
+      '<td data-label="Odmítnuté">'+(x.failed?'<span class="badge badge-red">'+x.failed+'</span>':'0')+'</td>'+
+      '<td data-label="Poslední spojení"'+(stale?' style="color:var(--danger)"':'')+'>'+ago(x.last_seen)+'<br><span style="font-size:11px;color:var(--muted)">'+fmt(x.last_seen)+'</span></td>'+
+      '<td data-label="Vstup">'+(x.input_mode==='reader'?'🔫 čtečka':'📷 kamera')+'</td></tr>';
   }).join('');
 }
 async function approveUser(id,name){
