@@ -662,6 +662,10 @@ Uložit nové heslo|Save new password|Uložiť nové heslo|Зберегти но
     var k = p[0].trim(); DICT[k] = {}; ORDER.forEach(function(lg, i){ DICT[k][lg] = p[i + 1].trim(); });
     LOWER[k.toLowerCase()] = k;
   });
+  // zpetny slovnik: preklad v libovolnem jazyce -> cesky klic (aby slo prepnout zpet i z textu, ktery stranka zkopirovala)
+  var REV = {}, REVL = {};
+  Object.keys(DICT).forEach(function(k){ ORDER.forEach(function(lg){ var v = DICT[k][lg]; if (v && v !== k && !DICT[v]) { if (!REV[v]) REV[v] = k; if (!REVL[v.toLowerCase()]) REVL[v.toLowerCase()] = k; } }); });
+  function val(k){ return lang === 'cs' ? k : DICT[k][lang]; }
 
   // hlasová hlášení
   var VOICE = {
@@ -693,13 +697,14 @@ Uložit nové heslo|Save new password|Uložiť nové heslo|Зберегти но
     return [seg.slice(0, i), seg.slice(i, j), seg.slice(j)];
   }
   function lookup(k){
-    if (DICT[k]) return DICT[k][lang];
-    var lk = LOWER[k.toLowerCase()];
-    if (lk) { var v = DICT[lk][lang]; return k === k.toUpperCase() && k !== k.toLowerCase() ? v.toUpperCase() : v; }
-    return null;
+    var r = null;
+    if (DICT[k]) r = val(k);
+    else if (REV[k]) r = val(REV[k]);
+    else { var lk = LOWER[k.toLowerCase()] || REVL[k.toLowerCase()]; if (lk) { var v = val(lk); r = k === k.toUpperCase() && k !== k.toLowerCase() ? v.toUpperCase() : v; } }
+    return r === k ? null : r;
   }
   function tr(s){
-    if (lang === 'cs' || !s) return s;
+    if (!s) return s;
     var t = s.trim(); if (!t) return s;
     var lead = s.slice(0, s.indexOf(t)), tail = s.slice(s.indexOf(t) + t.length);
     var full = core(t), f = full[1] && lookup(full[1]);
@@ -712,12 +717,15 @@ Uložit nové heslo|Save new password|Uložiť nové heslo|Зберегти но
   }
   var SKIP = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, CODE: 1, PRE: 1 };
   var busy = false;
+  // Safari/iPhone muze zahodit vlastni vlastnosti uzlu -> drzime prelozene uzly v pameti
+  var KEEP = new Set();
+  function keep(n){ KEEP.add(n); if (KEEP.size > 4000) KEEP.forEach(function(x){ if (!x.isConnected) KEEP.delete(x); }); }
   function doText(n){
     var cur = n.nodeValue;
     if (n.__i18nOut === cur) return;        // náš vlastní překlad
     n.__i18nSrc = cur;
     var out = tr(cur);
-    n.__i18nOut = out;
+    n.__i18nOut = out; keep(n);
     if (out !== cur) n.nodeValue = out;
   }
   function doEl(el){
@@ -725,7 +733,7 @@ Uložit nové heslo|Save new password|Uložiť nové heslo|Зберегти но
       if (!el.hasAttribute || !el.hasAttribute(a)) return;
       var cur = el.getAttribute(a), key = '__i18n_' + a;
       if (el[key + 'Out'] === cur) return;
-      el[key] = cur; var out = tr(cur); el[key + 'Out'] = out; if (out !== cur) el.setAttribute(a, out);
+      el[key] = cur; var out = tr(cur); el[key + 'Out'] = out; keep(el); if (out !== cur) el.setAttribute(a, out);
     });
   }
   function walk(root){
@@ -764,7 +772,8 @@ Uložit nové heslo|Save new password|Uložiť nové heslo|Зберегти но
     if (!document.body) return;
     document.documentElement.setAttribute('lang', lang);
     busy = true;
-    try { restore(document.body); if (lang !== 'cs') walk(document.body); } finally { busy = false; }
+    KEEP.forEach(function(x){ if (!x.isConnected) KEEP.delete(x); });
+    try { restore(document.body); walk(document.body); } finally { busy = false; }
     observe();
   }
   function setLang(l){
@@ -811,7 +820,274 @@ Uložit nové heslo|Save new password|Uložiť nové heslo|Зберегти но
     return null;
   }
 
-  window.PRG_I18N = { LANGS: LANGS, get lang(){ return lang; }, setLang: setLang, t: tr, apply: apply, say: say, voiceText: voiceText, classify: classify, hasVoice: hasVoice, VOICE_KEYS: Object.keys(VOICE) };
+
+  // stavová hlášení scanneru (dynamický text): nahrazení známých frází
+  var PHR_RAW = `Pro odeslání na server se znovu přihlas – klepni na červený štítek 🔒 nahoře. Skenovat můžeš dál, nic se neztratí|To send to the server, log in again – tap the red 🔒 label at the top. You can keep scanning, nothing will be lost|Na odoslanie na server sa znova prihlás – ťukni na červený štítok 🔒 hore. Skenovať môžeš ďalej, nič sa nestratí|Щоб надіслати на сервер, увійдіть знову – торкніться червоної позначки 🔒 угорі. Можна сканувати далі, нічого не втратиться|Aby wysłać na serwer, zaloguj się ponownie – dotknij czerwonej etykiety 🔒 u góry. Możesz dalej skanować, nic nie zginie|Log opnieuw in om naar de server te sturen – tik op het rode label 🔒 bovenaan. Je kunt verder scannen, er gaat niets verloren|Zum Senden an den Server erneut anmelden – oben auf das rote 🔒 tippen. Du kannst weiter scannen, nichts geht verloren|Pentru trimitere pe server autentifică-te din nou – atinge eticheta roșie 🔒 de sus. Poți scana în continuare, nu se pierde nimic|A szerverre küldéshez jelentkezz be újra – koppints a piros 🔒 jelre fent. Tovább olvashatsz, semmi sem vész el|Để gửi lên máy chủ, hãy đăng nhập lại – chạm nhãn đỏ 🔒 ở trên. Bạn vẫn có thể quét tiếp, không mất dữ liệu
+Zvuky zapnuty|Sounds on|Zvuky zapnuté|Звуки увімкнено|Dźwięki włączone|Geluid aan|Töne an|Sunete pornite|Hangok be|Đã bật âm thanh
+Zvuky vypnuty|Sounds off|Zvuky vypnuté|Звуки вимкнено|Dźwięki wyłączone|Geluid uit|Töne aus|Sunete oprite|Hangok ki|Đã tắt âm thanh
+Znovu přihlášen – odesílám neodeslané záznamy|Logged in again – sending unsent records|Znova prihlásený – odosielam neodoslané záznamy|Знову в системі – надсилаю ненадіслані записи|Ponownie zalogowano – wysyłam niewysłane rekordy|Opnieuw ingelogd – niet-verzonden records worden verstuurd|Erneut angemeldet – sende ungesendete Datensätze|Reautentificat – trimit înregistrările netrimise|Újra bejelentkezve – a el nem küldött rekordok küldése|Đã đăng nhập lại – đang gửi bản ghi chưa gửi
+Máš přístup jen do|You only have access to|Máš prístup len do|Ви маєте доступ лише до|Masz dostęp tylko do|Je hebt alleen toegang tot|Du hast nur Zugriff auf|Ai acces doar la|Csak ide van hozzáférésed:|Bạn chỉ có quyền truy cập
+Výchozí DC se nepodařilo uložit|Default DC could not be saved|Predvolené DC sa nepodarilo uložiť|Не вдалося зберегти типовий DC|Nie udało się zapisać domyślnego DC|Standaard-DC kon niet worden opgeslagen|Standard-DC konnte nicht gespeichert werden|DC implicit nu a putut fi salvat|Az alapértelmezett DC mentése nem sikerült|Không lưu được DC mặc định
+přepnuto|switched|prepnuté|перемкнено|przełączono|gewisseld|gewechselt|comutat|átváltva|đã chuyển
+Offline režim – skeny se ukládají do zařízení a odešlou se po připojení|Offline mode – scans are saved on the device and sent when connected|Offline režim – skeny sa ukladajú do zariadenia a odošlú sa po pripojení|Офлайн-режим – скани зберігаються на пристрої й надішлються після підключення|Tryb offline – skany są zapisywane w urządzeniu i wysłane po połączeniu|Offline modus – scans worden op het apparaat opgeslagen en verzonden zodra er verbinding is|Offline-Modus – Scans werden auf dem Gerät gespeichert und bei Verbindung gesendet|Mod offline – scanările se salvează pe dispozitiv și se trimit la conectare|Offline mód – a beolvasások az eszközön tárolódnak, kapcsolatkor elküldjük őket|Chế độ ngoại tuyến – dữ liệu quét được lưu trên thiết bị và gửi khi có kết nối
+Bez připojení – přihlášení dokončím, jakmile bude signál|No connection – login will finish once there is signal|Bez pripojenia – prihlásenie dokončím, keď bude signál|Немає з'єднання – вхід завершиться, щойно з'явиться сигнал|Brak połączenia – logowanie dokończę, gdy będzie zasięg|Geen verbinding – inloggen wordt afgerond zodra er signaal is|Keine Verbindung – Anmeldung wird abgeschlossen, sobald Signal da ist|Fără conexiune – autentificarea se termină când apare semnalul|Nincs kapcsolat – a bejelentkezés jel esetén befejeződik|Không có kết nối – sẽ hoàn tất đăng nhập khi có sóng
+Přihlášen jako|Logged in as|Prihlásený ako|Ви увійшли як|Zalogowano jako|Ingelogd als|Angemeldet als|Autentificat ca|Bejelentkezve:|Đã đăng nhập:
+Vítej|Welcome|Vitaj|Ласкаво просимо|Witaj|Welkom|Willkommen|Bun venit|Üdv|Chào mừng
+Hlasová hlášení zapnuta|Voice messages on|Hlasové hlásenia zapnuté|Голосові повідомлення увімкнено|Komunikaty głosowe włączone|Gesproken meldingen aan|Sprachansagen an|Mesaje vocale pornite|Hangüzenetek be|Đã bật thông báo giọng nói
+Hlasová hlášení vypnuta|Voice messages off|Hlasové hlásenia vypnuté|Голосові повідомлення вимкнено|Komunikaty głosowe wyłączone|Gesproken meldingen uit|Sprachansagen aus|Mesaje vocale oprite|Hangüzenetek ki|Đã tắt thông báo giọng nói
+Toto zařízení neumí číst nahlas|This device cannot read aloud|Toto zariadenie nevie čítať nahlas|Цей пристрій не вміє читати вголос|To urządzenie nie potrafi czytać na głos|Dit apparaat kan niet voorlezen|Dieses Gerät kann nicht vorlesen|Acest dispozitiv nu poate citi cu voce tare|Ez az eszköz nem tud felolvasni|Thiết bị này không đọc thành tiếng được
+Pro zvolený jazyk není v zařízení nainstalovaný hlas – použije se výchozí|No voice installed for the chosen language – the default will be used|Pre zvolený jazyk nie je v zariadení nainštalovaný hlas – použije sa predvolený|Для вибраної мови немає голосу – буде використано типовий|Brak głosu dla wybranego języka – zostanie użyty domyślny|Geen stem geïnstalleerd voor de gekozen taal – standaard wordt gebruikt|Für die gewählte Sprache ist keine Stimme installiert – Standard wird verwendet|Nu există voce pentru limba aleasă – se folosește cea implicită|A választott nyelvhez nincs hang telepítve – az alapértelmezett lesz használva|Không có giọng cho ngôn ngữ đã chọn – dùng giọng mặc định
+Úlohy WMS|WMS tasks|Úlohy WMS|Завдання WMS|Zadania WMS|WMS-taken|WMS-Aufgaben|Sarcini WMS|WMS feladatok|Tác vụ WMS
+Inventura ze serveru|Stocktake from server|Inventúra zo servera|Інвентаризація з сервера|Inwentaryzacja z serwera|Telling van server|Inventur vom Server|Inventar de pe server|Leltár szerverről|Kiểm kê từ máy chủ
+Mezinárodka (seznam i slepá)|International (list and blind)|Medzinárodka (zoznam aj slepá)|Міжнародна (список і сліпа)|Międzynarodowa (lista i ślepa)|Internationaal (lijst en blind)|International (Liste und blind)|Internațional (listă și orb)|Nemzetközi (lista és vak)|Quốc tế (danh sách và mù)
+Průša dobalování|Průša repacking|Průša dobaľovanie|Průša допакування|Průša dopakowywanie|Průša bijverpakken|Průša Nachverpackung|Průša reambalare|Průša utócsomagolás|Průša đóng gói bổ sung
+Ostatní|Other|Ostatné|Інше|Inne|Overig|Sonstiges|Altele|Egyéb|Khác
+Naskenuj nebo napiš kód|Scan or type the code|Naskenuj alebo napíš kód|Відскануйте або введіть код|Zeskanuj lub wpisz kod|Scan of typ de code|Code scannen oder eingeben|Scanează sau scrie codul|Olvasd be vagy írd be a kódot|Quét hoặc nhập mã
+Packing list A4 otevřen k tisku|A4 packing list opened for printing|Packing list A4 otvorený na tlač|Пакувальний лист A4 відкрито для друку|Packing list A4 otwarty do druku|Paklijst A4 geopend om te printen|Packliste A4 zum Drucken geöffnet|Packing list A4 deschis pentru tipărire|A4 csomaglista nyomtatásra megnyitva|Đã mở phiếu đóng gói A4 để in
+Tisk ve frontě|Print queued|Tlač vo fronte|Друк у черзі|Wydruk w kolejce|Afdruk in wachtrij|Druck in Warteschlange|Tipărire în coadă|Nyomtatás sorban|Lệnh in đang chờ
+Vytištěno|Printed|Vytlačené|Надруковано|Wydrukowano|Afgedrukt|Gedruckt|Tipărit|Kinyomtatva|Đã in
+Tisk selhal|Print failed|Tlač zlyhala|Помилка друку|Drukowanie nie powiodło się|Printen mislukt|Druck fehlgeschlagen|Tipărirea a eșuat|Nyomtatás sikertelen|In thất bại
+Přidej aspoň jednu fotku|Add at least one photo|Pridaj aspoň jednu fotku|Додайте хоча б одне фото|Dodaj co najmniej jedno zdjęcie|Voeg minstens één foto toe|Mindestens ein Foto hinzufügen|Adaugă cel puțin o fotografie|Adj hozzá legalább egy fotót|Thêm ít nhất một ảnh
+Ukládám|Saving|Ukladám|Зберігаю|Zapisuję|Opslaan|Speichere|Se salvează|Mentés|Đang lưu
+výjimku|exception|výnimku|виняток|wyjątek|uitzondering|Ausnahme|excepția|kivételt|ngoại lệ
+fotky|photos|fotky|фото|zdjęcia|foto's|Fotos|fotografiile|fotókat|ảnh
+fotek|photos|fotiek|фото|zdjęć|foto's|Fotos|fotografii|fotó|ảnh
+Uloženo|Saved|Uložené|Збережено|Zapisano|Opgeslagen|Gespeichert|Salvat|Mentve|Đã lưu
+Výjimka nahlášena|Exception reported|Výnimka nahlásená|Виняток зареєстровано|Wyjątek zgłoszony|Uitzondering gemeld|Ausnahme gemeldet|Excepție raportată|Kivétel bejelentve|Đã báo ngoại lệ
+Uloženo v zařízení – odešle se po připojení|Saved on the device – will be sent when connected|Uložené v zariadení – odošle sa po pripojení|Збережено на пристрої – надішлеться після підключення|Zapisano w urządzeniu – zostanie wysłane po połączeniu|Opgeslagen op het apparaat – wordt verzonden bij verbinding|Auf dem Gerät gespeichert – wird bei Verbindung gesendet|Salvat pe dispozitiv – se trimite la conectare|Az eszközön mentve – kapcsolatkor elküldjük|Đã lưu trên thiết bị – sẽ gửi khi có kết nối
+Nepodařilo se uložit|Could not save|Nepodarilo sa uložiť|Не вдалося зберегти|Nie udało się zapisać|Kon niet opslaan|Konnte nicht speichern|Nu s-a putut salva|Nem sikerült menteni|Không lưu được
+vyber činnost|choose an activity|vyber činnosť|виберіть дію|wybierz czynność|kies een activiteit|Tätigkeit wählen|alege o activitate|válassz tevékenységet|chọn công việc
+pokračuj – spusť kameru|continue – start the camera|pokračuj – spusti kameru|продовжуйте – увімкніть камеру|kontynuuj – uruchom kamerę|ga verder – start de camera|weiter – Kamera starten|continuă – pornește camera|folytasd – indítsd a kamerát|tiếp tục – bật camera
+vyber zdroj seznamu|choose the list source|vyber zdroj zoznamu|виберіть джерело списку|wybierz źródło listy|kies de lijstbron|Listenquelle wählen|alege sursa listei|válaszd ki a lista forrását|chọn nguồn danh sách
+spusť kameru|start the camera|spusti kameru|увімкніть камеру|uruchom kamerę|start de camera|Kamera starten|pornește camera|indítsd a kamerát|bật camera
+Spusť kameru|Start the camera|Spusti kameru|Увімкніть камеру|Uruchom kamerę|Start de camera|Kamera starten|Pornește camera|Indítsd a kamerát|Bật camera
+klepni na Start a vyber činnost|tap Start and choose an activity|ťukni na Start a vyber činnosť|натисніть Старт і виберіть дію|dotknij Start i wybierz czynność|tik op Start en kies een activiteit|auf Start tippen und Tätigkeit wählen|atinge Start și alege o activitate|koppints a Start gombra és válassz tevékenységet|chạm Bắt đầu và chọn công việc
+klepni nebo naskenuj číslo dokladu|tap or scan the document number|ťukni alebo naskenuj číslo dokladu|торкніться або відскануйте номер документа|dotknij lub zeskanuj numer dokumentu|tik of scan het documentnummer|tippen oder Belegnummer scannen|atinge sau scanează numărul documentului|koppints vagy olvasd be a bizonylatszámot|chạm hoặc quét số chứng từ
+Příjem je ve stavu|Receipt status is|Príjem je v stave|Статус приймання|Przyjęcie ma status|Ontvangst heeft status|Wareneingang hat Status|Recepția are starea|A bevételezés állapota|Trạng thái nhập hàng
+naskenuj EAN / SKU zboží|scan the goods EAN / SKU|naskenuj EAN / SKU tovaru|відскануйте EAN / SKU товару|zeskanuj EAN / SKU towaru|scan EAN / SKU van de goederen|EAN / SKU der Ware scannen|scanează EAN / SKU marfă|olvasd be az áru EAN / SKU kódját|quét EAN / SKU hàng
+Příjem už není otevřený|Receipt is no longer open|Príjem už nie je otvorený|Приймання вже не відкрите|Przyjęcie nie jest już otwarte|Ontvangst is niet meer open|Wareneingang ist nicht mehr offen|Recepția nu mai este deschisă|A bevételezés már nincs nyitva|Phiếu nhập không còn mở
+klient takové SKU / EAN nemá|the client has no such SKU / EAN|klient také SKU / EAN nemá|клієнт не має такого SKU / EAN|klient nie ma takiego SKU / EAN|klant heeft deze SKU / EAN niet|Kunde hat diese SKU / EAN nicht|clientul nu are acest SKU / EAN|az ügyfélnek nincs ilyen SKU / EAN|khách hàng không có SKU / EAN này
+Zrušeno|Cancelled|Zrušené|Скасовано|Anulowano|Geannuleerd|Abgebrochen|Anulat|Megszakítva|Đã hủy
+ks přijato|pcs received|ks prijatých|шт. прийнято|szt. przyjęto|st. ontvangen|Stk. eingegangen|buc. recepționate|db bevételezve|cái đã nhận
+odešle se, až bude signál|will be sent when there is signal|odošle sa, keď bude signál|надішлеться, коли буде сигнал|zostanie wysłane, gdy będzie zasięg|wordt verzonden bij signaal|wird gesendet, sobald Signal da ist|se trimite când apare semnalul|jel esetén elküldjük|sẽ gửi khi có sóng
+Nejdřív naskenuj zboží|Scan the goods first|Najprv naskenuj tovar|Спочатку відскануйте товар|Najpierw zeskanuj towar|Scan eerst de goederen|Zuerst Ware scannen|Scanează mai întâi marfa|Először az árut olvasd be|Hãy quét hàng trước
+Příjem dokončen|Receipt completed|Príjem dokončený|Приймання завершено|Przyjęcie zakończone|Ontvangst voltooid|Wareneingang abgeschlossen|Recepție finalizată|Bevételezés kész|Đã hoàn tất nhập hàng
+Dokončení příjmu se odešle, až bude signál|Receipt completion will be sent when there is signal|Dokončenie príjmu sa odošle, keď bude signál|Завершення приймання надішлеться, коли буде сигнал|Zakończenie przyjęcia zostanie wysłane, gdy będzie zasięg|Afronding ontvangst wordt verzonden bij signaal|Abschluss wird gesendet, sobald Signal da ist|Finalizarea recepției se trimite când apare semnalul|A bevételezés lezárását jel esetén küldjük|Hoàn tất nhập hàng sẽ gửi khi có sóng
+Naskenuj LPN palety|Scan the pallet LPN|Naskenuj LPN palety|Відскануйте LPN палети|Zeskanuj LPN palety|Scan de pallet-LPN|Paletten-LPN scannen|Scanează LPN-ul paletului|Olvasd be a raklap LPN-jét|Quét LPN của pallet
+nečeká na zaskladnění|is not waiting for put-away|nečaká na zaskladnenie|не очікує розміщення|nie czeka na składowanie|wacht niet op wegzetten|wartet nicht auf Einlagerung|nu așteaptă depozitarea|nem vár betárolásra|không chờ cất hàng
+naskenuj lokaci|scan the location|naskenuj lokáciu|відскануйте локацію|zeskanuj lokalizację|scan de locatie|Lagerplatz scannen|scanează locația|olvasd be a helyet|quét vị trí
+To je LPN – naskenuj LOKACI|That is an LPN – scan the LOCATION|To je LPN – naskenuj LOKÁCIU|Це LPN – відскануйте ЛОКАЦІЮ|To jest LPN – zeskanuj LOKALIZACJĘ|Dat is een LPN – scan de LOCATIE|Das ist eine LPN – LAGERPLATZ scannen|Acesta este un LPN – scanează LOCAȚIA|Ez LPN – a HELYET olvasd be|Đây là LPN – hãy quét VỊ TRÍ
+Hlavní|Main|Hlavná|Основна|Główna|Hoofd|Haupt|Principală|Fő|Chính
+naskenuj sousední lokaci (přesah), pak Hotovo|scan the adjacent location (overhang), then Done|naskenuj susednú lokáciu (presah), potom Hotovo|відскануйте сусідню локацію (виступ), потім Готово|zeskanuj sąsiednią lokalizację (nawis), potem Gotowe|scan de aangrenzende locatie (overstek), dan Klaar|Nachbarplatz scannen (Überhang), dann Fertig|scanează locația vecină (depășire), apoi Gata|olvasd be a szomszédos helyet (túllógás), majd Kész|quét vị trí bên cạnh (tràn), rồi Xong
+už je zadaná|is already entered|už je zadaná|вже введено|jest już wprowadzona|is al ingevoerd|ist bereits eingegeben|este deja introdusă|már meg van adva|đã được nhập
+Přesah|Overhang|Presah|Виступ|Nawis|Overstek|Überhang|Depășire|Túllógás|Tràn
+další sousední lokace, nebo Hotovo|next adjacent location, or Done|ďalšia susedná lokácia, alebo Hotovo|наступна сусідня локація або Готово|następna sąsiednia lokalizacja lub Gotowe|volgende aangrenzende locatie, of Klaar|nächster Nachbarplatz oder Fertig|următoarea locație vecină sau Gata|következő szomszédos hely, vagy Kész|vị trí kế tiếp hoặc Xong
+přesah|overhang|presah|виступ|nawis|overstek|Überhang|depășire|túllógás|tràn
+odešle se později|will be sent later|odošle sa neskôr|надішлеться пізніше|zostanie wysłane później|wordt later verzonden|wird später gesendet|se trimite mai târziu|később küldjük|sẽ gửi sau
+další LPN|next LPN|ďalšie LPN|наступний LPN|następny LPN|volgende LPN|nächste LPN|următorul LPN|következő LPN|LPN tiếp theo
+Naskenuj lokaci nebo LPN|Scan the location or LPN|Naskenuj lokáciu alebo LPN|Відскануйте локацію або LPN|Zeskanuj lokalizację lub LPN|Scan de locatie of LPN|Lagerplatz oder LPN scannen|Scanează locația sau LPN|Olvasd be a helyet vagy az LPN-t|Quét vị trí hoặc LPN
+Naskenuj sousední lokace, kam paleta přesahuje|Scan the adjacent locations the pallet overhangs|Naskenuj susedné lokácie, kam paleta presahuje|Відскануйте сусідні локації, куди виступає палета|Zeskanuj sąsiednie lokalizacje, na które wystaje paleta|Scan de aangrenzende locaties waar de pallet overheen steekt|Nachbarplätze scannen, in die die Palette ragt|Scanează locațiile vecine în care depășește paletul|Olvasd be a szomszédos helyeket, ahová a raklap túllóg|Quét các vị trí bên cạnh mà pallet tràn sang
+Přesah uložen|Overhang saved|Presah uložený|Виступ збережено|Nawis zapisany|Overstek opgeslagen|Überhang gespeichert|Depășire salvată|Túllógás mentve|Đã lưu phần tràn
+Přesah se uloží, až bude signál|Overhang will be saved when there is signal|Presah sa uloží, keď bude signál|Виступ збережеться, коли буде сигнал|Nawis zostanie zapisany, gdy będzie zasięg|Overstek wordt opgeslagen bij signaal|Überhang wird gespeichert, sobald Signal da ist|Depășirea se salvează când apare semnalul|A túllógást jel esetén mentjük|Phần tràn sẽ lưu khi có sóng
+To je hlavní lokace / LPN|That is the main location / LPN|To je hlavná lokácia / LPN|Це основна локація / LPN|To jest główna lokalizacja / LPN|Dat is de hoofdlocatie / LPN|Das ist der Hauptplatz / LPN|Aceasta este locația principală / LPN|Ez a fő hely / LPN|Đây là vị trí chính / LPN
+Jdi na|Go to|Choď na|Ідіть до|Idź do|Ga naar|Gehe zu|Mergi la|Menj ide:|Đi đến
+a naskenuj lokaci|and scan the location|a naskenuj lokáciu|і відскануйте локацію|i zeskanuj lokalizację|en scan de locatie|und Lagerplatz scannen|și scanează locația|és olvasd be a helyet|và quét vị trí
+Výdej odeslán|Shipment dispatched|Výdaj odoslaný|Відвантаження відправлено|Wydanie wysłane|Zending verzonden|Warenausgang versendet|Livrare expediată|Kiadás elküldve|Đã xuất hàng
+Vše vychystáno – můžeš odeslat|All picked – you can dispatch|Všetko vychystané – môžeš odoslať|Усе скомплектовано – можна відправляти|Wszystko skompletowane – możesz wysłać|Alles gepickt – je kunt verzenden|Alles kommissioniert – du kannst versenden|Totul culeș – poți expedia|Minden kiszedve – elküldheted|Đã lấy đủ – có thể xuất
+Vše vychystáno – potvrď odeslání|All picked – confirm dispatch|Všetko vychystané – potvrď odoslanie|Усе скомплектовано – підтвердіть відправлення|Wszystko skompletowane – potwierdź wysyłkę|Alles gepickt – bevestig verzending|Alles kommissioniert – Versand bestätigen|Totul culeș – confirmă expedierea|Minden kiszedve – erősítsd meg a küldést|Đã lấy đủ – xác nhận xuất
+Špatná lokace|Wrong location|Zlá lokácia|Неправильна локація|Zła lokalizacja|Verkeerde locatie|Falscher Lagerplatz|Locație greșită|Rossz hely|Sai vị trí
+máš jít na|you should go to|máš ísť na|вам треба до|masz iść do|je moet naar|du musst zu|trebuie să mergi la|ide kell menned:|bạn cần đến
+Naskenuj|Scan|Naskenuj|Відскануйте|Zeskanuj|Scan|Scannen:|Scanează|Olvasd be:|Quét
+zboží|goods|tovar|товар|towar|goederen|Ware|marfa|áru|hàng
+není|is not|nie je|не є|nie jest|is niet|ist nicht|nu este|nem|không phải
+ani|nor|ani|ані|ani|noch|noch|nici|sem|cũng không
+ks vychystáno|pcs picked|ks vychystaných|шт. скомплектовано|szt. skompletowano|st. gepickt|Stk. kommissioniert|buc. culese|db kiszedve|cái đã lấy
+Uloženo v zařízení, odešle se se signálem|Saved on the device, will be sent with signal|Uložené v zariadení, odošle sa so signálom|Збережено на пристрої, надішлеться із сигналом|Zapisano w urządzeniu, wyślę przy zasięgu|Opgeslagen op het apparaat, wordt verzonden bij signaal|Auf dem Gerät gespeichert, wird mit Signal gesendet|Salvat pe dispozitiv, se trimite cu semnal|Az eszközön mentve, jel esetén küldjük|Đã lưu trên thiết bị, sẽ gửi khi có sóng
+Short nahlášen – lokace|Short reported – location|Short nahlásený – lokácia|Нестачу зареєстровано – локація|Brak zgłoszony – lokalizacja|Tekort gemeld – locatie|Fehlmenge gemeldet – Lagerplatz|Lipsă raportată – locația|Hiány bejelentve – hely|Đã báo thiếu – vị trí
+jde do PIR|goes to PIR|ide do PIR|іде на PIR|idzie do PIR|gaat naar PIR|geht in PIR|merge în PIR|PIR-be kerül|chuyển sang PIR
+Odeslání se potvrdí, až bude signál|Dispatch will be confirmed when there is signal|Odoslanie sa potvrdí, keď bude signál|Відправлення підтвердиться, коли буде сигнал|Wysyłka zostanie potwierdzona, gdy będzie zasięg|Verzending wordt bevestigd bij signaal|Versand wird bestätigt, sobald Signal da ist|Expedierea se confirmă când apare semnalul|A küldést jel esetén erősítjük meg|Xuất hàng sẽ xác nhận khi có sóng
+Naskenuj zboží do obalu, nebo zabal vše najednou|Scan goods into the package, or pack all at once|Naskenuj tovar do obalu, alebo zabaľ všetko naraz|Скануйте товар в упаковку або запакуйте все разом|Zeskanuj towar do opakowania lub zapakuj wszystko naraz|Scan goederen in de verpakking, of pak alles in één keer in|Ware in die Verpackung scannen oder alles auf einmal packen|Scanează marfa în ambalaj sau ambalează tot odată|Olvasd be az árut a csomagba, vagy csomagold egyszerre|Quét hàng vào kiện hoặc đóng gói tất cả một lần
+nic takového k zabalení není|nothing like that to pack|nič také na zabalenie nie je|нічого такого для пакування немає|nie ma nic takiego do zapakowania|niets van dat om in te pakken|nichts davon zu verpacken|nimic de acest fel de ambalat|nincs ilyen csomagolnivaló|không có gì như vậy để đóng gói
+Balení potřebuje signál – zkus znovu|Packing needs signal – try again|Balenie potrebuje signál – skús znova|Пакування потребує сигналу – спробуйте ще|Pakowanie wymaga zasięgu – spróbuj ponownie|Inpakken heeft signaal nodig – probeer opnieuw|Verpacken braucht Signal – erneut versuchen|Ambalarea necesită semnal – încearcă din nou|A csomagoláshoz jel kell – próbáld újra|Đóng gói cần có sóng – thử lại
+Obal|Package|Obal|Упаковка|Opakowanie|Verpakking|Packstück|Ambalaj|Csomag|Kiện
+napiš nebo nalep štítek s tímto kódem|write or stick a label with this code|napíš alebo nalep štítok s týmto kódom|напишіть або наклейте етикетку з цим кодом|napisz lub naklej etykietę z tym kodem|schrijf of plak een label met deze code|Etikett mit diesem Code schreiben oder aufkleben|scrie sau lipește o etichetă cu acest cod|írd fel vagy ragaszd fel a címkét ezzel a kóddal|ghi hoặc dán nhãn có mã này
+Naskenuj obaly / palety při nakládce|Scan packages / pallets when loading|Naskenuj obaly / palety pri nakládke|Скануйте упаковки / палети під час завантаження|Zeskanuj opakowania / palety przy załadunku|Scan verpakkingen / pallets bij het laden|Packstücke / Paletten beim Verladen scannen|Scanează ambalajele / paleții la încărcare|Rakodáskor olvasd be a csomagokat / raklapokat|Quét kiện / pallet khi xếp hàng
+nepatří k tomuto výdeji|does not belong to this shipment|nepatrí k tomuto výdaju|не належить до цього відвантаження|nie należy do tego wydania|hoort niet bij deze zending|gehört nicht zu diesem Warenausgang|nu aparține acestei livrări|nem ehhez a kiadáshoz tartozik|không thuộc lô xuất này
+už je naložený|is already loaded|už je naložený|вже завантажено|jest już załadowany|is al geladen|ist bereits verladen|este deja încărcat|már be van rakva|đã được xếp
+naložen|loaded|naložený|завантажено|załadowany|geladen|verladen|încărcat|berakva|đã xếp
+Odjelo – výdej odeslán|Departed – shipment dispatched|Odišlo – výdaj odoslaný|Від'їхало – відвантаження відправлено|Odjechało – wydanie wysłane|Vertrokken – zending verzonden|Abgefahren – Warenausgang versendet|A plecat – livrare expediată|Elindult – kiadás elküldve|Đã rời đi – đã xuất hàng
+Odjezd se potvrdí, až bude signál|Departure will be confirmed when there is signal|Odchod sa potvrdí, keď bude signál|Від'їзд підтвердиться, коли буде сигнал|Odjazd zostanie potwierdzony, gdy będzie zasięg|Vertrek wordt bevestigd bij signaal|Abfahrt wird bestätigt, sobald Signal da ist|Plecarea se confirmă când apare semnalul|Az indulást jel esetén erősítjük meg|Khởi hành sẽ xác nhận khi có sóng
+Jdi na zdrojovou lokaci a naskenuj paletu (LPN) nebo lokaci|Go to the source location and scan the pallet (LPN) or location|Choď na zdrojovú lokáciu a naskenuj paletu (LPN) alebo lokáciu|Ідіть до вихідної локації та відскануйте палету (LPN) або локацію|Idź do lokalizacji źródłowej i zeskanuj paletę (LPN) lub lokalizację|Ga naar de bronlocatie en scan de pallet (LPN) of locatie|Zum Quellplatz gehen und Palette (LPN) oder Lagerplatz scannen|Mergi la locația sursă și scanează paletul (LPN) sau locația|Menj a forráshelyre, és olvasd be a raklapot (LPN) vagy a helyet|Đi đến vị trí nguồn và quét pallet (LPN) hoặc vị trí
+žádná úloha doplnění|no replenishment task|žiadna úloha doplnenia|немає завдання поповнення|brak zadania uzupełnienia|geen aanvultaak|keine Nachschubaufgabe|nicio sarcină de reaprovizionare|nincs feltöltési feladat|không có tác vụ bổ sung
+Převez na|Move to|Prevez na|Перевезіть до|Przewieź do|Breng naar|Bringe zu|Mută la|Vidd ide:|Chuyển đến
+a naskenuj ji|and scan it|a naskenuj ju|і відскануйте її|i zeskanuj ją|en scan deze|und scannen|și scaneaz-o|és olvasd be|và quét nó
+cíl je|the target is|cieľ je|ціль –|cel to|doel is|Ziel ist|ținta este|a cél:|đích là
+doplněno na|replenished to|doplnené na|поповнено до|uzupełniono na|aangevuld naar|aufgefüllt auf|reaprovizionat la|feltöltve ide:|đã bổ sung vào
+Naskenuj lokaci k inventuře nebo ji vyber|Scan the location to count or select it|Naskenuj lokáciu na inventúru alebo ju vyber|Відскануйте локацію для інвентаризації або виберіть її|Zeskanuj lokalizację do inwentaryzacji lub ją wybierz|Scan de te tellen locatie of kies deze|Lagerplatz für Inventur scannen oder wählen|Scanează locația de inventariat sau selecteaz-o|Olvasd be a leltározandó helyet vagy válaszd ki|Quét vị trí cần kiểm kê hoặc chọn
+Naskenuj lokaci|Scan location|Naskenuj lokáciu|Відскануйте локацію|Zeskanuj lokalizację|Scan locatie|Lagerplatz scannen|Scanează locația|Olvasd be a helyet|Quét vị trí
+Máš být na|You should be at|Máš byť na|Ви маєте бути на|Masz być na|Je moet zijn op|Du solltest sein auf|Trebuie să fii la|Itt kellene lenned:|Bạn cần ở
+Skenuj palety / zboží na lokaci|Scan pallets / goods at the location|Skenuj palety / tovar na lokácii|Скануйте палети / товар на локації|Skanuj palety / towar na lokalizacji|Scan pallets / goederen op de locatie|Paletten / Ware am Lagerplatz scannen|Scanează paleți / marfă în locație|Olvasd be a raklapokat / árut a helyen|Quét pallet / hàng tại vị trí
+Paleta|Pallet|Paleta|Палета|Paleta|Pallet|Palette|Palet|Raklap|Pallet
+už je napočítaná|is already counted|už je napočítaná|вже пораховано|jest już policzona|is al geteld|ist bereits gezählt|este deja numărat|már meg van számolva|đã được đếm
+rozdíl – čeká na schválení vedoucím|difference – awaiting supervisor approval|rozdiel – čaká na schválenie vedúcim|розбіжність – очікує схвалення керівника|różnica – czeka na zatwierdzenie kierownika|verschil – wacht op goedkeuring leidinggevende|Differenz – wartet auf Freigabe durch Leiter|diferență – așteaptă aprobarea șefului|eltérés – vezetői jóváhagyásra vár|chênh lệch – chờ quản lý duyệt
+sedí|matches|sedí|збігається|zgadza się|klopt|stimmt|corespunde|egyezik|khớp
+Inventura se odešle, až bude signál|Count will be sent when there is signal|Inventúra sa odošle, keď bude signál|Інвентаризація надішлеться, коли буде сигнал|Inwentaryzacja zostanie wysłana, gdy będzie zasięg|Telling wordt verzonden bij signaal|Inventur wird gesendet, sobald Signal da ist|Inventarul se trimite când apare semnalul|A leltárt jel esetén küldjük|Kiểm kê sẽ gửi khi có sóng
+Doklad|Document|Doklad|Документ|Dokument|Document|Beleg|Documentul|Bizonylat|Chứng từ
+v seznamu není|is not on the list|v zozname nie je|немає у списку|nie ma na liście|staat niet op de lijst|ist nicht in der Liste|nu este în listă|nincs a listán|không có trong danh sách
+Na lokaci|At location|Na lokácii|На локації|Na lokalizacji|Op locatie|Am Lagerplatz|La locația|A helyen|Tại vị trí
+není otevřená inventura|there is no open count|nie je otvorená inventúra|немає відкритої інвентаризації|nie ma otwartej inwentaryzacji|is geen open telling|gibt es keine offene Inventur|nu există inventar deschis|nincs nyitott leltár|không có kiểm kê đang mở
+ve scanneru připravujeme (úlohy pro sklad). Zatím je řeš ve webovém PRG WMS.|is being prepared in the scanner (warehouse tasks). For now use the web PRG WMS.|v skeneri pripravujeme (úlohy pre sklad). Zatiaľ ich rieš vo webovom PRG WMS.|готуємо у сканері (завдання для складу). Поки що використовуйте веб PRG WMS.|przygotowujemy w skanerze (zadania magazynowe). Na razie użyj webowego PRG WMS.|wordt voorbereid in de scanner (magazijntaken). Gebruik voorlopig de web-PRG WMS.|wird im Scanner vorbereitet (Lageraufgaben). Vorerst im Web-PRG WMS erledigen.|este în pregătire în scanner (sarcini depozit). Deocamdată folosește PRG WMS web.|a szkennerben előkészítés alatt (raktári feladatok). Addig használd a webes PRG WMS-t.|đang được chuẩn bị trong máy quét (tác vụ kho). Tạm thời dùng PRG WMS trên web.
+nejdřív naskenuj LOKACI|scan the LOCATION first|najprv naskenuj LOKÁCIU|спочатку відскануйте ЛОКАЦІЮ|najpierw zeskanuj LOKALIZACJĘ|scan eerst de LOCATIE|zuerst LAGERPLATZ scannen|scanează mai întâi LOCAȚIA|először a HELYET olvasd be|hãy quét VỊ TRÍ trước
+Lokace nastavena|Location set|Lokácia nastavená|Локацію встановлено|Lokalizacja ustawiona|Locatie ingesteld|Lagerplatz gesetzt|Locație setată|Hely beállítva|Đã đặt vị trí
+Štítek|Label|Štítok|Етикетка|Etykieta|Label|Etikett|Eticheta|Címke|Nhãn
+už byl naskenován – nepočítá se znovu|was already scanned – not counted again|už bol naskenovaný – nepočíta sa znova|вже відскановано – повторно не враховується|już zeskanowano – nie liczy się ponownie|is al gescand – telt niet opnieuw|wurde bereits gescannt – zählt nicht erneut|a fost deja scanată – nu se numără din nou|már beolvasva – nem számít újra|đã quét – không tính lại
+Nejdřív naskenuj LOKACI|Scan the LOCATION first|Najprv naskenuj LOKÁCIU|Спочатку відскануйте ЛОКАЦІЮ|Najpierw zeskanuj LOKALIZACJĘ|Scan eerst de LOCATIE|Zuerst LAGERPLATZ scannen|Scanează mai întâi LOCAȚIA|Először a HELYET olvasd be|Hãy quét VỊ TRÍ trước
+nezapočteno|not counted|nezapočítané|не враховано|nie policzono|niet geteld|nicht gezählt|nenumărat|nem számolva|không tính
+už naskenoval|was already scanned by|už naskenoval|уже відсканував|już zeskanował|is al gescand door|wurde bereits gescannt von|a fost deja scanat de|már beolvasta:|đã được quét bởi
+někdo jiný|someone else|niekto iný|хтось інший|ktoś inny|iemand anders|jemand anderes|altcineva|valaki más|người khác
+nepočítá se znovu|not counted again|nepočíta sa znova|повторно не враховується|nie liczy się ponownie|telt niet opnieuw|zählt nicht erneut|nu se numără din nou|nem számít újra|không tính lại
+Server sken nepřijal|Server did not accept the scan|Server sken neprijal|Сервер не прийняв скан|Serwer nie przyjął skanu|Server heeft de scan niet geaccepteerd|Server hat den Scan nicht angenommen|Serverul nu a acceptat scanarea|A szerver nem fogadta el a beolvasást|Máy chủ không nhận lần quét
+NENÍ v seznamu – zapsáno jako přebývající|is NOT on the list – recorded as surplus|NIE JE v zozname – zapísané ako prebytočné|НЕМАЄ у списку – записано як надлишок|NIE MA na liście – zapisano jako nadwyżkę|staat NIET op de lijst – geregistreerd als overschot|ist NICHT in der Liste – als Überschuss erfasst|NU este în listă – înregistrat ca surplus|NINCS a listán – többletként rögzítve|KHÔNG có trong danh sách – ghi là dư
+KUS NAVÍC|EXTRA PIECE|KUS NAVYŠE|ЗАЙВА ОДИНИЦЯ|SZTUKA NADMIAROWA|EXTRA STUK|STÜCK ZU VIEL|BUCATĂ ÎN PLUS|TÖBBLET DARAB|THỪA MỘT KIỆN
+JINÁ LOKACE: v exportu|OTHER LOCATION: in the export|INÁ LOKÁCIA: v exporte|ІНША ЛОКАЦІЯ: в експорті|INNA LOKALIZACJA: w eksporcie|ANDERE LOCATIE: in de export|ANDERER LAGERPLATZ: im Export|ALTĂ LOCAȚIE: în export|MÁS HELY: az exportban|VỊ TRÍ KHÁC: trong file xuất
+jsi na|you are at|si na|ви на|jesteś na|je bent op|du bist auf|ești la|itt vagy:|bạn đang ở
+KOMPLETNÍ|COMPLETE|KOMPLETNÉ|ЗАВЕРШЕНО|KOMPLETNE|COMPLEET|VOLLSTÄNDIG|COMPLET|TELJES|ĐỦ
+Není co vrátit|Nothing to undo|Nie je čo vrátiť|Немає що скасувати|Nie ma czego cofnąć|Niets om ongedaan te maken|Nichts rückgängig zu machen|Nimic de anulat|Nincs mit visszavonni|Không có gì để hoàn tác
+Vráceno|Undone|Vrátené|Скасовано|Cofnięto|Ongedaan gemaakt|Rückgängig|Anulat|Visszavonva|Đã hoàn tác
+Neplatný počet|Invalid quantity|Neplatný počet|Недійсна кількість|Nieprawidłowa ilość|Ongeldig aantal|Ungültige Menge|Cantitate invalidă|Érvénytelen mennyiség|Số lượng không hợp lệ
+ručně|manually|ručne|вручну|ręcznie|handmatig|manuell|manual|kézzel|thủ công
+není v seznamu|not on the list|nie je v zozname|немає у списку|nie ma na liście|niet op de lijst|nicht in der Liste|nu este în listă|nincs a listán|không có trong danh sách
+Server ruční počet nepřijal|Server did not accept the manual count|Server ručný počet neprijal|Сервер не прийняв ручну кількість|Serwer nie przyjął ręcznej ilości|Server heeft de handmatige telling niet geaccepteerd|Server hat die manuelle Zählung nicht angenommen|Serverul nu a acceptat numărarea manuală|A szerver nem fogadta el a kézi számot|Máy chủ không nhận số đếm thủ công
+Mezinárodka dokončena|International completed|Medzinárodka dokončená|Міжнародну завершено|Międzynarodowa zakończona|Internationaal voltooid|International abgeschlossen|Internațional finalizat|Nemzetközi kész|Đã hoàn tất quốc tế
+Inventura ukončena|Stocktake finished|Inventúra ukončená|Інвентаризацію завершено|Inwentaryzacja zakończona|Telling afgesloten|Inventur beendet|Inventar încheiat|Leltár lezárva|Đã kết thúc kiểm kê
+Inventura zrušena|Stocktake cancelled|Inventúra zrušená|Інвентаризацію скасовано|Inwentaryzacja anulowana|Telling geannuleerd|Inventur abgebrochen|Inventar anulat|Leltár megszakítva|Đã hủy kiểm kê
+Produkt|Product|Produkt|Продукт|Produkt|Product|Produkt|Produs|Termék|Sản phẩm
+teď skenuj S/N|now scan S/N|teraz skenuj S/N|тепер скануйте S/N|teraz skanuj S/N|scan nu S/N|jetzt S/N scannen|acum scanează S/N|most olvasd be az S/N-t|giờ quét S/N
+Naskenuj EAN produktu|Scan the product EAN|Naskenuj EAN produktu|Відскануйте EAN продукту|Zeskanuj EAN produktu|Scan de product-EAN|Produkt-EAN scannen|Scanează EAN-ul produsului|Olvasd be a termék EAN-ját|Quét EAN sản phẩm
+naskenuj EAN produktu|scan the product EAN|naskenuj EAN produktu|відскануйте EAN продукту|zeskanuj EAN produktu|scan de product-EAN|Produkt-EAN scannen|scanează EAN-ul produsului|olvasd be a termék EAN-ját|quét EAN sản phẩm
+skenuj S/N|scan S/N|skenuj S/N|скануйте S/N|skanuj S/N|scan S/N|S/N scannen|scanează S/N|olvasd be az S/N-t|quét S/N
+už je nastaven|is already set|už je nastavený|вже встановлено|jest już ustawiony|is al ingesteld|ist bereits gesetzt|este deja setat|már be van állítva|đã được đặt
+není v SKU Setup|not in SKU Setup|nie je v SKU Setup|немає в SKU Setup|nie ma w SKU Setup|niet in SKU Setup|nicht im SKU Setup|nu este în SKU Setup|nincs az SKU Setupban|không có trong SKU Setup
+už bylo naskenováno|was already scanned|už bolo naskenované|вже відскановано|już zeskanowano|is al gescand|wurde bereits gescannt|a fost deja scanat|már beolvasva|đã được quét
+bez S/N|without S/N|bez S/N|без S/N|bez S/N|zonder S/N|ohne S/N|fără S/N|S/N nélkül|không S/N
+Odebráno|Removed|Odobraté|Видалено|Usunięto|Verwijderd|Entfernt|Eliminat|Eltávolítva|Đã xóa
+Žádná data k exportu|No data to export|Žiadne dáta na export|Немає даних для експорту|Brak danych do eksportu|Geen gegevens om te exporteren|Keine Daten zum Exportieren|Nu există date de exportat|Nincs exportálható adat|Không có dữ liệu để xuất
+CSV exportováno|CSV exported|CSV exportované|CSV експортовано|CSV wyeksportowano|CSV geëxporteerd|CSV exportiert|CSV exportat|CSV exportálva|Đã xuất CSV
+kód musí začínat SN nebo MAT|code must start with SN or MAT|kód musí začínať SN alebo MAT|код має починатися з SN або MAT|kod musi zaczynać się od SN lub MAT|code moet beginnen met SN of MAT|Code muss mit SN oder MAT beginnen|codul trebuie să înceapă cu SN sau MAT|a kódnak SN-nel vagy MAT-tal kell kezdődnie|mã phải bắt đầu bằng SN hoặc MAT
+Kód|Code|Kód|Код|Kod|Code|Code|Codul|Kód|Mã
+už je v sadě|is already in set|už je v sade|вже в наборі|jest już w zestawie|zit al in set|ist bereits in Set|este deja în setul|már benne van a készletben:|đã có trong bộ
+Sada|Set|Sada|Набір|Zestaw|Set|Set|Setul|Készlet|Bộ
+kompletní|complete|kompletná|завершено|kompletny|compleet|vollständig|complet|kész|đủ
+naskenuj KÓD 1 další sady|scan CODE 1 of the next set|naskenuj KÓD 1 ďalšej sady|відскануйте КОД 1 наступного набору|zeskanuj KOD 1 następnego zestawu|scan CODE 1 van de volgende set|CODE 1 des nächsten Sets scannen|scanează CODUL 1 al setului următor|olvasd be a következő készlet 1. KÓDJÁT|quét MÃ 1 của bộ tiếp theo
+teď naskenuj|now scan|teraz naskenuj|тепер відскануйте|teraz zeskanuj|scan nu|jetzt scannen:|acum scanează|most olvasd be:|giờ quét
+smazána|deleted|zmazaná|видалено|usunięty|verwijderd|gelöscht|șters|törölve|đã xóa
+sad|sets|sád|наборів|zestawów|sets|Sets|seturi|készlet|bộ
+kódů na sadu|codes per set|kódov na sadu|кодів на набір|kodów na zestaw|codes per set|Codes pro Set|coduri pe set|kód készletenként|mã mỗi bộ
+naskenuj KÓD 1|scan CODE 1|naskenuj KÓD 1|відскануйте КОД 1|zeskanuj KOD 1|scan CODE 1|CODE 1 scannen|scanează CODUL 1|olvasd be az 1. KÓDOT|quét MÃ 1
+naskenuj LOKACI, pak EAN a sériová čísla|scan the LOCATION, then EAN and serial numbers|naskenuj LOKÁCIU, potom EAN a sériové čísla|відскануйте ЛОКАЦІЮ, потім EAN і серійні номери|zeskanuj LOKALIZACJĘ, potem EAN i numery seryjne|scan de LOCATIE, dan EAN en serienummers|LAGERPLATZ scannen, dann EAN und Seriennummern|scanează LOCAȚIA, apoi EAN și numerele de serie|olvasd be a HELYET, majd az EAN-t és a sorozatszámokat|quét VỊ TRÍ, rồi EAN và số sê-ri
+Kamera uspána (šetření baterie) – klepni na Probudit|Camera asleep (battery saving) – tap Wake up|Kamera uspatá (šetrenie batérie) – ťukni na Prebudiť|Камера приспана (економія батареї) – натисніть Розбудити|Kamera uśpiona (oszczędzanie baterii) – dotknij Obudź|Camera in slaapstand (batterij sparen) – tik op Wekken|Kamera im Ruhezustand (Akku sparen) – auf Aufwecken tippen|Cameră în repaus (economie baterie) – atinge Trezește|Kamera alszik (akkukímélés) – koppints az Ébresztésre|Camera đang ngủ (tiết kiệm pin) – chạm Đánh thức
+Vstup: vestavěná čtečka|Input: built-in reader|Vstup: vstavaná čítačka|Введення: вбудований зчитувач|Wejście: wbudowany czytnik|Invoer: ingebouwde scanner|Eingabe: integrierter Scanner|Intrare: cititor integrat|Bemenet: beépített olvasó|Đầu vào: đầu đọc tích hợp
+Vstup: kamera|Input: camera|Vstup: kamera|Введення: камера|Wejście: kamera|Invoer: camera|Eingabe: Kamera|Intrare: cameră|Bemenet: kamera|Đầu vào: camera
+Kamera|Camera|Kamera|Камера|Kamera|Camera|Kamera|Cameră|Kamera|Camera
+Zastaveno|Stopped|Zastavené|Зупинено|Zatrzymano|Gestopt|Gestoppt|Oprit|Leállítva|Đã dừng
+je kód DESTINACE (spodní část štítku) – naskenuj horní kód zásilky|is the DESTINATION code (bottom of the label) – scan the top shipment code|je kód DESTINÁCIE (spodná časť štítku) – naskenuj horný kód zásielky|це код ПРИЗНАЧЕННЯ (нижня частина етикетки) – відскануйте верхній код відправлення|to kod MIEJSCA DOCELOWEGO (dół etykiety) – zeskanuj górny kod przesyłki|is de BESTEMMINGScode (onderkant label) – scan de bovenste zendingcode|ist der ZIELcode (unterer Teil des Etiketts) – oberen Sendungscode scannen|este codul de DESTINAȚIE (partea de jos a etichetei) – scanează codul de sus al expediției|ez a CÉL kód (a címke alja) – olvasd be a küldemény felső kódját|là mã ĐIỂM ĐẾN (phần dưới nhãn) – quét mã lô hàng phía trên
+skenuj zásilky|scan shipments|skenuj zásielky|скануйте відправлення|skanuj przesyłki|scan zendingen|Sendungen scannen|scanează expedierile|olvasd be a küldeményeket|quét lô hàng
+započteno, ale NENÍ v exportu|counted, but NOT in the export|započítané, ale NIE JE v exporte|враховано, але НЕМАЄ в експорті|policzono, ale NIE MA w eksporcie|geteld, maar NIET in de export|gezählt, aber NICHT im Export|numărat, dar NU este în export|számolva, de NINCS az exportban|đã tính, nhưng KHÔNG có trong file xuất
+Nejdřív vyber druh inventury (▶ Start)|First choose the stocktake type (▶ Start)|Najprv vyber druh inventúry (▶ Start)|Спочатку виберіть тип інвентаризації (▶ Старт)|Najpierw wybierz rodzaj inwentaryzacji (▶ Start)|Kies eerst het type telling (▶ Start)|Zuerst Inventurart wählen (▶ Start)|Alege mai întâi tipul de inventar (▶ Start)|Először válaszd ki a leltár típusát (▶ Start)|Trước tiên chọn loại kiểm kê (▶ Bắt đầu)
+Nejdřív vyber činnost (▶ Start)|First choose an activity (▶ Start)|Najprv vyber činnosť (▶ Start)|Спочатку виберіть дію (▶ Старт)|Najpierw wybierz czynność (▶ Start)|Kies eerst een activiteit (▶ Start)|Zuerst Tätigkeit wählen (▶ Start)|Alege mai întâi o activitate (▶ Start)|Először válassz tevékenységet (▶ Start)|Trước tiên chọn công việc (▶ Bắt đầu)
+Stiskni spoušť čtečky (boční tlačítko)|Press the reader trigger (side button)|Stlač spúšť čítačky (bočné tlačidlo)|Натисніть курок зчитувача (бічна кнопка)|Naciśnij spust czytnika (boczny przycisk)|Druk op de scanknop (zijknop)|Scannertaste drücken (Seitentaste)|Apasă trăgaciul cititorului (butonul lateral)|Nyomd meg az olvasó ravaszát (oldalsó gomb)|Nhấn cò đầu đọc (nút bên)
+Kód se nepodařilo přečíst – namiř znovu, přibliž, nebo zadej ručně|Code could not be read – aim again, move closer, or enter manually|Kód sa nepodarilo prečítať – namier znova, priblíž, alebo zadaj ručne|Не вдалося прочитати код – наведіть ще раз, наблизьте або введіть вручну|Nie udało się odczytać kodu – wyceluj ponownie, przybliż lub wpisz ręcznie|Code kon niet worden gelezen – richt opnieuw, kom dichterbij of voer handmatig in|Code konnte nicht gelesen werden – erneut zielen, näher ran oder manuell eingeben|Codul nu a putut fi citit – țintește din nou, apropie sau introdu manual|A kódot nem sikerült beolvasni – célozz újra, menj közelebb, vagy írd be kézzel|Không đọc được mã – nhắm lại, đưa gần hơn hoặc nhập thủ công
+Čtení kódu selhalo – zkus znovu nebo zadej ručně|Code reading failed – try again or enter manually|Čítanie kódu zlyhalo – skús znova alebo zadaj ručne|Помилка зчитування коду – спробуйте ще або введіть вручну|Odczyt kodu nie powiódł się – spróbuj ponownie lub wpisz ręcznie|Code lezen mislukt – probeer opnieuw of voer handmatig in|Code lesen fehlgeschlagen – erneut versuchen oder manuell eingeben|Citirea codului a eșuat – încearcă din nou sau introdu manual|A kód olvasása sikertelen – próbáld újra vagy írd be kézzel|Đọc mã thất bại – thử lại hoặc nhập thủ công
+Sken se nepodařilo uložit na server|Scan could not be saved to the server|Sken sa nepodarilo uložiť na server|Не вдалося зберегти скан на сервері|Nie udało się zapisać skanu na serwerze|Scan kon niet op de server worden opgeslagen|Scan konnte nicht auf dem Server gespeichert werden|Scanarea nu a putut fi salvată pe server|A beolvasást nem sikerült a szerverre menteni|Không lưu được lần quét lên máy chủ
+Nyní naskenuj LOKACI|Now scan the LOCATION|Teraz naskenuj LOKÁCIU|Тепер відскануйте ЛОКАЦІЮ|Teraz zeskanuj LOKALIZACJĘ|Scan nu de LOCATIE|Jetzt LAGERPLATZ scannen|Acum scanează LOCAȚIA|Most olvasd be a HELYET|Giờ quét VỊ TRÍ
+další lokace|next location|ďalšia lokácia|наступна локація|następna lokalizacja|volgende locatie|nächster Lagerplatz|următoarea locație|következő hely|vị trí tiếp theo
+Skenování zrušeno|Scanning cancelled|Skenovanie zrušené|Сканування скасовано|Skanowanie anulowane|Scannen geannuleerd|Scannen abgebrochen|Scanare anulată|Beolvasás megszakítva|Đã hủy quét
+načteno|loaded|načítané|завантажено|wczytano|geladen|geladen|încărcat|betöltve|đã tải
+zařízení|devices|zariadení|пристроїв|urządzeń|apparaten|Geräte|dispozitive|eszköz|thiết bị
+Vyber typ umístění|Choose placement type|Vyber typ umiestnenia|Виберіть тип розміщення|Wybierz typ umieszczenia|Kies het plaatsingstype|Platzierungsart wählen|Alege tipul de amplasare|Válaszd ki az elhelyezés típusát|Chọn loại vị trí
+Box potvrzen! Celkem|Box confirmed! Total|Box potvrdený! Celkom|Коробку підтверджено! Усього|Box potwierdzony! Razem|Box bevestigd! Totaal|Box bestätigt! Gesamt|Cutie confirmată! Total|Doboz megerősítve! Összesen|Đã xác nhận hộp! Tổng
+Špatný box! Naskenováno|Wrong box! Scanned|Zlý box! Naskenované|Неправильна коробка! Відскановано|Zły box! Zeskanowano|Verkeerde box! Gescand|Falsche Box! Gescannt|Cutie greșită! Scanat|Rossz doboz! Beolvasva|Sai hộp! Đã quét
+očekáváno Box|expected Box|očakávaný Box|очікувалась коробка|oczekiwano Box|verwacht Box|erwartet Box|așteptat Cutia|várt doboz|mong đợi Hộp
+nenalezeno v databázi|not found in the database|nenájdené v databáze|не знайдено в базі даних|nie znaleziono w bazie danych|niet gevonden in de database|nicht in der Datenbank gefunden|negăsit în baza de date|nem található az adatbázisban|không tìm thấy trong cơ sở dữ liệu
+Naskenuj štítek Boxu|Scan the label of Box|Naskenuj štítok Boxu|Відскануйте етикетку коробки|Zeskanuj etykietę Boxu|Scan het label van Box|Etikett von Box scannen|Scanează eticheta Cutiei|Olvasd be a doboz címkéjét:|Quét nhãn Hộp
+Znovu naskenuj štítek Boxu|Scan the label of Box again|Znova naskenuj štítok Boxu|Знову відскануйте етикетку коробки|Ponownie zeskanuj etykietę Boxu|Scan opnieuw het label van Box|Etikett von Box erneut scannen|Scanează din nou eticheta Cutiei|Olvasd be újra a doboz címkéjét:|Quét lại nhãn Hộp
+Přeskočeno|Skipped|Preskočené|Пропущено|Pominięto|Overgeslagen|Übersprungen|Omis|Kihagyva|Đã bỏ qua
+přidáno (neověřeno)|added (not verified)|pridané (neoverené)|додано (не перевірено)|dodano (niezweryfikowane)|toegevoegd (niet geverifieerd)|hinzugefügt (nicht geprüft)|adăugat (neverificat)|hozzáadva (nem ellenőrzött)|đã thêm (chưa xác minh)
+Inventura z paměti zařízení|Stocktake from device memory|Inventúra z pamäte zariadenia|Інвентаризація з пам'яті пристрою|Inwentaryzacja z pamięci urządzenia|Telling uit apparaatgeheugen|Inventur aus dem Gerätespeicher|Inventar din memoria dispozitivului|Leltár az eszköz memóriájából|Kiểm kê từ bộ nhớ thiết bị
+Inventura načtena|Stocktake loaded|Inventúra načítaná|Інвентаризацію завантажено|Inwentaryzacja wczytana|Telling geladen|Inventur geladen|Inventar încărcat|Leltár betöltve|Đã tải kiểm kê
+položek|items|položiek|позицій|pozycji|artikelen|Positionen|articole|tétel|mục
+Sken zahozen – zkus znovu|Scan discarded – try again|Sken zahodený – skús znova|Скан відкинуто – спробуйте ще|Skan odrzucony – spróbuj ponownie|Scan verworpen – probeer opnieuw|Scan verworfen – erneut versuchen|Scanare respinsă – încearcă din nou|Beolvasás eldobva – próbáld újra|Đã bỏ lần quét – thử lại
+produkt|product|produkt|продукт|produkt|product|Produkt|produs|termék|sản phẩm
+Uzavírám inventuru|Closing the stocktake|Uzatváram inventúru|Закриваю інвентаризацію|Zamykam inwentaryzację|Telling wordt afgesloten|Schließe Inventur|Se închide inventarul|Leltár lezárása|Đang đóng kiểm kê
+Řádek odstraněn|Row removed|Riadok odstránený|Рядок видалено|Wiersz usunięty|Rij verwijderd|Zeile entfernt|Rând eliminat|Sor törölve|Đã xóa dòng
+Mezinárodka CSV exportováno|International CSV exported|Medzinárodka CSV exportované|Міжнародну CSV експортовано|Międzynarodowa CSV wyeksportowana|Internationaal CSV geëxporteerd|International CSV exportiert|Internațional CSV exportat|Nemzetközi CSV exportálva|Đã xuất CSV quốc tế
+Inventura CSV exportováno|Stocktake CSV exported|Inventúra CSV exportovaná|Інвентаризацію CSV експортовано|Inwentaryzacja CSV wyeksportowana|Telling CSV geëxporteerd|Inventur CSV exportiert|Inventar CSV exportat|Leltár CSV exportálva|Đã xuất CSV kiểm kê
+záznamů|records|záznamov|записів|rekordów|records|Datensätze|înregistrări|rekord|bản ghi
+řádků|rows|riadkov|рядків|wierszy|rijen|Zeilen|rânduri|sor|dòng
+Data smazána|Data deleted|Dáta zmazané|Дані видалено|Dane usunięte|Gegevens verwijderd|Daten gelöscht|Date șterse|Adatok törölve|Đã xóa dữ liệu
+Lokace|Location|Lokácia|Локація|Lokalizacja|Locatie|Lagerplatz|Locație|Hely|Vị trí
+Inventura|Stocktake|Inventúra|Інвентаризація|Inwentaryzacja|Telling|Inventur|Inventar|Leltár|Kiểm kê
+Mezinárodka|International|Medzinárodka|Міжнародна|Międzynarodowa|Internationaal|International|Internațional|Nemzetközi|Quốc tế
+nejdřív naskenuj LOKACI|scan the LOCATION first|najprv naskenuj LOKÁCIU|спочатку відскануйте ЛОКАЦІЮ|najpierw zeskanuj LOKALIZACJĘ|scan eerst de LOCATIE|zuerst LAGERPLATZ scannen|scanează mai întâi LOCAȚIA|először a HELYET olvasd be|hãy quét VỊ TRÍ trước
+ks|pcs|ks|шт.|szt.|st.|Stk.|buc.|db|cái
+Chyba|Error|Chyba|Помилка|Błąd|Fout|Fehler|Eroare|Hiba|Lỗi
+Kód destinace|Destination code|Kód destinácie|Код призначення|Kod miejsca docelowego|Bestemmingscode|Zielcode|Cod de destinație|Célkód|Mã điểm đến
+spouštím kameru|starting the camera|spúšťam kameru|вмикаю камеру|uruchamiam kamerę|camera wordt gestart|starte Kamera|pornesc camera|kamera indítása|đang bật camera
+naskenuj LOKACI, pak jen zásilky|scan the LOCATION, then only shipments|naskenuj LOKÁCIU, potom len zásielky|відскануйте ЛОКАЦІЮ, потім лише відправлення|zeskanuj LOKALIZACJĘ, potem tylko przesyłki|scan de LOCATIE, dan alleen zendingen|LAGERPLATZ scannen, dann nur Sendungen|scanează LOCAȚIA, apoi doar expedierile|olvasd be a HELYET, majd csak a küldeményeket|quét VỊ TRÍ, rồi chỉ lô hàng
+Inventura EAN + lokace|Stocktake EAN + location|Inventúra EAN + lokácia|Інвентаризація EAN + локація|Inwentaryzacja EAN + lokalizacja|Telling EAN + locatie|Inventur EAN + Lagerplatz|Inventar EAN + locație|Leltár EAN + hely|Kiểm kê EAN + vị trí
+Inventura – jen EAN|Stocktake – EAN only|Inventúra – len EAN|Інвентаризація – лише EAN|Inwentaryzacja – tylko EAN|Telling – alleen EAN|Inventur – nur EAN|Inventar – doar EAN|Leltár – csak EAN|Kiểm kê – chỉ EAN
+EAN + lokace + S/N|EAN + location + S/N|EAN + lokácia + S/N|EAN + локація + S/N|EAN + lokalizacja + S/N|EAN + locatie + S/N|EAN + Lagerplatz + S/N|EAN + locație + S/N|EAN + hely + S/N|EAN + vị trí + S/N
+Doklad nebo záznam nebyl nalezen|Document or record not found|Doklad alebo záznam sa nenašiel|Документ або запис не знайдено|Nie znaleziono dokumentu lub rekordu|Document of record niet gevonden|Beleg oder Datensatz nicht gefunden|Documentul sau înregistrarea nu a fost găsită|A bizonylat vagy rekord nem található|Không tìm thấy chứng từ hoặc bản ghi
+Doklad je uzavřený|Document is closed|Doklad je uzavretý|Документ закрито|Dokument jest zamknięty|Document is gesloten|Beleg ist geschlossen|Documentul este închis|A bizonylat lezárva|Chứng từ đã đóng
+Zatím není nic naskenováno|Nothing scanned yet|Zatiaľ nie je nič naskenované|Ще нічого не відскановано|Jeszcze nic nie zeskanowano|Nog niets gescand|Noch nichts gescannt|Încă nu s-a scanat nimic|Még semmi nincs beolvasva|Chưa quét gì
+Neplatné množství|Invalid quantity|Neplatné množstvo|Недійсна кількість|Nieprawidłowa ilość|Ongeldige hoeveelheid|Ungültige Menge|Cantitate invalidă|Érvénytelen mennyiség|Số lượng không hợp lệ
+Klient má příjem rovnou na lokaci – zadej lokaci|Client receives directly to location – enter the location|Klient má príjem rovno na lokáciu – zadaj lokáciu|Клієнт приймає одразу на локацію – введіть локацію|Klient ma przyjęcie od razu na lokalizację – podaj lokalizację|Klant ontvangt direct op locatie – voer de locatie in|Kunde hat Eingang direkt auf Lagerplatz – Lagerplatz eingeben|Clientul recepționează direct în locație – introdu locația|Az ügyfél közvetlenül helyre vételez – add meg a helyet|Khách nhập thẳng vào vị trí – nhập vị trí
+Doklad nemá DC|Document has no DC|Doklad nemá DC|Документ не має DC|Dokument nie ma DC|Document heeft geen DC|Beleg hat kein DC|Documentul nu are DC|A bizonylatnak nincs DC-je|Chứng từ không có DC
+Už se vychystává|Picking already in progress|Už sa vychystáva|Уже комплектується|Już jest kompletowane|Wordt al gepickt|Wird bereits kommissioniert|Se culege deja|Már kiszedés alatt|Đang lấy hàng rồi
+Doklad je ve stavu|Document status is|Doklad je v stave|Статус документа|Dokument ma status|Document heeft status|Beleg hat Status|Documentul are starea|A bizonylat állapota|Trạng thái chứng từ
+tohle teď nejde|this is not possible now|toto teraz nejde|зараз це неможливо|teraz to niemożliwe|dit kan nu niet|das geht jetzt nicht|acum nu este posibil|ez most nem lehetséges|hiện không thể làm việc này
+klient nemá v SKU Setup|is not in the client's SKU Setup|klient nemá v SKU Setup|немає в SKU Setup клієнта|klient nie ma w SKU Setup|staat niet in de SKU Setup van de klant|hat der Kunde nicht im SKU Setup|clientul nu are în SKU Setup|nincs az ügyfél SKU Setupjában|khách không có trong SKU Setup
+je povinný LOT|LOT is required|je povinný LOT|LOT обов'язковий|LOT jest wymagany|LOT is verplicht|LOT ist Pflicht|LOT este obligatoriu|LOT kötelező|bắt buộc có LOT
+neexistuje|does not exist|neexistuje|не існує|nie istnieje|bestaat niet|existiert nicht|nu există|nem létezik|không tồn tại
+už na skladě je|is already in stock|už na sklade je|вже на складі|jest już na magazynie|is al op voorraad|ist bereits im Lager|este deja în stoc|már raktáron van|đã có trong kho
+je jiné SKU nebo LOT|has a different SKU or LOT|je iné SKU alebo LOT|інший SKU або LOT|jest inne SKU lub LOT|staat een andere SKU of LOT|ist eine andere SKU oder LOT|există alt SKU sau LOT|más SKU vagy LOT van|có SKU hoặc LOT khác
+Na bulk lokaci|At bulk location|Na bulk lokácii|На bulk-локації|Na lokalizacji bulk|Op bulklocatie|Auf Bulk-Lagerplatz|În locația bulk|A bulk helyen|Tại vị trí bulk
+je blokovaná – přesahuje na ni paleta|is blocked – overhung by pallet|je blokovaná – presahuje na ňu paleta|заблокована – на неї виступає палета|jest zablokowana – wystaje na nią paleta|is geblokkeerd – pallet steekt erover|ist blockiert – Palette ragt hinein|este blocată – o depășește paletul|blokkolva – ráláog a raklap|bị chặn – pallet tràn sang
+je obsazená – přesah na ni nejde|is occupied – overhang not possible|je obsadená – presah na ňu nejde|зайнята – виступ неможливий|jest zajęta – nawis niemożliwy|is bezet – overstek niet mogelijk|ist belegt – Überhang nicht möglich|este ocupată – depășirea nu e posibilă|foglalt – túllógás nem lehetséges|đã có hàng – không thể tràn
+Na systémovou lokaci|To a system location|Na systémovú lokáciu|На системну локацію|Na lokalizację systemową|Naar een systeemlocatie|Auf einen Systemplatz|În locația de sistem|Rendszerhelyre|Vào vị trí hệ thống
+přesah nejde|overhang is not possible|presah nejde|виступ неможливий|nawis niemożliwy|is overstek niet mogelijk|ist kein Überhang möglich|depășirea nu e posibilă|túllógás nem lehetséges|không thể tràn
+na skladě není|is not in stock|na sklade nie je|немає на складі|nie ma na magazynie|is niet op voorraad|ist nicht im Lager|nu este în stoc|nincs raktáron|không có trong kho
+Tento klient má nakládku – odešli přes 🚚 Nakládka|This client uses loading – dispatch via 🚚 Loading|Tento klient má nakládku – odošli cez 🚚 Nakládka|Цей клієнт має завантаження – відправте через 🚚 Завантаження|Ten klient ma załadunek – wyślij przez 🚚 Załadunek|Deze klant heeft laden – verzend via 🚚 Laden|Dieser Kunde hat Verladung – über 🚚 Verladung versenden|Acest client are încărcare – expediază prin 🚚 Încărcare|Ennek az ügyfélnek rakodása van – küldd a 🚚 Rakodás menüben|Khách này có xếp hàng – xuất qua 🚚 Xếp hàng
+Výdej ještě není zabalený|Shipment is not packed yet|Výdaj ešte nie je zabalený|Відвантаження ще не запаковано|Wydanie nie jest jeszcze zapakowane|Zending is nog niet ingepakt|Warenausgang ist noch nicht verpackt|Livrarea nu este încă ambalată|A kiadás még nincs becsomagolva|Lô xuất chưa được đóng gói
+patří k jinému výdeji|belongs to another shipment|patrí k inému výdaju|належить до іншого відвантаження|należy do innego wydania|hoort bij een andere zending|gehört zu einem anderen Warenausgang|aparține altei livrări|másik kiadáshoz tartozik|thuộc lô xuất khác
+Nenaloženo ještě|Not yet loaded:|Nenaložené ešte|Ще не завантажено:|Jeszcze nie załadowano:|Nog niet geladen:|Noch nicht verladen:|Încă neîncărcate:|Még nincs berakva:|Chưa xếp:
+obalů|packages|obalov|упаковок|opakowań|verpakkingen|Packstücke|ambalaje|csomag|kiện
+Zdrojová paleta už na místě není|Source pallet is no longer in place|Zdrojová paleta už na mieste nie je|Вихідної палети вже немає на місці|Palety źródłowej nie ma już na miejscu|Bronpallet staat er niet meer|Quellpalette ist nicht mehr am Platz|Paletul sursă nu mai este la locul lui|A forrásraklap már nincs a helyén|Pallet nguồn không còn tại chỗ
+je povinná expirace|expiry date is required|je povinná expirácia|термін придатності обов'язковий|data ważności jest wymagana|houdbaarheidsdatum is verplicht|Ablaufdatum ist Pflicht|data expirării este obligatorie|lejárati dátum kötelező|bắt buộc có hạn dùng
+je potřeba|requires|je potrebných|потрібно|wymagane jest|zijn nodig:|sind nötig:|sunt necesare|szükséges:|cần
+sériových čísel|serial numbers|sériových čísel|серійних номерів|numerów seryjnych|serienummers|Seriennummern|numere de serie|sorozatszám|số sê-ri
+U SKU|For SKU|Pri SKU|Для SKU|Dla SKU|Voor SKU|Bei SKU|Pentru SKU|Az SKU-nál:|Với SKU`;
+  var PHR = {}, PHR_L = {}, PHR_RE = null;
+  PHR_RAW.split('\n').forEach(function(l){ var p = l.split('|'); if (p.length < 10) return; var k = p[0].trim(); PHR[k] = p.slice(1).map(function(x){ return x.trim(); }); if (!PHR_L[k.toLowerCase()]) PHR_L[k.toLowerCase()] = k; });
+  function phrRe(){
+    if (PHR_RE) return PHR_RE;
+    var keys = Object.keys(PHR).sort(function(a, b){ return b.length - a.length; }).map(function(k){ return k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); });
+    try { PHR_RE = new RegExp('(^|[^\\p{L}\\p{N}])(' + keys.join('|') + ')(?![\\p{L}\\p{N}])', 'giu'); }
+    catch(e) { PHR_RE = new RegExp('(^|[^A-Za-zÀ-ž0-9])(' + keys.join('|') + ')(?![A-Za-zÀ-ž0-9])', 'gi'); }
+    return PHR_RE;
+  }
+  function trStatus(m){
+    if (lang === 'cs' || !m) return m;
+    var d = tr(m); if (d !== m) return d;
+    var i = ORDER.indexOf(lang); if (i < 0) return m;
+    return String(m).replace(phrRe(), function(all, pre, w){
+      var k = PHR[w] ? w : PHR_L[w.toLowerCase()]; if (!k) return all;
+      var v = PHR[k][i] || w;
+      if (!PHR[w] && w === w.toUpperCase() && w !== w.toLowerCase()) v = v.toUpperCase();
+      return pre + v;
+    });
+  }
+  window.PRG_I18N = { ts: trStatus, LANGS: LANGS, get lang(){ return lang; }, setLang: setLang, t: tr, apply: apply, say: say, voiceText: voiceText, classify: classify, hasVoice: hasVoice, VOICE_KEYS: Object.keys(VOICE) };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply); else apply();
   if (window.speechSynthesis) { try { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = function(){}; } catch(e) {} }
 
@@ -1352,7 +1628,7 @@ Uložit nové heslo|Save new password|Uložiť nové heslo|Зберегти но
 
 <!-- Table area -->
 <div id="table-area">
-  <div id="status-bar">Čekám na spuštění…</div>
+  <div id="status-bar" data-noi18n>Čekám na spuštění…</div>
   <div id="manual-row">
     <input id="manual-code" type="text" placeholder="⌨️ Zadat kód ručně…" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" onkeydown="if(event.key==='Enter'){event.preventDefault();manualSubmit();}">
     <button id="manual-ok" onclick="manualSubmit()">OK</button>
@@ -1829,7 +2105,7 @@ var currentUser = '';
 var useLocation = false;
 var eanIntl = false;
 var intlSeen = {}, intlFull = null; // Mezinárodka: už naskenované celé štítky (s +pořadím)    // Mezinárodka: z kódu se bere jen část před „+“ (číslo zásilky bez pořadí kusu)
-var APP_VERSION = '5-64';
+var APP_VERSION = '5-65';
 var eanCount = false;   // Inventory Tool: počítání EAN (s lokací nebo bez)
 var eanSession = null;  // session_uid volné inventury EAN – na serveru jako řádek inventory_lists (kind ean / ean_loc)
 var expectingLoc = false;
@@ -1865,7 +2141,8 @@ var locPill   = document.getElementById('loc-pill');
 var devPill   = document.getElementById('dev-pill');
 var statusBar = document.getElementById('status-bar');
 
-function setStatus(m) { statusBar.textContent = m; if (VOICE_PEND) voiceFromStatus(m); try { updateVoiceBtn(); } catch(e) {} }
+var LAST_STATUS = '';
+function setStatus(m) { LAST_STATUS = m; statusBar.textContent = PRG_I18N.ts(m); if (VOICE_PEND) voiceFromStatus(m); try { updateVoiceBtn(); } catch(e) {} }
 function setCamSt(m)  { camSt.textContent = m; }
 function closeModal(id) { document.getElementById(id).style.display='none'; }
 
@@ -2334,7 +2611,7 @@ function openSetup() {
   document.getElementById('su-ver').textContent = 'Verze ' + APP_VERSION + (window.speechSynthesis ? '' : ' · zařízení neumí číst nahlas');
   document.getElementById('modal-setup').style.display = 'flex';
 }
-function setupLang(l) { PRG_I18N.setLang(l); openSetup(); }
+function setupLang(l) { PRG_I18N.setLang(l); openSetup(); setStatus(LAST_STATUS || 'Čekám na spuštění…'); }
 function hubSetupSub() {
   var L = PRG_I18N.LANGS.find(function(x){ return x[0] === PRG_I18N.lang; }) || PRG_I18N.LANGS[0];
   var c = currentDcId != null ? dcById(currentDcId) : null;

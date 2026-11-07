@@ -236,6 +236,10 @@ Uložit nové heslo|Save new password|Uložiť nové heslo|Зберегти но
     var k = p[0].trim(); DICT[k] = {}; ORDER.forEach(function(lg, i){ DICT[k][lg] = p[i + 1].trim(); });
     LOWER[k.toLowerCase()] = k;
   });
+  // zpetny slovnik: preklad v libovolnem jazyce -> cesky klic (aby slo prepnout zpet i z textu, ktery stranka zkopirovala)
+  var REV = {}, REVL = {};
+  Object.keys(DICT).forEach(function(k){ ORDER.forEach(function(lg){ var v = DICT[k][lg]; if (v && v !== k && !DICT[v]) { if (!REV[v]) REV[v] = k; if (!REVL[v.toLowerCase()]) REVL[v.toLowerCase()] = k; } }); });
+  function val(k){ return lang === 'cs' ? k : DICT[k][lang]; }
 
   // hlasová hlášení
   var VOICE = {
@@ -267,13 +271,14 @@ Uložit nové heslo|Save new password|Uložiť nové heslo|Зберегти но
     return [seg.slice(0, i), seg.slice(i, j), seg.slice(j)];
   }
   function lookup(k){
-    if (DICT[k]) return DICT[k][lang];
-    var lk = LOWER[k.toLowerCase()];
-    if (lk) { var v = DICT[lk][lang]; return k === k.toUpperCase() && k !== k.toLowerCase() ? v.toUpperCase() : v; }
-    return null;
+    var r = null;
+    if (DICT[k]) r = val(k);
+    else if (REV[k]) r = val(REV[k]);
+    else { var lk = LOWER[k.toLowerCase()] || REVL[k.toLowerCase()]; if (lk) { var v = val(lk); r = k === k.toUpperCase() && k !== k.toLowerCase() ? v.toUpperCase() : v; } }
+    return r === k ? null : r;
   }
   function tr(s){
-    if (lang === 'cs' || !s) return s;
+    if (!s) return s;
     var t = s.trim(); if (!t) return s;
     var lead = s.slice(0, s.indexOf(t)), tail = s.slice(s.indexOf(t) + t.length);
     var full = core(t), f = full[1] && lookup(full[1]);
@@ -286,12 +291,15 @@ Uložit nové heslo|Save new password|Uložiť nové heslo|Зберегти но
   }
   var SKIP = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, CODE: 1, PRE: 1 };
   var busy = false;
+  // Safari/iPhone muze zahodit vlastni vlastnosti uzlu -> drzime prelozene uzly v pameti
+  var KEEP = new Set();
+  function keep(n){ KEEP.add(n); if (KEEP.size > 4000) KEEP.forEach(function(x){ if (!x.isConnected) KEEP.delete(x); }); }
   function doText(n){
     var cur = n.nodeValue;
     if (n.__i18nOut === cur) return;        // náš vlastní překlad
     n.__i18nSrc = cur;
     var out = tr(cur);
-    n.__i18nOut = out;
+    n.__i18nOut = out; keep(n);
     if (out !== cur) n.nodeValue = out;
   }
   function doEl(el){
@@ -299,7 +307,7 @@ Uložit nové heslo|Save new password|Uložiť nové heslo|Зберегти но
       if (!el.hasAttribute || !el.hasAttribute(a)) return;
       var cur = el.getAttribute(a), key = '__i18n_' + a;
       if (el[key + 'Out'] === cur) return;
-      el[key] = cur; var out = tr(cur); el[key + 'Out'] = out; if (out !== cur) el.setAttribute(a, out);
+      el[key] = cur; var out = tr(cur); el[key + 'Out'] = out; keep(el); if (out !== cur) el.setAttribute(a, out);
     });
   }
   function walk(root){
@@ -338,7 +346,8 @@ Uložit nové heslo|Save new password|Uložiť nové heslo|Зберегти но
     if (!document.body) return;
     document.documentElement.setAttribute('lang', lang);
     busy = true;
-    try { restore(document.body); if (lang !== 'cs') walk(document.body); } finally { busy = false; }
+    KEEP.forEach(function(x){ if (!x.isConnected) KEEP.delete(x); });
+    try { restore(document.body); walk(document.body); } finally { busy = false; }
     observe();
   }
   function setLang(l){
