@@ -223,6 +223,7 @@
     #manual-row #voice-btn, #manual-row #sound-btn, #manual-row #exc-btn { padding: 10px 9px; }
     #manual-row input { flex: 1 1 120px; min-width: 0; padding: 10px 12px; border: 1.5px solid #e2e6ed; border-radius: 9px; font-size: 15px; font-family: 'JetBrains Mono', monospace; outline: none; background: #fff; }
     #manual-row input:focus { border-color: #0a7c4e; }
+    @media (max-width: 420px) { #manual-row { gap: 4px; padding: 8px 8px 2px; } #manual-row input { flex-basis: 90px; padding: 10px 8px; font-size: 14px; } #manual-row button { padding: 10px 8px; } #manual-row #voice-btn, #manual-row #sound-btn, #manual-row #exc-btn { padding: 10px 6px; } }
     #manual-row button { padding: 10px 12px; border-radius: 9px; border: 1.5px solid #e2e6ed; background: #fff; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
     #manual-row #manual-ok { background: #0a7c4e; color: #fff; border-color: #0a7c4e; }
     video { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -1828,7 +1829,7 @@ var currentUser = '';
 var useLocation = false;
 var eanIntl = false;
 var intlSeen = {}, intlFull = null; // Mezinárodka: už naskenované celé štítky (s +pořadím)    // Mezinárodka: z kódu se bere jen část před „+“ (číslo zásilky bez pořadí kusu)
-var APP_VERSION = '5-63';
+var APP_VERSION = '5-64';
 var eanCount = false;   // Inventory Tool: počítání EAN (s lokací nebo bez)
 var eanSession = null;  // session_uid volné inventury EAN – na serveru jako řádek inventory_lists (kind ean / ean_loc)
 var expectingLoc = false;
@@ -1864,7 +1865,7 @@ var locPill   = document.getElementById('loc-pill');
 var devPill   = document.getElementById('dev-pill');
 var statusBar = document.getElementById('status-bar');
 
-function setStatus(m) { statusBar.textContent = m; if (VOICE_PEND) voiceFromStatus(m); }
+function setStatus(m) { statusBar.textContent = m; if (VOICE_PEND) voiceFromStatus(m); try { updateVoiceBtn(); } catch(e) {} }
 function setCamSt(m)  { camSt.textContent = m; }
 function closeModal(id) { document.getElementById(id).style.display='none'; }
 
@@ -2279,7 +2280,7 @@ var VOICE_MODES = [['wms', '🏭 Úlohy WMS'], ['server', '☁️ Inventura ze s
 function voiceModes() { try { return JSON.parse(localStorage.getItem('prg_voice_modes') || '{}'); } catch(e) { return {}; } }
 function voiceSetModes(m) { try { localStorage.setItem('prg_voice_modes', JSON.stringify(m)); } catch(e) {} updateVoiceBtn(); }
 function voiceCtx() {
-  if (task) return 'wms';
+  if (task || appMode === 'wms') return 'wms';
   if (intlV || (eanCount && eanIntl)) return 'intl';
   if (invMode && invList.length) return 'server';
   if (eanCount && kitMode) return 'prusa';
@@ -2289,7 +2290,10 @@ function voiceCtx() {
 }
 function voiceOn() { return !!voiceModes()[voiceCtx()]; }
 function updateVoiceBtn() {
+  // inventurni nastroje: misto foto tlacitka jen hlas; WMS (vc. cyklicke inventury): hlas i foto
+  var ex = document.getElementById('exc-btn'); if (ex) ex.style.display = (appMode === 'inventura' && !myDevMode) ? 'none' : '';
   var b = document.getElementById('voice-btn'); if (!b) return;
+  b.style.display = '';
   var on = voiceOn(); b.style.opacity = on ? '1' : '.45'; b.style.borderColor = on ? '#2980b9' : ''; b.style.background = on ? '#eaf3fb' : '';
   b.title = on ? 'Hlasová hlášení: zapnuto pro tuto úlohu' : 'Hlasová hlášení: vypnuto pro tuto úlohu';
 }
@@ -2845,6 +2849,7 @@ function refreshModeUI() {
     if (swLabel) swLabel.textContent = 'Inventura';
   }
   if (typeof updateRoomPill === 'function') updateRoomPill();
+  updateVoiceBtn();
 }
 
 function switchAppMode(target) {
