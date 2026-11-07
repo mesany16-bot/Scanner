@@ -156,8 +156,13 @@ function watch(page, bag) {
     must((await s.textContent('#task-panel')).includes(rc.num), 'příjem není v seznamu úkolů');
     await type(rc.num);
     await type('2999000000011'); await sheetOk(ctx.qa);
-    await type('2999000000028'); await sheetOk(ctx.qb);
+    // BOT-B přes jednotky balení: outer (karton 4 ks) + volné kusy
+    await type('3999000000029'); await s.waitForSelector('#tk-sheet', { state: 'visible', timeout: 8000 });
+    if (await s.$('#tkf-uom')) { await s.selectOption('#tkf-uom', 'outer'); await s.fill('#tkf-cnt', String(Math.floor(ctx.qb / 4))); await s.fill('#tkf-loose', String(ctx.qb % 4)); await s.click('#tk-ok'); await sleep(1200); }
+    else await sheetOk(ctx.qb);
     const st = await db(id => supa.from('receipts').select('status').eq('id', id).single().then(r => r.data && r.data.status), rc.id);
+    const uomRow = await db(id => supa.from('receipt_scans').select('sku,qty,uom,uom_count,loose_qty').eq('receipt_id', id).eq('sku', 'BOT-B').then(r => r.data && r.data[0]), rc.id);
+    must(uomRow && Number(uomRow.qty) === ctx.qb && (ctx.qb < 4 || uomRow.uom === 'outer'), 'jednotky balení se neuložily: ' + JSON.stringify(uomRow));
     must(st === 'receiving', 'stav příjmu je ' + st + ' (čekáno receiving) · ' + await status());
   }, s);
 

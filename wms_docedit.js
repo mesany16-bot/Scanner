@@ -468,8 +468,9 @@
       card.style.display='block';g('work-title').textContent='📥 Přijato scannerem';
       var q=d.reduce(function(a,x){return a+Number(x.qty);},0),pa=d.filter(function(x){return x.putaway_at;}).length;
       g('work-sum').textContent=nf(q)+' ks · '+d.length+' LPN · zaskladněno '+pa+'/'+d.length;
-      g('work-body').innerHTML='<table><thead><tr><th>SKU</th><th>Ks</th><th>LOT</th><th>LPN</th><th>Lokace</th><th>Čas</th></tr></thead><tbody>'+d.map(function(x){
-        return '<tr><td><b>'+esc(x.sku)+'</b></td><td>'+nf(x.qty)+'</td><td>'+esc(x.lot||'–')+'</td><td style="font-family:JetBrains Mono,monospace;font-size:12px">'+esc(x.lpn||'')+'</td>'
+      g('work-body').innerHTML='<table><thead><tr><th>SKU</th><th>Ks</th><th>Balení</th><th>LOT</th><th>LPN</th><th>Lokace</th><th>Čas</th></tr></thead><tbody>'+d.map(function(x){
+        var pk=x.uom&&x.uom!=='ks'?(nf(x.uom_count)+' × '+({inner:'inner',outer:'outer',pallet:'paleta'}[x.uom]||x.uom)+(x.uom_factor?' à '+nf(x.uom_factor):'')+(Number(x.loose_qty)>0?' + '+nf(x.loose_qty)+' ks':'')):'';
+        return '<tr><td><b>'+esc(x.sku)+'</b></td><td>'+nf(x.qty)+'</td><td style="font-size:12px;color:var(--muted)">'+esc(pk)+'</td><td>'+esc(x.lot||'–')+'</td><td style="font-family:JetBrains Mono,monospace;font-size:12px">'+esc(x.lpn||'')+'</td>'
           +'<td>'+(x.putaway_at?'<span class="badge badge-green">'+esc(x.putaway_location)+'</span>':(x.balance_id?'<span class="badge badge-orange">UNASSIGNED</span>':'<span class="badge badge-gray">'+esc(x.location_code||'čeká na dokončení')+'</span>'))+'</td>'
           +'<td style="font-size:12px;color:var(--muted)">'+new Date(x.created_at).toLocaleString('cs-CZ',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})+'</td></tr>';}).join('')+'</tbody></table>';
     }else{
