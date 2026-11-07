@@ -32,6 +32,7 @@ async function doLogin(){
   document.getElementById('auth-msg').textContent='Prihlasovani...';
   var res=await supa.auth.signInWithPassword({email,password:pass});
   if(res.error){document.getElementById('auth-msg').textContent='Chyba: '+res.error.message;return;}
+  try{if(window.PasswordCredential&&navigator.credentials){navigator.credentials.store(new PasswordCredential({id:email,password:pass})).catch(function(){});}}catch(e){}
   await onLoggedIn(res.data.user);
 }
 

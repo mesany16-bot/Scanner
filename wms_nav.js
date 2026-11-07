@@ -145,9 +145,9 @@
   setInterval(idleCheck,30000);
   document.addEventListener('visibilitychange',function(){if(!document.hidden)idleCheck();});
   window.addEventListener('pageshow',idleCheck);
-  // po odhlášení nenechávat heslo vyplněné
-  function clearPass(){var p=document.getElementById('login-pass');if(p){p.value='';p.setAttribute('autocomplete','new-password');}}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',clearPass);else clearPass();
+  // prihlaseni: prohlizec smi nabidnout ulozene jmeno a heslo
+  function loginAc(){var e=document.getElementById('login-email'),p=document.getElementById('login-pass');if(e)e.setAttribute('autocomplete','username');if(p)p.setAttribute('autocomplete','current-password');}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',loginAc);else loginAc();
 
   var EVERY=15000;
   function hasFn(n){return typeof window[n]==='function';}

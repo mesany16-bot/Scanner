@@ -1136,9 +1136,9 @@ U SKU|For SKU|Pri SKU|Для SKU|Dla SKU|Voor SKU|Bei SKU|Pentru SKU|Az SKU-nál
   <div class="modal">
     <h2>📦 PRG Scanner</h2>
     <p id="login-msg">Přihlas se pro pokračování.</p>
-    <input id="login-email" type="text" placeholder="E-mail nebo přezdívka" autocomplete="off">
-    <input id="login-password" type="password" placeholder="Heslo" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')">
-    <button class="modal-btn" onclick="doLogin()">🔐 Přihlásit se</button>
+    <form id="login-form" method="post" action="#" autocomplete="on" onsubmit="event.preventDefault();doLogin();" style="margin:0 0 8px"><input id="login-email" type="text" placeholder="E-mail nebo přezdívka" name="username" autocomplete="username">
+    <input id="login-password" type="password" placeholder="Heslo" name="password" autocomplete="current-password">
+    <button class="modal-btn" type="submit">🔐 Přihlásit se</button></form>
     <button class="modal-btn secondary" onclick="showForgot()">🔑 Zapomenuté heslo?</button>
     <button class="modal-btn secondary" id="login-cancel" style="display:none" onclick="closeModal('modal-login')">Zpět – přihlásím se později</button>
   </div>
@@ -2105,7 +2105,7 @@ var currentUser = '';
 var useLocation = false;
 var eanIntl = false;
 var intlSeen = {}, intlFull = null; // Mezinárodka: už naskenované celé štítky (s +pořadím)    // Mezinárodka: z kódu se bere jen část před „+“ (číslo zásilky bez pořadí kusu)
-var APP_VERSION = '5-65';
+var APP_VERSION = '5-66';
 var eanCount = false;   // Inventory Tool: počítání EAN (s lokací nebo bez)
 var eanSession = null;  // session_uid volné inventury EAN – na serveru jako řádek inventory_lists (kind ean / ean_loc)
 var expectingLoc = false;
@@ -2163,6 +2163,7 @@ async function doLogin() {
   }
   var res = await supa.auth.signInWithPassword({ email: email, password: pass });
   if (res.error) { document.getElementById('login-msg').textContent = '❌ '+res.error.message; return; }
+  try{if(window.PasswordCredential&&navigator.credentials){navigator.credentials.store(new PasswordCredential({id:input,password:pass})).catch(function(){});}}catch(e){}
   clearLoginForm();
   if (currentUserId && res.data.user && res.data.user.id === currentUserId) {
     // jen obnovené přihlášení – rozpracovaná práce zůstává, pošli frontu
@@ -2233,7 +2234,7 @@ function idleExpired() {
 }
 function clearLoginForm() {
   var p = document.getElementById('login-password');
-  if (p) { p.value = ''; p.setAttribute('readonly', ''); }
+  if (p) { p.value = ''; }
 }
 // Společné odhlášení: bez signálu jen lokálně (neodeslané skeny zůstávají ve frontě zařízení)
 async function logoutCore(msg) {

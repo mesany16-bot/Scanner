@@ -107,9 +107,9 @@ setTimeout(function(){
     <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG Systems</h1>
     <p style="font-size:13px;color:#7a8090;margin-bottom:20px">Přihlas se pro pokračování</p>
     <div id="auth-msg" style="font-size:13px;color:#c0392b;min-height:18px;margin-bottom:8px"></div>
-    <input id="login-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
-    <input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none">
-    <button onclick="doLogin()" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px">Přihlásit se</button>
+    <form id="login-form" method="post" action="#" autocomplete="on" onsubmit="event.preventDefault();doLogin();" style="margin:0"><input id="login-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none" name="username" autocomplete="username">
+    <input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none" name="password" autocomplete="current-password">
+    <button type="submit" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer;margin-bottom:8px">Přihlásit se</button></form>
     <button onclick="showForgot()" style="width:100%;padding:10px;background:none;color:#7a8090;border:none;font-size:13px;font-weight:600;cursor:pointer">🔑 Zapomenuté heslo?</button>
     <button onclick="showRegister()" style="width:100%;padding:10px;background:none;color:#0a7c4e;border:none;font-size:13px;font-weight:700;cursor:pointer">📝 Registrovat se</button>
   </div>
@@ -263,7 +263,7 @@ async function doLogin(){
   document.getElementById('auth-msg').textContent='⏳ Přihlašuji…';
   var res=await supa.auth.signInWithPassword({email,password:pass});
   if(res.error){document.getElementById('auth-msg').textContent='❌ '+res.error.message;return;}
-  await onLoggedIn(res.data.user);
+  try{if(window.PasswordCredential&&navigator.credentials){navigator.credentials.store(new PasswordCredential({id:email,password:pass})).catch(function(){});}}catch(e){}await onLoggedIn(res.data.user);
 }
 
 function showRegister(){
