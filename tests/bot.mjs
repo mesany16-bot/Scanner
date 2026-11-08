@@ -325,7 +325,7 @@ function watch(page, bag) {
   // ---- blokace / karanténa ----
   await step('Blokace: karanténa a uvolnění palety', async () => {
     const r = await db(async a => {
-      const b = await supa.from('stock_balances').select('id,lpn,units_total').eq('dc_id', a.dc).in('sku', ['BOT-A', 'BOT-B']).gt('units_available', 0).limit(1);
+      const b = await supa.from('stock_balances').select('id,lpn,units_total').eq('dc_id', a.dc).in('sku', ['BOT-A', 'BOT-B']).gt('units_available', 0).or('condition_code.is.null,condition_code.eq.OK').limit(1);
       const bal = b.data && b.data[0]; if (!bal) return { e: 'BOT-A ani BOT-B nemá volnou zásobu' };
       const q = await supa.rpc('wms_adjust_param', { p_balance_id: bal.id, p_field: 'condition_code', p_value: 'QUARANTINE', p_reason: 'block', p_note: 'robot', p_user: currentUserId });
       if (q.error) return { e: 'blokace: ' + q.error.message };
