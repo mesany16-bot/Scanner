@@ -287,6 +287,7 @@ function watch(page, bag) {
     }, dl.id);
     must(r && !r.e, r && r.e);
     must(r.overBlocked, 'vratka nad vydané množství nebyla zablokována');
+    await sleep(500); for (let i = serr.length - 1; i >= 0; i--) if (/wms_return_create/.test(serr[i])) serr.splice(i, 1);   // zámerne odmítnutá vratka
     ctx.rma = r.rma;
     await s.evaluate(() => tkOpenList('receipt')); await sleep(1500);
     must((await s.textContent('#task-panel')).includes(r.rma.number), 'vratka není v seznamu příjmů');
