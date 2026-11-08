@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Uzávěrka dne – PRG WMS</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="wms_nav.js"></script>
+<script src="wms_dc.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Barlow+Condensed:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+:root{--bg:#f0f2f5;--surface:#fff;--border:#e2e6ed;--accent:#0a7c4e;--accent-light:#e8f7f1;--danger:#c0392b;--danger-light:#fdecea;--warning:#e67e22;--warning-light:#fef3e8;--info:#2980b9;--info-light:#eaf4fb;--text:#1a1d27;--muted:#7a8090;--shadow:0 2px 12px rgba(0,0,0,0.07);--sidebar-w:220px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+.btn{padding:9px 18px;border:none;border-radius:8px;cursor:pointer;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;transition:opacity 0.15s;text-decoration:none;display:inline-flex;align-items:center;gap:6px;}
+.btn:active{opacity:0.8;}.btn-primary{background:var(--accent);color:#fff;}.btn-secondary{background:var(--bg);color:var(--muted);border:1.5px solid var(--border);}.btn-danger{background:var(--danger);color:#fff;}.btn-warning{background:var(--warning);color:#fff;}.btn-info{background:var(--info);color:#fff;}.btn-sm{padding:6px 12px;font-size:12px;}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;}
+.badge-green{background:var(--accent-light);color:var(--accent);}.badge-orange{background:var(--warning-light);color:var(--warning);}.badge-red{background:var(--danger-light);color:var(--danger);}.badge-blue{background:var(--info-light);color:var(--info);}.badge-gray{background:#f0f2f5;color:var(--muted);}
+.card{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden;margin-bottom:20px;}
+.card-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.card-header h3{font-family:'Barlow Condensed',sans-serif;font-size:17px;font-weight:700;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+thead{background:#f8f9fb;}
+th{padding:9px 14px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--muted);border-bottom:1px solid var(--border);font-weight:600;}
+td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tbody tr:last-child td{border-bottom:none;}tbody tr:hover{background:#fafbfc;}
+.empty-row td{text-align:center;color:var(--muted);padding:28px;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.form-row.single{grid-template-columns:1fr;}.form-row.triple{grid-template-columns:1fr 1fr 1fr;}
+.form-group{display:flex;flex-direction:column;gap:5px;}
+.form-group label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.3px;}
+.form-group input,.form-group select,.form-group textarea{padding:9px 12px;border:1.5px solid var(--border);border-radius:7px;font-family:'Inter',sans-serif;font-size:13px;outline:none;transition:border-color 0.2s;background:#fff;}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--accent);}
+.form-group textarea{resize:vertical;min-height:70px;}
+.form-section{font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:200;padding:20px;}
+.modal-box{background:var(--surface);border-radius:14px;width:100%;max-width:520px;box-shadow:0 20px 60px rgba(0,0,0,0.2);max-height:90vh;overflow-y:auto;}
+.modal-header{padding:18px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.modal-header h3{font-family:'Barlow Condensed',sans-serif;font-size:19px;font-weight:700;}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);}
+.modal-body{padding:18px 22px;}.modal-footer{padding:12px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;}
+#sidebar{position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);background:#0a7c4e;display:flex;flex-direction:column;z-index:50;transition:transform 0.25s ease;}
+.sidebar-logo{padding:20px 18px 14px;font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:700;color:#fff;letter-spacing:1.5px;border-bottom:1px solid rgba(255,255,255,0.15);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;}
+.sidebar-logo span{font-size:11px;font-weight:400;opacity:0.7;width:100%;letter-spacing:0;}
+#sidebar-close-btn{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;opacity:0.8;display:none;}
+nav{flex:1;padding:10px 0;overflow-y:auto;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:11px 18px;color:rgba(255,255,255,0.75);cursor:pointer;font-size:14px;font-weight:500;transition:background 0.15s,color 0.15s;border-left:3px solid transparent;}
+.nav-item:hover{background:rgba(255,255,255,0.1);color:#fff;}
+.nav-item.active{background:rgba(255,255,255,0.15);color:#fff;border-left-color:#fff;}
+.nav-icon{font-size:17px;width:22px;text-align:center;}
+.sidebar-user{padding:12px 18px;border-top:1px solid rgba(255,255,255,0.15);font-size:12px;color:rgba(255,255,255,0.7);display:flex;flex-direction:column;gap:4px;}
+.sidebar-user strong{color:#fff;font-size:13px;}
+.sidebar-user button{background:rgba(255,255,255,0.15);color:#fff;border:none;border-radius:5px;padding:5px 10px;cursor:pointer;font-size:11px;margin-top:4px;}
+#main{margin-left:var(--sidebar-w);min-height:100vh;}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:13px 24px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow);position:sticky;top:0;z-index:40;}
+.topbar h2{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;flex:1;}
+.topbar-actions{display:flex;gap:8px;align-items:center;}
+.hamburger-btn{display:inline-flex;align-items:center;background:none;border:none;font-size:24px;cursor:pointer;color:var(--text);padding:4px 8px;margin-right:4px;border-radius:6px;}
+.content{padding:24px;}
+#sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:49;}
+#toast{position:fixed;bottom:24px;right:24px;background:#1a1d27;color:#fff;padding:12px 20px;border-radius:9px;font-size:13px;font-weight:500;z-index:999;opacity:0;transition:opacity 0.3s;pointer-events:none;}
+#toast.show{opacity:1;}
+.back-btn{background:var(--bg);border:1.5px solid var(--border);border-radius:7px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;text-decoration:none;display:flex;align-items:center;gap:6px;}
+.back-btn:hover{border-color:var(--accent);color:var(--accent);}
+@media(min-width:901px){.hamburger-btn{display:none;}#sidebar-close-btn{display:none !important;}}
+@media(max-width:900px){:root{--sidebar-w:0px;}#sidebar{transform:translateX(-220px);width:220px;}#sidebar.open{transform:translateX(0);}#sidebar-close-btn{display:block !important;}#main{margin-left:0;}.content{padding:14px;}.topbar{padding:11px 14px;}}
+
+/* mobilní zobrazení – sjednoceno s Inventory Tool */
+@media(max-width:900px){
+body{overflow-x:hidden;}
+#main{min-width:0;max-width:100%;}
+.content{padding:12px !important;min-width:0;max-width:100%;}
+.card{min-width:0;max-width:100%;}
+.topbar{flex-wrap:wrap;gap:8px;padding:10px 12px !important;}
+.topbar h2{font-size:19px !important;min-width:0;flex:1 1 auto;}
+.topbar-actions{flex-wrap:wrap;gap:6px;margin-left:auto;}
+#last-refresh{display:none;}
+#theme-popover{right:8px !important;max-width:calc(100vw - 16px);}
+.stat-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;gap:10px !important;}
+.two-col{grid-template-columns:minmax(0,1fr) !important;}
+.stat-grid>*,.two-col>*{min-width:0;}
+.form-row{grid-template-columns:1fr !important;}
+}
+
+.sf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;padding:12px 16px;}
+.sf-grid label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;}
+.sf-grid input,.sf-grid select{width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px;outline:none;background:#fff;font-family:inherit;}
+.sf-grid input:focus,.sf-grid select:focus{border-color:var(--accent);}
+.sf-bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 16px;border-top:1px solid var(--border);background:#fafbfc;}
+.sf-bar .sf-info{flex:1;min-width:160px;font-size:12px;color:var(--muted);}
+.sf-quick{display:flex;gap:6px;flex-wrap:wrap;padding:12px 16px 0;}
+.sf-quick button{padding:5px 11px;border:1.5px solid var(--border);border-radius:20px;background:#fff;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;}
+.sf-quick button:hover{border-color:var(--accent);color:var(--accent);}
+th.sortable{cursor:pointer;user-select:none;white-space:nowrap;}
+th.sortable:hover{color:var(--accent);}
+</style>
+</head>
+<body>
+<div id="session-check" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+  <div style="color:#fff;font-family:'Barlow Condensed',sans-serif;font-size:16px;opacity:0.85;">Načítám…</div>
+</div>
+<div id="auth-screen" style="display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#0a7c4e,#075c3a)">
+  <div style="background:#fff;border-radius:16px;padding:36px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.2)">
+    <h1 style="font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:700;color:#0a7c4e;margin-bottom:4px">📦 PRG WMS</h1>
+    <p style="font-size:13px;color:#7a8090;margin-bottom:20px">Warehouse Management System</p>
+    <div id="auth-msg" style="font-size:13px;color:#c0392b;min-height:18px;margin-bottom:8px"></div>
+    <form id="login-form" method="post" action="#" autocomplete="on" onsubmit="event.preventDefault();doLogin();" style="margin:0"><input id="login-email" type="email" placeholder="E-mail" style="width:100%;padding:11px 14px;margin-bottom:10px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none" name="username" autocomplete="username">
+    <input id="login-pass" type="password" placeholder="Heslo" style="width:100%;padding:11px 14px;margin-bottom:14px;border:1.5px solid #e2e6ed;border-radius:8px;font-size:14px;outline:none" name="password" autocomplete="current-password">
+    <button type="submit" style="width:100%;padding:12px;background:#0a7c4e;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:600;cursor:pointer">Přihlásit se</button></form>
+  </div>
+</div>
+<div id="app" style="display:none">
+  <div id="sidebar">
+    <div class="sidebar-logo">PRG WMS<span>Warehouse Management</span><button onclick="toggleSidebar()" id="sidebar-close-btn">✕</button></div>
+    <nav id="wms-nav" data-active="eod"></nav>
+    <div class="sidebar-user">
+      <strong id="sidebar-user-name">–</strong>
+      <span id="sidebar-user-role" class="badge badge-gray"></span>
+      <button onclick="doLogout()">Odhlásit se</button>
+    </div>
+  </div>
+  <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+  <div id="main">
+    
+<div class="topbar"><button class="hamburger-btn" onclick="toggleSidebar()">☰</button><h2>🌙 Uzávěrka dne</h2><div class="topbar-actions">
+  <select id="f-dc" onchange="load()" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px"></select>
+  <input id="f-date" type="date" onchange="load()" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:7px;font-size:13px">
+</div></div>
+<div class="content">
+  <div class="card"><div class="card-header"><h3>Stav dne</h3><span id="eod-sum" style="font-size:13px;color:var(--muted)"></span></div>
+    <div id="eod-check" style="padding:6px 0"></div></div>
+  <div class="card"><div class="card-header"><h3>Manifesty k uzavření</h3><span style="font-size:12px;color:var(--muted)">Odeslané výdejky, které ještě nejsou na žádném manifestu</span></div>
+    <div id="eod-open" style="padding:14px 20px">Načítám…</div></div>
+  <div class="card"><div class="card-header"><h3>Uzavřené manifesty</h3></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Manifest</th><th>Dopravce</th><th>Den</th><th style="text-align:right">Výdejky</th><th style="text-align:right">Kusy</th><th style="text-align:right">Váha kg</th><th>Uzavřel</th><th></th></tr></thead>
+    <tbody id="eod-done"><tr class="empty-row"><td colspan="8">Načítám…</td></tr></tbody></table></div></div>
+</div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+var SUPA_URL="https://ujvqanqqhmnfxsfeqixc.supabase.co";
+var SUPA_KEY="sb_publishable_5o19BnZUEi8j-rU5DDAgBA_HwKB7V-v";
+var supa=supabase.createClient(SUPA_URL,SUPA_KEY);
+var currentUser=null,currentProfile=null;
+async function doLogin(){var email=document.getElementById('login-email').value.trim();var pass=document.getElementById('login-pass').value;if(!email||!pass){document.getElementById('auth-msg').textContent='⚠️ Vyplň e-mail a heslo';return;}document.getElementById('auth-msg').textContent='⏳ Přihlašuji…';var res=await supa.auth.signInWithPassword({email,password:pass});if(res.error){document.getElementById('auth-msg').textContent='❌ '+res.error.message;return;}try{if(window.PasswordCredential&&navigator.credentials){navigator.credentials.store(new PasswordCredential({id:email,password:pass})).catch(function(){});}}catch(e){}await onLoggedIn(res.data.user);}
+// idle logout
+var SESSION_IDLE_MS=2*60*60*1000;var sessionIdleTimer=null;function startSessionIdleWatch(){function reset(){clearTimeout(sessionIdleTimer);sessionIdleTimer=setTimeout(async function(){await supa.auth.signOut();alert('Byl jsi odhlášen kvůli 2 hodinám nečinnosti.');window.location.href='wms_dashboard.html';},SESSION_IDLE_MS);}['click','keydown','touchstart','scroll','mousemove'].forEach(function(evt){document.addEventListener(evt,reset,{passive:true});});reset();}
+async function onLoggedIn(user){document.getElementById('session-check').style.display='none';currentUser=user;var prof=await supa.from('profiles').select('*').eq('id',user.id).single();if(!prof.data){alert('Tento účet už není platný. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}currentProfile=prof.data;if(currentProfile.is_active===false){alert('Tento účet byl deaktivován. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}var allowed=currentProfile.allowed_apps;if(currentProfile.role!=='admin'&&Array.isArray(allowed)&&allowed.indexOf('wms')===-1){alert('Nemáš přístup do PRG WMS. Kontaktuj administrátora.');await supa.auth.signOut();window.location.href='wms_dashboard.html';return;}document.getElementById('sidebar-user-name').textContent=currentProfile.name||user.email;var rb=document.getElementById('sidebar-user-role');rb.textContent=currentProfile.role==='admin'?'Admin':'User';rb.className=currentProfile.role==='admin'?'badge badge-orange':'badge badge-gray';document.querySelectorAll('.admin-only').forEach(function(el){el.style.display=currentProfile.role==='admin'?'flex':'none';});document.getElementById('auth-screen').style.display='none';document.getElementById('app').style.display='block';(async function(){try{if(window.PRG_DC)await PRG_DC.init(supa,currentProfile);}catch(e){console.warn('DC',e);}if(typeof afterLogin==='function')afterLogin();})();startSessionIdleWatch();}
+async function doLogout(){await supa.auth.signOut();window.location.href='wms_dashboard.html';}
+function go(u){window.location.href=u;}
+function toggleSidebar(){var sb=document.getElementById('sidebar'),ov=document.getElementById('sidebar-overlay'),o=sb.classList.toggle('open');ov.style.display=o?'block':'none';}
+var _tt;function toast(m){var e=document.getElementById('toast');e.textContent=m;e.classList.add('show');clearTimeout(_tt);_tt=setTimeout(function(){e.classList.remove('show');},2800);}
+function closeModal(id){document.getElementById(id).style.display='none';}
+function fmt(dt){return new Date(dt).toLocaleString('cs-CZ');}
+function fmtD(dt){return new Date(dt).toLocaleDateString('cs-CZ');}
+supa.auth.getSession().then(function(res){
+  if(res.data&&res.data.session){onLoggedIn(res.data.session.user);}
+  else{window.location.href='wms_dashboard.html';}
+});
+
+var openRows=[],doneRows=[];
+function escH(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function nf(n,d){return Number(n||0).toLocaleString('cs-CZ',{maximumFractionDigits:d==null?0:d});}
+function isoDay(d){var z=new Date(d.getTime()-d.getTimezoneOffset()*6e4);return z.toISOString().slice(0,10);}
+function dayRange(){var v=document.getElementById('f-date').value,a=new Date(v+'T00:00:00'),b=new Date(a.getTime()+864e5);return {from:a.toISOString(),to:b.toISOString(),day:v};}
+function dcId(){return Number(document.getElementById('f-dc').value)||null;}
+async function afterLogin(){
+  var whs=(window.PRG_DC&&PRG_DC.list().length)?PRG_DC.list():((await supa.from('warehouses').select('id,code,name').order('code')).data||[]);
+  var cur=window.PRG_DC&&PRG_DC.currentId?PRG_DC.currentId():null;
+  document.getElementById('f-dc').innerHTML=whs.map(function(w){return '<option value="'+w.id+'"'+(String(w.id)===String(cur)?' selected':'')+'>DC '+escH(w.code||w.id)+(w.name?' · '+escH(w.name):'')+'</option>';}).join('');
+  document.getElementById('f-date').value=isoDay(new Date());
+  load();
+}
+function tile(ok,icon,txt,href){return '<a href="'+href+'" style="display:flex;gap:10px;align-items:center;padding:9px 20px;border-bottom:1px solid var(--border);color:var(--text);text-decoration:none"><span style="font-size:18px">'+(ok?'✅':icon)+'</span><span>'+txt+'</span></a>';}
+async function load(){
+  var dc=dcId(),r=dayRange();if(!dc)return;
+  var Q=function(t,s){return supa.from(t).select(s,{count:'exact',head:true});};
+  var res=await Promise.all([
+    Q('receipts','id').eq('warehouse_id',dc).gte('received_at',r.from).lt('received_at',r.to),
+    Q('deliveries','id').eq('warehouse_id',dc).gte('shipped_at',r.from).lt('shipped_at',r.to),
+    Q('deliveries','id').eq('warehouse_id',dc).lt('planned_at',r.to).not('status','in','(shipped,done,delivered,cancelled)'),
+    Q('receipts','id').eq('warehouse_id',dc).in('status',['arrived','receiving','received','putaway']),
+    Q('count_tasks','id').eq('dc_id',dc).in('status',['open','counted']),
+    Q('repl_tasks','id').eq('dc_id',dc).eq('status','open'),
+    Q('deliveries','id').eq('warehouse_id',dc).not('problem','is',null).not('status','in','(shipped,done,delivered,cancelled)'),
+    Q('receipts','id').eq('warehouse_id',dc).eq('receipt_type','return').in('status',['new','arrived'])
+  ]);
+  var c=res.map(function(x){return x.count||0;});
+  document.getElementById('eod-sum').textContent='Přijato '+c[0]+' · odesláno '+c[1]+' výdejek';
+  document.getElementById('eod-check').innerHTML=
+     tile(!c[2],'⏰',c[2]?'<b>'+c[2]+'</b> výdejek plánovaných do dneška ještě neodešlo':'Všechny výdejky plánované do dneška odešly','wms_deliveries.html')
+    +tile(!c[6],'⚠️',c[6]?'<b>'+c[6]+'</b> otevřených výdejek má problém (chybí zásoba ap.)':'Žádná otevřená výdejka nemá problém','wms_exceptions.html')
+    +tile(!c[3],'📥',c[3]?'<b>'+c[3]+'</b> příjmů je rozpracovaných (dorazilo, nepřijato nebo nezaskladněno)':'Žádný rozpracovaný příjem','wms_receipts.html')
+    +tile(!c[7],'↩️',c[7]?'<b>'+c[7]+'</b> vratek čeká na příjem':'Žádná vratka nečeká','wms_returns.html')
+    +tile(!c[4],'📋',c[4]?'<b>'+c[4]+'</b> inventur je otevřených nebo čeká na schválení':'Žádná otevřená inventura','wms_accuracy.html')
+    +tile(!c[5],'🔁',c[5]?'<b>'+c[5]+'</b> úloh doplnění pick lokací čeká na retrak':'Pick lokace jsou doplněné','wms_stock.html');
+  // manifesty
+  var o=await supa.from('deliveries').select('id,delivery_number,carrier,shipped_at,customer_ref,ship_to_name,ship_to_city,ship_to_country,tracking_no,clients(name),packages(id,code,sscc,weight_kg,tracking_no)').eq('warehouse_id',dc).in('status',['shipped','done','delivered']).is('manifest_id',null).lt('shipped_at',r.to).order('shipped_at').limit(1000);
+  openRows=o.data||[];
+  var by={};openRows.forEach(function(d){var k=(d.carrier||'').trim()||'(bez dopravce)';(by[k]=by[k]||[]).push(d);});
+  var keys=Object.keys(by).sort();
+  document.getElementById('eod-open').innerHTML=o.error?'❌ '+escH(o.error.message):keys.length?keys.map(function(k){var ds=by[k],pk=0,w=0;ds.forEach(function(d){pk+=(d.packages||[]).length;(d.packages||[]).forEach(function(p){w+=Number(p.weight_kg||0);});});
+      return '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap"><div><b style="font-size:15px">🚚 '+escH(k)+'</b><div style="font-size:13px;color:var(--muted);margin-top:3px">'+ds.length+' výdejek · '+pk+' kusů · '+nf(w,1)+' kg</div><div style="font-size:12px;color:var(--muted);margin-top:3px">'+ds.map(function(d){return escH(d.delivery_number);}).join(', ')+'</div></div>'
+        +'<button class="btn btn-primary btn-sm" onclick="closeMan(\''+encodeURIComponent(k)+'\')">🔒 Uzavřít a vytisknout manifest</button></div>';}).join('')
+    :'<span style="color:var(--muted)">✅ Všechny odeslané výdejky jsou na manifestu.</span>';
+  // uzavrene
+  var m=await supa.from('carrier_manifests').select('*').eq('dc_id',dc).order('closed_at',{ascending:false}).limit(60);
+  doneRows=m.data||[];
+  var ids=doneRows.map(function(x){return x.closed_by;}).filter(Boolean),names={};
+  if(ids.length){var p=await supa.from('profiles').select('id,name').in('id',ids);(p.data||[]).forEach(function(x){names[x.id]=x.name;});}
+  document.getElementById('eod-done').innerHTML=doneRows.length?doneRows.map(function(x){return '<tr><td><b>'+escH(x.number)+'</b></td><td>'+escH(x.carrier)+'</td><td>'+fmtD(x.manifest_date)+'</td><td style="text-align:right">'+x.deliveries+'</td><td style="text-align:right">'+x.packages+'</td><td style="text-align:right">'+nf(x.weight_kg,1)+'</td><td>'+escH(names[x.closed_by]||'')+' · '+fmt(x.closed_at)+'</td><td><button class="btn btn-secondary btn-sm" onclick="printMan('+x.id+')">🖨️ Tisk</button></td></tr>';}).join('')
+    :'<tr class="empty-row"><td colspan="8">Zatím žádný uzavřený manifest</td></tr>';
+}
+async function closeMan(k){
+  k=decodeURIComponent(k);
+  if(!confirm('Uzavřít manifest pro '+k+'? Výdejky se na něj zapíšou a manifest se vytiskne k podpisu řidiči.'))return;
+  var r=await supa.rpc('wms_manifest_close',{p_dc:dcId(),p_carrier:k,p_date:dayRange().day});
+  if(r.error){toast('❌ '+r.error.message);return;}
+  toast('✅ Manifest '+r.data.number+' uzavřen');await load();printMan(r.data.id);
+}
+async function printMan(id){
+  var m=(await supa.from('carrier_manifests').select('*').eq('id',id).single()).data;if(!m)return;
+  var d=(await supa.from('deliveries').select('delivery_number,customer_ref,ship_to_name,ship_to_city,ship_to_zip,ship_to_country,tracking_no,clients(name),packages(code,sscc,weight_kg,length_cm,width_cm,height_cm,tracking_no)').eq('manifest_id',id).order('delivery_number')).data||[];
+  var who=m.closed_by?((await supa.from('profiles').select('name').eq('id',m.closed_by).single()).data||{}).name:'';
+  var w=(await supa.from('warehouses').select('code,name').eq('id',m.dc_id).single()).data||{};
+  var rows='',n=0;
+  d.forEach(function(x){var ps=(x.packages&&x.packages.length)?x.packages:[{}];ps.forEach(function(p,i){n++;rows+='<tr><td>'+n+'</td><td>'+(i?'':'<b>'+escH(x.delivery_number)+'</b><br><small>'+escH(x.clients&&x.clients.name||'')+(x.customer_ref?' · '+escH(x.customer_ref):'')+'</small>')+'</td><td>'+(i?'':escH(x.ship_to_name||'')+'<br><small>'+escH([x.ship_to_zip,x.ship_to_city,x.ship_to_country].filter(Boolean).join(' '))+'</small>')+'</td><td>'+escH(p.sscc||p.code||'–')+'</td><td style="text-align:right">'+(p.weight_kg?nf(p.weight_kg,1):'')+'</td><td>'+(p.length_cm?nf(p.length_cm)+'×'+nf(p.width_cm)+'×'+nf(p.height_cm):'')+'</td><td>'+escH(p.tracking_no||x.tracking_no||'')+'</td></tr>';});});
+  var h='<!doctype html><html><head><meta charset="utf-8"><title>'+escH(m.number)+'</title><style>body{font-family:Arial,sans-serif;font-size:12px;margin:24px;color:#111}h1{font-size:20px;margin:0}table{width:100%;border-collapse:collapse;margin-top:14px}th,td{border:1px solid #999;padding:5px 6px;vertical-align:top;text-align:left}th{background:#eee}small{color:#555}.hd{display:flex;justify-content:space-between;align-items:flex-start}.sig{display:flex;gap:30px;margin-top:40px}.sig div{flex:1;border-top:1px solid #333;padding-top:6px}</style></head><body>'
+    +'<div class="hd"><div><h1>Manifest dopravce</h1><div style="font-size:14px;margin-top:4px"><b>'+escH(m.carrier)+'</b></div></div><div style="text-align:right"><b style="font-size:16px">'+escH(m.number)+'</b><br>Den: '+fmtD(m.manifest_date)+'<br>Sklad: DC '+escH(w.code||m.dc_id)+(w.name?' · '+escH(w.name):'')+'</div></div>'
+    +'<table><thead><tr><th>#</th><th>Výdejka</th><th>Příjemce</th><th>Kus (SSCC)</th><th>kg</th><th>Rozměr cm</th><th>Tracking</th></tr></thead><tbody>'+rows+'</tbody>'
+    +'<tfoot><tr><th colspan="3">Celkem: '+m.deliveries+' výdejek</th><th>'+m.packages+' kusů</th><th style="text-align:right">'+nf(m.weight_kg,1)+'</th><th colspan="2"></th></tr></tfoot></table>'
+    +'<div class="sig"><div>Předal (sklad): <b>'+escH(who||'')+'</b><br><br>Podpis:</div><div>Převzal (řidič) – jméno:<br><br>SPZ: ____________ Čas: ________<br><br>Podpis:</div></div>'
+    +'<script>window.onload=function(){window.print();}<\/script></body></html>';
+  var wnd=window.open('','_blank');if(!wnd){toast('⚠️ Povol vyskakovací okna pro tisk');return;}wnd.document.write(h);wnd.document.close();
+}
+
+</script>
+</body>
+</html>

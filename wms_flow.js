@@ -95,6 +95,14 @@
       +'<div style="border:1.5px solid '+(p.checked?'var(--accent)':'var(--border)')+';background:'+(p.checked?'var(--accent-light)':'#fff')+';border-radius:9px;padding:8px 10px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:600">Zkontroloval</div>'
       +(p.checked?'<div style="font-size:13.5px;font-weight:700;margin-top:2px;color:var(--accent)">✔ '+esc(p.checked)+'</div><div style="font-size:11.5px;color:var(--muted)">'+dt(p.checked_at)+' · <a href="#" style="color:var(--muted)" onclick="PRG_FLOW.docCheck(\''+type+'\','+id+',true);return false">zrušit</a></div>'
         :'<button class="btn btn-primary btn-sm" style="margin-top:4px" onclick="PRG_FLOW.docCheck(\''+type+'\','+id+',false)">✔ Potvrdit kontrolu</button>')+'</div></div>';
+    try{
+      if(type==='receipt'){var rr=await supa.from('receipts').select('receipt_type,return_reason,return_delivery_id,deliveries(delivery_number)').eq('id',id).single();
+        if(rr.data&&rr.data.receipt_type==='return')html='<div style="border:1.5px solid var(--warning);background:#fff8ec;border-radius:9px;padding:9px 12px;margin-bottom:10px;font-size:13.5px">↩️ <b>Vratka</b> k výdejce <a href="wms_delivery.html?id='+rr.data.return_delivery_id+'" style="color:var(--info);font-weight:700">'+esc(rr.data.deliveries&&rr.data.deliveries.delivery_number||'#'+rr.data.return_delivery_id)+'</a> · důvod: <b>'+esc(rr.data.return_reason||'')+'</b> · zboží se přijímá do karantény</div>'+html;}
+      else{var dd=await supa.from('deliveries').select('status').eq('id',id).single(),rt=await supa.from('receipts').select('id,receipt_number,status').eq('return_delivery_id',id).order('id');
+        var shipped=dd.data&&['shipped','done','delivered'].indexOf(dd.data.status)>=0,lst=rt.data||[];
+        if(shipped||lst.length)html='<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:13.5px">'+(lst.length?'<span>↩️ Vratky: '+lst.map(function(x){return '<a href="wms_receipt.html?id='+x.id+'" style="color:var(--accent);font-weight:700">'+esc(x.receipt_number)+'</a>';}).join(', ')+'</span>':'')
+          +(shipped&&!window.PRG_PORTAL?'<a class="btn btn-secondary btn-sm" href="wms_returns.html?delivery='+id+'">↩️ Založit vratku</a>':'')+'</div>'+html;}
+    }catch(e){}
     box.innerHTML=html;
   }
   async function docCheck(type,id,undo){

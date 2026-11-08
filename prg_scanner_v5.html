@@ -2105,7 +2105,7 @@ var currentUser = '';
 var useLocation = false;
 var eanIntl = false;
 var intlSeen = {}, intlFull = null; // Mezinárodka: už naskenované celé štítky (s +pořadím)    // Mezinárodka: z kódu se bere jen část před „+“ (číslo zásilky bez pořadí kusu)
-var APP_VERSION = '5-68';
+var APP_VERSION = '5-69';
 var eanCount = false;   // Inventory Tool: počítání EAN (s lokací nebo bez)
 var eanSession = null;  // session_uid volné inventury EAN – na serveru jako řádek inventory_lists (kind ean / ean_loc)
 var expectingLoc = false;
@@ -3362,7 +3362,7 @@ function tkRenderList(off) {
   if (!d.length && !(task.waves || []).length) h += '<div class="tk-muted" style="padding:18px;text-align:center">' + TK_LIST[t].empty + '</div>';
   h += d.map(function(x, i){
     var num = x.receipt_number || x.delivery_number, when = x.expected_at || x.planned_at;
-    return '<div class="tk-card" onclick="tkOpenDoc(' + i + ')"><div style="display:flex;justify-content:space-between;gap:8px"><b class="tk-mono">' + tkEsc(num) + '</b><span class="tk-badge tk-b-' + x.status + '">' + tkEsc(TK_ST[t === 'receipt' ? 'receipt' : 'delivery'][x.status] || x.status) + '</span></div>'
+    return '<div class="tk-card" onclick="tkOpenDoc(' + i + ')"' + (x.receipt_type === 'return' ? ' style="border-color:#e67e22"' : '') + '><div style="display:flex;justify-content:space-between;gap:8px"><b class="tk-mono">' + (x.receipt_type === 'return' ? '↩️ ' : '') + tkEsc(num) + '</b><span class="tk-badge tk-b-' + x.status + '">' + tkEsc(TK_ST[t === 'receipt' ? 'receipt' : 'delivery'][x.status] || x.status) + '</span></div>'
       + '<div class="tk-sub">' + tkEsc((x.clients && x.clients.name) || '') + (x.supplier ? ' · ' + tkEsc(x.supplier) : '') + (when ? ' · ' + new Date(when).toLocaleString('cs-CZ', { day:'numeric', month:'numeric', hour:'2-digit', minute:'2-digit' }) : '')
       + (x.priority === 'high' ? ' · <b style="color:#c0392b">VYSOKÁ PRIORITA</b>' : '') + (x.assigned_to ? '<br>👤 ' + (x.assigned_to === currentUserId ? '<b>moje</b>' : tkEsc((TK_NAMES && TK_NAMES[x.assigned_to]) || 'přiřazeno')) : '') + (x.problem ? '<br><span style="color:#c0392b">⚠ ' + tkEsc(x.problem) + '</span>' : '') + '</div></div>';
   }).join('');
@@ -3427,7 +3427,7 @@ function tkRenderReceipt() {
   task.scans.forEach(function(s){ if (s.st !== 'fail') got[tkUp(s.sku)] = (got[tkUp(s.sku)] || 0) + s.qty; });
   var keys = Object.keys(exp).concat(Object.keys(got).filter(function(k){ return !(k in exp); }));
   var open = /new|arrived|receiving/.test(d.status);
-  var h = '<div class="tk-head">📥 ' + tkEsc(d.receipt_number) + ' <span class="tk-badge tk-b-' + d.status + '">' + tkEsc(TK_ST.receipt[d.status] || d.status) + '</span><button class="tk-x" onclick="tkOpenList(\'receipt\')">↩</button></div>'
+  var h = '<div class="tk-head">📥 ' + tkEsc(d.receipt_number) + ' <span class="tk-badge tk-b-' + d.status + '">' + tkEsc(TK_ST.receipt[d.status] || d.status) + '</span><button class="tk-x" onclick="tkOpenList(\'receipt\')">↩</button></div>' + (d.receipt_type === 'return' ? '<div class="tk-warn" style="background:#fdf0e1;color:#a0522d">↩️ VRATKA' + (d.return_reason ? ' – ' + tkEsc(d.return_reason) : '') + ' · zboží zkontroluj, výchozí stav je karanténa</div>' : '')
     + '<div class="tk-sub" style="padding:0 14px 8px">' + tkEsc(cl.name || '') + (d.supplier ? ' · ' + tkEsc(d.supplier) : '') + (cl.receipt_flow === 'one_step' ? ' · příjem rovnou na lokaci' : '') + (cl.lot_required ? ' · LOT povinný' : '') + '</div>';
   if (task.off) h += '<div class="tk-warn">📴 Bez signálu – data z poslední synchronizace, skeny se odešlou později</div>';
   if (d.problem) h += '<div class="tk-warn">⚠ ' + tkEsc(d.problem) + '</div>';
@@ -3492,7 +3492,7 @@ async function tkReceiptCode(code) {
     ? [{ k: 'uom', label: 'Jednotka', opts: U.map(function(x){ return [x[0], x[1]]; }), v: defU }, { k: 'cnt', label: 'Počet', num: true, v: 1, req: true, focus: true }, { k: 'loose', label: 'Kusy navíc (volné)', num: true, v: '', ph: '0' }]
     : [{ k: 'qty', label: 'Množství (ks)', num: true, v: 1, req: true, focus: true }];
   fields = fields.concat([ { k: 'lot', label: 'LOT', req: lotReq, ph: lotReq ? 'povinný' : 'nepovinný' }, { k: 'lpn', label: 'LPN (štítek palety)', ph: 'prázdné = přidělí systém' },
-    { k: 'cond', label: 'Stav zboží', opts: [['OK', '✅ V pořádku'], ['QUARANTINE', '🟡 Karanténa – čeká na kontrolu'], ['DAMAGE', '🔴 Poškozené'], ['HOLD', '⛔ Blokované (HOLD)']], v: 'OK' }]);
+    { k: 'cond', label: 'Stav zboží', opts: [['OK', '✅ V pořádku'], ['QUARANTINE', '🟡 Karanténa – čeká na kontrolu'], ['DAMAGE', '🔴 Poškozené'], ['HOLD', '⛔ Blokované (HOLD)']], v: (task.doc && task.doc.receipt_type === 'return') ? 'QUARANTINE' : 'OK' }]);
   if (one) fields.push({ k: 'loc', label: 'Lokace', req: true, ph: s.primary_location || 'naskenuj lokaci', v: '' });
   if (s.expiry_tracked) fields.push({ k: 'exp', label: 'Expirace', req: true, ph: 'DD.MM.RRRR' });
   if (s.serial_in) fields.push({ k: 'ser', label: 'Sériová čísla (každé na nový řádek / sken)', req: true, area: true });
@@ -3983,7 +3983,7 @@ async function tkStartRepl() {
   task = { kind: 'repl', step: 'from', list: [], cur: null };
   tkPanel('<div class="tk-muted" style="padding:18px">Hledám, co doplnit…</div>');
   if (currentDcId != null) { try { await supa.rpc('wms_repl_generate', { p_dc: currentDcId, p_user: currentUserId }); } catch(e) {} }
-  var q = supa.from('repl_tasks').select('*').eq('status', 'open').order('from_location').limit(200);
+  var q = supa.from('repl_tasks').select('*').eq('status', 'open').order('priority', { ascending: false }).order('from_location').limit(200);
   if (currentDcId != null) q = q.eq('dc_id', currentDcId);
   var r = await tkFetch(q);
   task.list = r.data || tkCacheGet('repl_' + currentDcId) || []; task.off = !r.data;
@@ -3995,7 +3995,7 @@ function tkRenderRepl() {
   if (task.off) h += '<div class="tk-warn">📴 Bez signálu – seznam z poslední synchronizace</div>';
   var c = task.cur;
   if (c) h += '<div class="tk-big on"><div class="tk-sub">PŘEVEZ PALETU</div><div class="tk-mono" style="font-size:20px;font-weight:700">' + tkEsc(c.lpn || '') + '</div><div>' + tkEsc(c.sku) + ' · ' + tkNf(c.qty) + ' ks</div><div style="font-size:22px;margin-top:6px">' + tkEsc(c.from_location) + ' → <b class="tk-mono">' + tkEsc(c.to_location) + '</b></div><div style="margin-top:8px;font-size:18px">📍 Naskenuj cílovou lokaci</div></div><button class="tk-btn sec" onclick="task.cur=null;task.step=\'from\';tkRenderRepl();updateScanBtn()">✖ Jiná úloha</button>';
-  h += '<div class="tk-sec">Úkoly: ' + task.list.length + '</div>' + (task.list.length ? task.list.map(function(t){ return '<div class="tk-row' + (c && c.id === t.id ? ' cur' : '') + '"><span><b class="tk-mono">' + tkEsc(t.from_location) + '</b> → <b class="tk-mono">' + tkEsc(t.to_location) + '</b><br><span class="tk-sub">' + tkEsc(t.sku) + ' · ' + tkNf(t.qty) + ' ks · ' + tkEsc(t.lpn || '') + '</span></span></div>'; }).join('') : '<div class="tk-muted" style="padding:16px;text-align:center">✅ Všechny pick lokace jsou doplněné.</div>');
+  h += '<div class="tk-sec">Úkoly: ' + task.list.length + '</div>' + (task.list.length ? task.list.map(function(t){ return '<div class="tk-row' + (c && c.id === t.id ? ' cur' : '') + '"><span>' + (t.priority ? '🔴 ' : '') + '<b class="tk-mono">' + tkEsc(t.from_location) + '</b> → <b class="tk-mono">' + tkEsc(t.to_location) + '</b><br><span class="tk-sub">' + tkEsc(t.sku) + ' · ' + tkNf(t.qty) + ' ks · ' + tkEsc(t.lpn || '') + '</span></span></div>'; }).join('') : '<div class="tk-muted" style="padding:16px;text-align:center">✅ Všechny pick lokace jsou doplněné.</div>');
   tkPanel(h);
 }
 async function tkReplCode(code) {

@@ -140,7 +140,7 @@ body{overflow-x:hidden;}
       <div class="form-row"><div class="form-group"><label>Ks v inneru (vnitřní balení)</label><input id="f-upi" type="number" min="0" placeholder="např. 6"></div><div class="form-group"><label>GTIN inneru</label><input id="f-gti" type="text" maxlength="14"></div></div>
       <div class="form-row"><div class="form-group"><label>Ks v outeru / kartonu</label><input id="f-upc" type="number" min="0"></div><div class="form-group"><label>ABC třída</label><select id="f-abcc"><option value="">–</option><option>A</option><option>B</option><option>C</option><option>D</option></select></div></div>
       <div class="form-row"><div class="form-group"><label>GTIN kartonu (14 číslic)</label><input id="f-gtc" type="text" maxlength="14"></div><div class="form-group"><label>GTIN palety (14 číslic)</label><input id="f-gtp" type="text" maxlength="14"></div></div>
-      <div class="form-row"><div class="form-group"><label>Pick lokace</label><input id="f-prim" type="text" placeholder="např. R01P01L1BA" style="text-transform:uppercase"></div><div class="form-group"><label>Min. v pick lokaci (ks)</label><input id="f-pmin" type="number" min="0"></div></div>
+      <div class="form-row"><div class="form-group"><label>Pick lokace</label><input id="f-prim" type="text" placeholder="např. R01P01L1BA" style="text-transform:uppercase"></div><div class="form-group"><label>Min. v pick lokaci (ks)</label><input id="f-pmin" type="number" min="0"></div><div class="form-group"><label>Max. v pick lokaci (ks)</label><input id="f-pmax" type="number" min="0" placeholder="prázdné = celá paleta"></div></div>
       <div class="form-row"><div class="form-group"><label>LOT u tohoto SKU</label><select id="f-lotx"><option value="0">Podle klienta</option><option value="1">Nevyžadovat (výjimka)</option></select></div><div class="form-group"><label>Stav</label><select id="f-act2"><option value="1">Aktivní</option><option value="0">Neaktivní</option></select></div></div>
       <div class="form-row"><div class="form-group"><label>Váha palety (kg)</label><input id="f-pkg" type="number" step="0.1" min="0"></div><div class="form-group"><label>Min. stav (ks)</label><input id="f-min" type="number" value="0"></div></div>
       <div class="form-row"><div class="form-group"><label>Cena (Kč)</label><input id="f-price" type="number" step="0.01"></div><div class="form-group"><label>Foto URL</label><input id="f-photo" type="url"></div></div>
@@ -247,6 +247,7 @@ function openModal(item){
   document.getElementById('f-gtp').value=item?(item.gtin_pallet||''):'';
   document.getElementById('f-prim').value=item?(item.primary_location||''):'';
   document.getElementById('f-pmin').value=item&&item.pick_min!=null?item.pick_min:'';
+  document.getElementById('f-pmax').value=item&&item.pick_max!=null?item.pick_max:'';
   document.getElementById('f-lotx').value=item&&item.lot_exempt?'1':'0';
   document.getElementById('f-act2').value=item&&item.is_active===false?'0':'1';
   document.getElementById('f-photo').value=item?(item.photo_url||''):'';
@@ -265,8 +266,13 @@ function printSkuLabel(id){
 }
 async function openRepl(){
   var m=document.getElementById('modal-repl');m.style.display='flex';var b=document.getElementById('repl-body');b.innerHTML='Počítám…';
+  var tq=supa.from('repl_tasks').select('id,sku,from_location,lpn,to_location,qty,priority,have_qty,created_at,dc_id').eq('status','open').order('priority',{ascending:false}).order('created_at');if(window.PRG_DC)tq=PRG_DC.apply(tq,'dc_id');var tr=await tq,tasks=tr.data||[];
+  var th='<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap"><b>Úlohy pro retrak ('+tasks.length+')</b><button class="btn btn-primary btn-sm" onclick="replGen()">🔁 Vytvořit úlohy teď</button></div>'
+    +'<p style="font-size:12.5px;color:var(--muted);margin:0 0 8px">Úlohy vznikají automaticky každých 10 minut, když pick lokace klesne pod minimum. Retrak je vidí ve scanneru v Doplnění; prázdná pick lokace má přednost.</p>'
+    +(tasks.length?'<div style="overflow-x:auto;margin-bottom:16px"><table><thead><tr><th></th><th>SKU</th><th>Z lokace</th><th>LPN</th><th>Do pick lokace</th><th style="text-align:right">Přesunout ks</th><th style="text-align:right">V pick lokaci</th><th>Vzniklo</th></tr></thead><tbody>'+tasks.map(function(t){return '<tr><td>'+(t.priority?'🔴':'')+'</td><td><b>'+escR(t.sku)+'</b></td><td>'+escR(t.from_location)+'</td><td>'+escR(t.lpn||'')+'</td><td>'+escR(t.to_location)+'</td><td style="text-align:right">'+Number(t.qty||0).toLocaleString('cs-CZ')+'</td><td style="text-align:right">'+(t.have_qty!=null?Number(t.have_qty).toLocaleString('cs-CZ'):'')+'</td><td>'+new Date(t.created_at).toLocaleString('cs-CZ')+'</td></tr>';}).join('')+'</tbody></table></div>':'<p style="margin-bottom:16px">✅ Žádná úloha nečeká.</p>');
+  window._replHead=th;
   var skus=data.filter(function(i){return i.primary_location&&i.is_active!==false;});
-  if(!skus.length){b.innerHTML='<p>Žádné SKU nemá nastavenou pick lokaci (pole „Pick lokace“ v kartě SKU).</p>';return;}
+  if(!skus.length){b.innerHTML=th+'<p>Žádné SKU nemá nastavenou pick lokaci (pole „Pick lokace“ v kartě SKU).</p>';return;}
   var names=skus.map(function(i){return i.sku;}),rows=[],from=0;
   while(true){var q=supa.from('stock_balances').select('dc_id,sku,location_code,lpn,lot,condition_code,units_available,received_at').in('sku',names).gt('units_available',0).order('received_at',{ascending:true}).range(from,from+999);if(window.PRG_DC)q=PRG_DC.apply(q,'dc_id');var r=await q;if(r.error){b.innerHTML='Chyba: '+r.error.message;return;}var d=r.data||[];rows=rows.concat(d);if(d.length<1000)break;from+=1000;}
   var bad={DAMAGE:1,PIR:1,HOLD:1,QUARANTINE:1},out=[];
@@ -278,9 +284,15 @@ async function openRepl(){
     var src=mine.filter(function(x){return String(x.location_code||'').toUpperCase()!==pl&&!bad[String(x.condition_code||'').toUpperCase()];})[0];
     out.push({sku:i.sku,pick:i.primary_location,inPick:inPick,min:min,src:src,upc:i.units_per_carton});
   });
-  if(!out.length){b.innerHTML='<p>✅ Všechny pick lokace jsou nad minimem.</p>';return;}
-  b.innerHTML='<p class="hint" style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Pick lokace na minimu nebo pod ním. Zdroj = nejstarší dostupná zásoba mimo pick lokaci (FIFO). Přesun udělej v Adjustments → Přesun.</p><div style="overflow-x:auto"><table><thead><tr><th>SKU</th><th>Pick lokace</th><th style="text-align:right">V pick lokaci</th><th style="text-align:right">Minimum</th><th>Doplnit z</th><th style="text-align:right">Dostupné</th></tr></thead><tbody>'+out.map(function(o){return '<tr><td><b>'+o.sku+'</b></td><td>'+o.pick+'</td><td style="text-align:right">'+o.inPick+'</td><td style="text-align:right">'+o.min+'</td><td>'+(o.src?('<b>'+(o.src.location_code||'–')+'</b>'+(o.src.lpn?' · '+o.src.lpn:'')+(o.src.lot?' · lot '+o.src.lot:'')):'<span style="color:var(--danger)">není zásoba</span>')+'</td><td style="text-align:right">'+(o.src?o.src.units_available:'–')+'</td></tr>';}).join('')+'</tbody></table></div>';
+  if(!out.length){b.innerHTML=th+'<p>✅ Všechny pick lokace jsou nad minimem.</p>';return;}
+  b.innerHTML=th+'<p class="hint" style="font-size:12.5px;color:var(--muted);margin-bottom:8px">Pick lokace na minimu nebo pod ním. Zdroj = nejstarší dostupná zásoba mimo pick lokaci (FIFO). Přesun udělej v Adjustments → Přesun.</p><div style="overflow-x:auto"><table><thead><tr><th>SKU</th><th>Pick lokace</th><th style="text-align:right">V pick lokaci</th><th style="text-align:right">Minimum</th><th>Doplnit z</th><th style="text-align:right">Dostupné</th></tr></thead><tbody>'+out.map(function(o){return '<tr><td><b>'+o.sku+'</b></td><td>'+o.pick+'</td><td style="text-align:right">'+o.inPick+'</td><td style="text-align:right">'+o.min+'</td><td>'+(o.src?('<b>'+(o.src.location_code||'–')+'</b>'+(o.src.lpn?' · '+o.src.lpn:'')+(o.src.lot?' · lot '+o.src.lot:'')):'<span style="color:var(--danger)">není zásoba</span>')+'</td><td style="text-align:right">'+(o.src?o.src.units_available:'–')+'</td></tr>';}).join('')+'</tbody></table></div>';
 }
+async function replGen(){
+  var dcs=(window.PRG_DC&&PRG_DC.currentId&&PRG_DC.currentId()!=null)?[PRG_DC.currentId()]:((window.PRG_DC&&PRG_DC.list())||[]).map(function(w){return w.id;});
+  var n=0;for(var k=0;k<dcs.length;k++){var r=await supa.rpc('wms_repl_generate',{p_dc:Number(dcs[k]),p_user:currentUser.id});if(r.error){toast('❌ '+r.error.message);return;}n+=r.data||0;}
+  toast(n?'✅ Vytvořeno úloh: '+n:'Žádná nová úloha – pick lokace jsou nad minimem nebo už mají úlohu');openRepl();
+}
+function escR(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
 function edit(id){openModal(data.find(function(i){return i.id===id;}));}
 async function save(){
   var sku=document.getElementById('f-sku').value.trim();if(!sku){toast('⚠️ Zadej SKU');return;}
@@ -289,7 +301,7 @@ async function save(){
   var p={sku,ean:document.getElementById('f-ean').value.trim()||null,description:document.getElementById('f-desc').value.trim()||null,category:document.getElementById('f-cat').value.trim()||null,supplier:document.getElementById('f-sup').value.trim()||null,price:parseFloat(document.getElementById('f-price').value)||null,min_stock:parseInt(document.getElementById('f-min').value)||0,units_per_pallet:iv('f-upp'),pallet_type:document.getElementById('f-ptype').value.trim()||null,pallet_width_mm:iv('f-pw'),pallet_height_mm:iv('f-ph'),pallet_weight_kg:fv('f-pkg'),photo_url:document.getElementById('f-photo').value.trim()||null,notes:document.getElementById('f-notes').value.trim()||null,warehouse_id:parseInt(document.getElementById('f-wh2').value)||null,client_id:parseInt(document.getElementById('f-cl2').value)||null};
   var gc=document.getElementById('f-gtc').value.trim(),gp=document.getElementById('f-gtp').value.trim();
   if((gc&&!/^\d{14}$/.test(gc))||(gp&&!/^\d{14}$/.test(gp))){toast('⚠️ GTIN kartonu/palety musí mít 14 číslic');return;}
-  Object.assign(p,{unit_weight_kg:(function(){var v=parseFloat(document.getElementById('f-uw').value);return isNaN(v)?null:v;})(),units_per_inner:iv('f-upi'),gtin_inner:document.getElementById('f-gti').value.trim()||null,units_per_carton:iv('f-upc'),abc_class:document.getElementById('f-abcc').value||null,gtin_carton:gc||null,gtin_pallet:gp||null,primary_location:document.getElementById('f-prim').value.trim().toUpperCase()||null,pick_min:iv('f-pmin'),lot_exempt:document.getElementById('f-lotx').value==='1',is_active:document.getElementById('f-act2').value==='1'});
+  Object.assign(p,{unit_weight_kg:(function(){var v=parseFloat(document.getElementById('f-uw').value);return isNaN(v)?null:v;})(),units_per_inner:iv('f-upi'),gtin_inner:document.getElementById('f-gti').value.trim()||null,units_per_carton:iv('f-upc'),abc_class:document.getElementById('f-abcc').value||null,gtin_carton:gc||null,gtin_pallet:gp||null,primary_location:document.getElementById('f-prim').value.trim().toUpperCase()||null,pick_min:iv('f-pmin'),pick_max:iv('f-pmax'),lot_exempt:document.getElementById('f-lotx').value==='1',is_active:document.getElementById('f-act2').value==='1'});
   if(!editId){p.quantity=0;p.created_by=currentUser.id;}
   var res=editId?await supa.from('stock_items').update(p).eq('id',editId):await supa.from('stock_items').insert(p);
   if(res.error){toast('❌ '+res.error.message);return;}

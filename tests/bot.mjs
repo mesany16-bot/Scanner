@@ -74,7 +74,7 @@ function watch(page, bag) {
 
   const PAGES = ['wms_dashboard.html?app=wms', 'wms_kpi.html', 'wms_stock.html', 'wms_balances.html', 'wms_occupancy.html', 'wms_accuracy.html',
     'wms_adjustments.html', 'wms_history.html', 'wms_clients.html', 'wms_receipts.html', 'wms_deliveries.html', 'wms_yard.html',
-    'wms_scans.html', 'wms_exceptions.html', 'wms_locations.html', 'wms_inventura.html', 'wms_temp.html', 'wms_reports.html'];
+    'wms_scans.html', 'wms_exceptions.html', 'wms_locations.html', 'wms_inventura.html', 'wms_temp.html', 'wms_reports.html', 'wms_returns.html', 'wms_eod.html'];
   for (const p of PAGES) {
     await step('Web: stránka ' + p, async () => {
       werr.length = 0;
@@ -184,6 +184,33 @@ function watch(page, bag) {
     must(bal.length === 2 && bal.every(b => /^BOT-/.test(b.location_code)), 'zásoby nejsou na lokacích: ' + JSON.stringify(bal));
   }, s);
 
+  await step('Doplnění pick lokace: úloha a přesun části palety', async () => {
+    const t = await db(async a => {
+      const u = await supa.from('stock_items').update({ primary_location: 'BOT-02-01', pick_min: 1, pick_max: 1 }).eq('sku', 'BOT-A').eq('client_id', a.client);
+      if (u.error) return { e: 'SKU: ' + u.error.message };
+      await supa.from('repl_tasks').update({ status: 'cancelled' }).eq('dc_id', a.dc).eq('status', 'open');
+      const g = await supa.rpc('wms_repl_generate', { p_dc: a.dc, p_user: currentUserId });
+      if (g.error) return { e: 'generování: ' + g.error.message };
+      const r = await supa.from('repl_tasks').select('*').eq('dc_id', a.dc).eq('sku', 'BOT-A').eq('status', 'open');
+      return { n: g.data, t: r.data && r.data[0] };
+    }, ctx);
+    must(t && !t.e, t && t.e);
+    must(t.t && Number(t.t.qty) === 1 && t.t.priority === 1, 'úloha doplnění: ' + JSON.stringify(t));
+    await s.evaluate(() => tkStartRepl()); await sleep(2500);
+    await type(t.t.lpn); await type('BOT-02-01'); await sleep(1500);
+    const r = await db(async a => {
+      const d = await supa.from('repl_tasks').select('status').eq('id', a.id).single();
+      const b = await supa.from('stock_balances').select('location_code,units_total').eq('dc_id', a.dc).eq('sku', 'BOT-A').gt('units_total', 0);
+      await supa.from('stock_items').update({ primary_location: null, pick_min: null, pick_max: null }).eq('sku', 'BOT-A').eq('client_id', a.client);
+      return { st: d.data && d.data.status, b: b.data };
+    }, { id: t.t.id, dc: ctx.dc, client: ctx.client });
+    must(r.st === 'done', 'úloha není hotová: ' + r.st + ' · ' + await status());
+    const pick = (r.b || []).filter(x => x.location_code === 'BOT-02-01').reduce((a, x) => a + Number(x.units_total), 0);
+    const all = (r.b || []).reduce((a, x) => a + Number(x.units_total), 0);
+    must(pick === 1 && all === ctx.qa, 'po doplnění: pick ' + pick + ', celkem ' + all + ' (čekáno 1 / ' + ctx.qa + ') ' + JSON.stringify(r.b));
+    await s.evaluate(() => tkClose && tkClose()); await sleep(500);
+  }, s);
+
   await step('Příjem: kontrola dokladu a jména na dokladu', async () => {
     const r = await db(id => supa.rpc('wms_doc_check', { p_type: 'receipt', p_id: id }).then(x => x.error ? { e: x.error.message } : x.data), rc.id);
     must(r && !r.e, 'kontrolu nelze potvrdit: ' + (r && r.e));
@@ -216,7 +243,7 @@ function watch(page, bag) {
     must(cur && cur.l, 'scanner neukázal lokaci k vychystání · ' + await status());
     // BOT-A po kusech, BOT-B přes kód kartonu (1 × outer = 4 ks)
     for (let n = 0; n < 4; n++) {
-      const c = await s.evaluate(() => task && task.cur && { l: task.cur.location_code, sku: task.cur.sku });
+      const c = await s.evaluate(() => task && task.cur && { l: task.cur.location_code, sku: task.cur.sku, q: Number(task.cur.qty) - Number(task.cur.picked_qty || 0) });
       if (!c || !c.l) break;
       await type(c.l); await type(c.sku === 'BOT-B' ? '3999000000029' : '2999000000011');
       if (c.sku === 'BOT-B') {
@@ -224,7 +251,7 @@ function watch(page, bag) {
         must(await s.$('#tkf-uom'), 'vychystání BOT-B nenabídlo jednotky balení');
         must(await s.inputValue('#tkf-uom') === 'outer' && await s.inputValue('#tkf-cnt') === '1', 'předvyplněno ' + await s.inputValue('#tkf-uom') + ' × ' + await s.inputValue('#tkf-cnt') + ' (čekáno 1 × outer)');
         await s.click('#tk-ok'); await sleep(1200);
-      } else await sheetOk(ctx.qd);
+      } else await sheetOk(c.q > 0 ? c.q : ctx.qd);
     }
     const pk = await db(id => supa.from('delivery_allocations').select('sku,picked_qty').eq('delivery_id', id).then(r => r.data || []), dl.id);
     must(pk.filter(x => x.sku === 'BOT-B').reduce((t, x) => t + Number(x.picked_qty || 0), 0) === 4, 'BOT-B vychystáno: ' + JSON.stringify(pk));
@@ -244,6 +271,54 @@ function watch(page, bag) {
     const r = await db(id => supa.rpc('wms_doc_check', { p_type: 'delivery', p_id: id }).then(x => x.error ? { e: x.error.message } : x.data), dl.id);
     must(r && !r.e, 'kontrolu nelze potvrdit: ' + (r && r.e));
     must(r.checked && r.picked && r.shipped, 'chybí jména: ' + JSON.stringify(r));
+  }, s);
+
+  // ---- vratka ----
+  await step('Vratka: ohlášení k výdejce a příjem do karantény', async () => {
+    const r = await db(async id => {
+      const l = await supa.rpc('wms_return_lines', { p_delivery: id });
+      if (l.error) return { e: 'řádky: ' + l.error.message };
+      const a = (l.data || []).find(x => x.sku === 'BOT-A');
+      if (!a) return { e: 'BOT-A není mezi vydanými: ' + JSON.stringify(l.data) };
+      const c = await supa.rpc('wms_return_create', { p_delivery: id, p_lines: [{ sku: 'BOT-A', lot: a.lot, qty: 1 }], p_reason: 'Robot test', p_note: null });
+      if (c.error) return { e: 'založení: ' + c.error.message };
+      const over = await supa.rpc('wms_return_create', { p_delivery: id, p_lines: [{ sku: 'BOT-A', lot: a.lot, qty: 999 }], p_reason: 'Robot test', p_note: null });
+      return { rma: c.data, overBlocked: !!over.error };
+    }, dl.id);
+    must(r && !r.e, r && r.e);
+    must(r.overBlocked, 'vratka nad vydané množství nebyla zablokována');
+    ctx.rma = r.rma;
+    await s.evaluate(() => tkOpenList('receipt')); await sleep(1500);
+    must((await s.textContent('#task-panel')).includes(r.rma.number), 'vratka není v seznamu příjmů');
+    await type(r.rma.number);
+    must((await s.textContent('#task-panel')).includes('VRATKA'), 'scanner neoznačil doklad jako vratku');
+    await type('2999000000011'); await s.waitForSelector('#tk-sheet', { state: 'visible', timeout: 8000 });
+    must(await s.inputValue('#tkf-cond') === 'QUARANTINE', 'výchozí stav vratky není karanténa: ' + await s.inputValue('#tkf-cond'));
+    await sheetOk(1);
+    await s.evaluate(() => tkReceiptFinish()); await sleep(2500);
+    const b = await db(async id => {
+      const sc = await supa.from('receipt_scans').select('balance_id').eq('receipt_id', id);
+      const ids = (sc.data || []).map(x => x.balance_id).filter(Boolean);
+      const bb = ids.length ? await supa.from('stock_balances').select('condition_code,units_total').in('id', ids) : { data: [] };
+      const st = await supa.from('receipts').select('status').eq('id', id).single();
+      return { st: st.data && st.data.status, b: bb.data };
+    }, r.rma.id);
+    must(/received|putaway|done/.test(b.st || ''), 'stav vratky: ' + b.st + ' · ' + await status());
+    must(b.b && b.b.length && b.b.every(x => x.condition_code === 'QUARANTINE'), 'vrácené zboží není v karanténě: ' + JSON.stringify(b.b));
+  }, s);
+
+  // ---- uzávěrka dne ----
+  await step('Uzávěrka dne: manifest dopravce', async () => {
+    const day = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Prague' });
+    const r = await db(async a => {
+      const d = await supa.from('deliveries').select('carrier').eq('id', a.id).single();
+      const m = await supa.rpc('wms_manifest_close', { p_dc: a.dc, p_carrier: (d.data && d.data.carrier) || null, p_date: a.day });
+      if (m.error) return { e: m.error.message };
+      const chk = await supa.from('deliveries').select('manifest_id').eq('id', a.id).single();
+      return { m: m.data, mid: chk.data && chk.data.manifest_id };
+    }, { id: dl.id, dc: ctx.dc, day });
+    must(r && !r.e, 'manifest: ' + (r && r.e));
+    must(r.mid === r.m.id && r.m.deliveries >= 1, 'výdejka není na manifestu: ' + JSON.stringify(r));
   }, s);
 
   // ---- blokace / karanténa ----
