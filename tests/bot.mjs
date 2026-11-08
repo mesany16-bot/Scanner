@@ -84,7 +84,7 @@ function watch(page, bag) {
       must(!login || !(await login.isVisible()), 'stránka chce znovu přihlásit');
       const toast = await web.evaluate(() => [...document.querySelectorAll('.toast,#toast')].map(t => t.textContent).join(' '));
       must(!/❌/.test(toast), 'chybová hláška: ' + toast.slice(0, 160));
-      const inPage = await web.evaluate(() => { const m = (document.querySelector('.content') || document.body).innerText.match(/(Chyba:|❌|Could not|does not exist|permission denied)[^\n]{0,140}/i); return m && m[0]; });
+      const inPage = await web.evaluate(() => { const m = (document.querySelector('.content') || document.body).innerText.match(/(Chyba:|Could not|does not exist|permission denied|violates|relationship)[^\n]{0,140}/i); return m && m[0]; });
       must(!inPage, 'chyba na stránce: ' + inPage);
       must(!werr.length, werr.slice(0, 3).join(' | '));
     }, web);
