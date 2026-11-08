@@ -266,13 +266,14 @@ function watch(page, bag) {
   // ---- inventura s přepočítáním ----
   await step('Inventura: rozdíl → přepočítání → sedí', async () => {
     const ct = await db(async a => {
-      const b = await supa.from('stock_balances').select('id,sku,lpn,lot,units_total').eq('dc_id', a.dc).eq('location_code', 'BOT-01-01').gt('units_total', 0);
-      if (b.error || !b.data || !b.data.length) return { e: 'BOT-01-01 je prázdná ' + ((b.error || {}).message || '') };
-      const t = await supa.from('count_tasks').insert({ dc_id: a.dc, location_code: 'BOT-01-01', reason: 'robot', created_by: currentUserId }).select().single();
+      const b0 = await supa.from('stock_balances').select('id,sku,lpn,lot,units_total,location_code').eq('dc_id', a.dc).in('location_code', ['BOT-01-01', 'BOT-01-02']).gt('units_total', 0).order('location_code');
+      if (b0.error || !b0.data || !b0.data.length) return { e: 'lokace BOT-01-01/02 jsou prázdné ' + ((b0.error || {}).message || '') };
+      const loc = b0.data[0].location_code, b = { data: b0.data.filter(x => x.location_code === loc) };
+      const t = await supa.from('count_tasks').insert({ dc_id: a.dc, location_code: loc, reason: 'robot', created_by: currentUserId }).select().single();
       if (t.error) return { e: t.error.message };
       const l = await supa.from('count_lines').insert(b.data.map(x => ({ task_id: t.data.id, balance_id: x.id, sku: x.sku, lpn: x.lpn, lot: x.lot, expected: x.units_total })));
       if (l.error) return { e: l.error.message };
-      return { id: t.data.id, bal: b.data };
+      return { id: t.data.id, bal: b.data, loc };
     }, ctx);
     must(ct && ct.id, 'nelze založit inventuru: ' + (ct && ct.e));
     ctx.cc = ct.id;
@@ -280,7 +281,7 @@ function watch(page, bag) {
     const i = await s.evaluate(id => task.list.findIndex(t => t.id === id), ct.id);
     must(i >= 0, 'inventura není v seznamu na scanneru');
     await s.evaluate(i => tkOpenCount(i), i); await sleep(1500);
-    await type('BOT-01-01');
+    await type(ct.loc);
     const countAll = async (plus) => {
       for (const b of ct.bal) {
         await type(b.lpn);
