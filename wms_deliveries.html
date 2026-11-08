@@ -100,7 +100,7 @@ async function afterLogin(){
   if(window.PRG_DOCIMPORT)PRG_DOCIMPORT.attach({kind:KIND,supa:supa,user:function(){return currentUser;},reload:load});
 }
 async function load(){
-  var q=supa.from('deliveries').select('*,warehouses(name,code),profiles(name),clients(name)').order('created_at',{ascending:false}).limit(2000);
+  var q=supa.from('deliveries').select('*,warehouses(name,code),profiles!deliveries_created_by_fkey(name),clients(name)').order('created_at',{ascending:false}).limit(2000);
   if(window.PRG_DC)q=PRG_DC.apply(q,'warehouse_id');
   var res=await q;
   if(res.error){document.getElementById('tbody').innerHTML='<tr class="empty-row"><td colspan="10">Chyba: '+esc(res.error.message)+'</td></tr>';return;}

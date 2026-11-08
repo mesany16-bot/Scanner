@@ -133,6 +133,8 @@ function watch(page, bag) {
     });
     must(r.w && r.c, 'chybí DC 99 nebo klient TEST robot (spusť bot_setup SQL) ' + (r.e || ''));
     ctx.dc = r.w.id; ctx.client = r.c.id;
+    // zasoby z minuleho behu smazat az ted (po behu zustanou na webu k prohlednuti)
+    await db(async () => { try { await supa.rpc('wms_bot_cleanup'); } catch (e) {} });
     await db(dc => { try { localStorage.setItem('prg_dc', String(dc)); sessionStorage.setItem('prg_scanner_dc', String(dc)); } catch (e) {} currentDcId = dc; ['modal-dc', 'mode-select-screen'].forEach(id => { const e = document.getElementById(id); if (e) e.style.display = 'none'; }); if (typeof hubClose === 'function') hubClose(); selectAppMode('wms'); }, ctx.dc);
     await sleep(800);
   }, s);
@@ -189,13 +191,17 @@ function watch(page, bag) {
       const u = await supa.from('stock_items').update({ primary_location: 'BOT-02-01', pick_min: 1, pick_max: 1 }).eq('sku', 'BOT-A').eq('client_id', a.client);
       if (u.error) return { e: 'SKU: ' + u.error.message };
       await supa.from('repl_tasks').update({ status: 'cancelled' }).eq('dc_id', a.dc).eq('status', 'open');
+      const b0 = await supa.from('stock_balances').select('location_code,units_total').eq('dc_id', a.dc).eq('sku', 'BOT-A').gt('units_total', 0);
+      const tot0 = (b0.data || []).reduce((x, y) => x + Number(y.units_total), 0);
+      const pick0 = (b0.data || []).filter(y => y.location_code === 'BOT-02-01').reduce((x, y) => x + Number(y.units_total), 0);
       const g = await supa.rpc('wms_repl_generate', { p_dc: a.dc, p_user: currentUserId });
       if (g.error) return { e: 'generování: ' + g.error.message };
       const r = await supa.from('repl_tasks').select('*').eq('dc_id', a.dc).eq('sku', 'BOT-A').eq('status', 'open');
-      return { n: g.data, t: r.data && r.data[0] };
+      return { n: g.data, t: r.data && r.data[0], tot0, pick0 };
     }, ctx);
     must(t && !t.e, t && t.e);
-    must(t.t && Number(t.t.qty) === 1 && t.t.priority === 1, 'úloha doplnění: ' + JSON.stringify(t));
+    must(t.pick0 > 0 || (t.t && Number(t.t.qty) === 1 && t.t.priority === 1), 'úloha doplnění: ' + JSON.stringify(t));
+    if (!t.t) { await db(a => supa.from('stock_items').update({ primary_location: null, pick_min: null, pick_max: null }).eq('sku', 'BOT-A').eq('client_id', a.client), ctx); return; } // pick lokace uz plna z minulych behu
     await s.evaluate(() => tkStartRepl()); await sleep(2500);
     await type(t.t.lpn); await type('BOT-02-01'); await sleep(1500);
     const r = await db(async a => {
@@ -207,7 +213,7 @@ function watch(page, bag) {
     must(r.st === 'done', 'úloha není hotová: ' + r.st + ' · ' + await status());
     const pick = (r.b || []).filter(x => x.location_code === 'BOT-02-01').reduce((a, x) => a + Number(x.units_total), 0);
     const all = (r.b || []).reduce((a, x) => a + Number(x.units_total), 0);
-    must(pick === 1 && all === ctx.qa, 'po doplnění: pick ' + pick + ', celkem ' + all + ' (čekáno 1 / ' + ctx.qa + ') ' + JSON.stringify(r.b));
+    must(pick === t.pick0 + Number(t.t.qty) && all === t.tot0, 'po doplnění: pick ' + pick + ', celkem ' + all + ' (čekáno ' + (t.pick0 + Number(t.t.qty)) + ' / ' + t.tot0 + ') ' + JSON.stringify(r.b));
     await s.evaluate(() => tkClose && tkClose()); await sleep(500);
   }, s);
 
@@ -377,10 +383,7 @@ function watch(page, bag) {
 
   await step('Scanner: bez chyb v prohlížeči', async () => { must(!serr.length, serr.slice(0, 4).join(' | ')); }, s);
 
-  // úklid: zbylé zboží z testu vyskladnit, ať DC 99 neroste
-  await step('Úklid testovacích zásob', async () => {
-    await db(async id => { try { if (id) { await supa.from('count_lines').delete().eq('task_id', id); await supa.from('count_tasks').delete().eq('id', id); } await supa.rpc('wms_bot_cleanup'); } catch (e) {} }, ctx.cc || null);
-  }, null);
+  // data robota v DC 99 se schvalne nemazou - Jan si je prohlizi na webu
 
   await browser.close();
 
