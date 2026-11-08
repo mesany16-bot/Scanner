@@ -55,8 +55,8 @@ function watch(page, bag) {
   must(PASS || LOCAL_BRIDGE, 'Chybí BOT_PASSWORD');
   const browser = await chromium.launch();
   const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
-  const ctx = { dc: null, client: null, run: new Date().toISOString().slice(2, 19).replace(/[-:T]/g, ''), qa: rnd(2, 12), qb: rnd(4, 8) };
-  ctx.qd = rnd(1, ctx.qa);
+  const ctx = { dc: null, client: null, run: new Date().toISOString().slice(2, 19).replace(/[-:T]/g, ''), qa: rnd(2, 12), qb: rnd(5, 8) };
+  ctx.qd = rnd(1, ctx.qa - 1); // vzdy necha zasobu pro blokaci a inventuru
   log(`Množství tohoto běhu: A ${ctx.qa}, B ${ctx.qb}, výdej A ${ctx.qd}`);
 
   // ================= WEB =================
