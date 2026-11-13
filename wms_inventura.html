@@ -253,6 +253,7 @@ async function saveOwnTheme(){
   var accent=document.getElementById('theme-accent').value;
   var res=await supa.from('app_theme').upsert({app:'inventura',bg_color:bg,accent_color:accent});
   if(res.error){toast('❌ '+res.error.message);return;}
+  if(!res.data||!res.data.length){prgSessionLost();return;}
   toast('✅ Vzhled uložen');
   applyTheme('inventura');
   document.getElementById('theme-popover').style.display='none';
@@ -629,11 +630,13 @@ async function restartInvList(id,name){
 function cancelBadge(l){ return l.status==='cancelled'?'<span class="badge badge-red" style="margin-right:6px">🚫 Zrušená</span>':''; }
 function whoDone(l){ return (l.status==='cancelled'?(l.cancelled_by||'–'):(l.completed_by||'–')); }
 function whenDone(l){ var t=l.status==='cancelled'?l.cancelled_at:l.completed_at; return t?new Date(t).toLocaleString('cs-CZ'):'–'; }
+function prgSessionLost(){ if(window.PRG_SESSION_LOST)PRG_SESSION_LOST();else{alert('Přihlášení vypršelo – změna se NEULOŽILA. Přihlas se znovu.');location.reload();} }
 async function cancelInvList(id, name){
   if(!confirm('Zrušit inventuru "'+name+'" bez dokončení?\n\nInventura se ukončí jako ZRUŠENÁ (ne dokončená). Dosud naskenovaná data zůstanou k nahlédnutí a stažení, inventuru jde případně oživit.'))return;
   var who=(currentProfile&&currentProfile.name)||(currentUser&&currentUser.email)||'admin';
-  var res=await supa.from('inventory_lists').update({status:'cancelled', cancelled_by:who, cancelled_at:new Date().toISOString()}).eq('id',id);
+  var res=await supa.from('inventory_lists').update({status:'cancelled', cancelled_by:who, cancelled_at:new Date().toISOString()}).eq('id',id).select('id');
   if(res.error){toast('❌ '+res.error.message);return;}
+  if(!res.data||!res.data.length){prgSessionLost();return;}
   toast('🚫 Inventura zrušena');
   loadInvPage();
 }
@@ -704,23 +707,26 @@ function agingXlsx(){
 async function finishInvFromDashboard(id, name){
   if(!confirm('Dokončit inventuru "'+name+'"? Přesune se do Dokončených.'))return;
   var who=(currentProfile&&currentProfile.name)||(currentUser&&currentUser.email)||'admin';
-  var res=await supa.from('inventory_lists').update({status:'completed', completed_by:who, completed_at:new Date().toISOString()}).eq('id',id);
+  var res=await supa.from('inventory_lists').update({status:'completed', completed_by:who, completed_at:new Date().toISOString()}).eq('id',id).select('id');
   if(res.error){toast('❌ '+res.error.message);return;}
+  if(!res.data||!res.data.length){prgSessionLost();return;}
   toast('✅ Inventura dokončena');
   loadInvPage();
 }
 
 async function reviveInvList(id){
-  var res=await supa.from('inventory_lists').update({status:'uploaded'}).eq('id',id);
+  var res=await supa.from('inventory_lists').update({status:'uploaded'}).eq('id',id).select('id');
   if(res.error){toast('❌ '+res.error.message);return;}
+  if(!res.data||!res.data.length){prgSessionLost();return;}
   toast('🔄 Inventura oživena – zpět v Nahraných');
   loadInvPage();
 }
 
 async function deleteInvList(id,name){
   if(!confirm('Smazat inventuru "'+name+'" včetně všech jejích položek?'))return;
-  var res=await supa.from('inventory_lists').delete().eq('id',id);
+  var res=await supa.from('inventory_lists').delete().eq('id',id).select('id');
   if(res.error){toast('❌ '+res.error.message);return;}
+  if(!res.data||!res.data.length){prgSessionLost();return;}
   toast('🗑 Inventura smazána');
   loadInvPage();
 }

@@ -300,3 +300,33 @@
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
 })();
+
+/* Hlídání přihlášení: když Supabase tiše odhlásí (vypršený / neobnovený token, výpadek),
+   stránka by jinak ukazovala prázdné seznamy a změny by se neuložily. */
+(function(){
+  var shown=false;
+  window.PRG_SESSION_LOST=function(){
+    if(shown)return;shown=true;
+    var d=document.createElement('div');
+    d.style.cssText='position:fixed;inset:0;background:rgba(15,20,30,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+    d.innerHTML='<div style="background:#fff;color:#1a1d27;border-radius:14px;max-width:420px;width:100%;padding:22px;font-family:inherit;box-shadow:0 10px 40px rgba(0,0,0,.3)">'
+      +'<div style="font-size:18px;font-weight:700;margin-bottom:8px">🔑 Přihlášení vypršelo</div>'
+      +'<div style="font-size:14px;line-height:1.5;color:#444;margin-bottom:16px">Stránka ztratila spojení s tvým účtem (např. po výpadku). Poslední změna se <b>neuložila</b> a seznamy mohou být prázdné. Přihlas se znovu – data jsou v pořádku.</div>'
+      +'<button style="width:100%;padding:12px;border:none;border-radius:9px;background:#0a7c4e;color:#fff;font-weight:700;font-size:15px;cursor:pointer" onclick="location.reload()">Přihlásit znovu</button></div>';
+    document.body.appendChild(d);
+  };
+  var n=0,t=setInterval(function(){
+    var s=window.supa;
+    if(s&&s.auth&&s.auth.onAuthStateChange){
+      clearInterval(t);
+      var had=false;
+      s.auth.getSession().then(function(r){if(r&&r.data&&r.data.session)had=true;}).catch(function(){});
+      s.auth.onAuthStateChange(function(ev,sess){
+        if(sess){had=true;return;}
+        if(ev==='SIGNED_OUT'&&had&&!window.PRG_LOGGING_OUT)window.PRG_SESSION_LOST();
+      });
+      // uzivatel klikl na Odhlasit -> zadne varovani
+      document.addEventListener('click',function(e){var b=e.target&&e.target.closest&&e.target.closest('button,a');if(b&&/odhl[aá]sit|logout|sign ?out/i.test(b.textContent+' '+(b.getAttribute('onclick')||'')))window.PRG_LOGGING_OUT=true;},true);
+    } else if(++n>200) clearInterval(t);
+  },100);
+})();
