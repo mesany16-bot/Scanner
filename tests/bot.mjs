@@ -383,6 +383,30 @@ function watch(page, bag) {
     must(st && st.status === 'approved', 'stav inventury: ' + JSON.stringify(st) + ' · ' + await status());
   }, s);
 
+  // ---- S/N scanning k dokladu (Inventory Tool) ----
+  await step('S/N scanning k příjmu', async () => {
+    must(rc && rc.num, 'příjem neexistuje');
+    await s.evaluate(() => { try { if (typeof tkClose === 'function') tkClose(); } catch (e) {} });
+    await s.evaluate(() => { try { if (appMode !== 'inventura') switchAppMode('inventura'); } catch (e) {} ['modal-inv-source', 'modal-hub-inv', 'mode-select-screen'].forEach(id => { const e = document.getElementById(id); if (e) e.style.display = 'none'; }); invPick('sn'); });
+    await s.waitForSelector('#modal-sn-doc', { state: 'visible', timeout: 8000 });
+    await s.evaluate(() => snDocGo('')); await sleep(400);
+    must(/povinné/.test(await s.textContent('#sn-doc-info')), 'prázdné číslo dokladu prošlo');
+    s.evaluate(n => snDocGo(n), rc.num.toLowerCase()); await sleep(2500);
+    const st = await s.evaluate(() => ({ on: snOn(), doc: snDoc && { num: snDoc.num, type: snDoc.type, exp: snDoc.exp } }));
+    must(st.on && st.doc && st.doc.num === rc.num && st.doc.type === 'receipt' && st.doc.exp === ctx.qa + ctx.qb, 'režim S/N: ' + JSON.stringify(st));
+    const sn1 = 'SNBOT' + ctx.run + 'A', sn2 = 'SNBOT' + ctx.run + 'B';
+    await type('2999000000011'); await type(sn1); await type(sn2); await type(sn1);
+    const r = await s.evaluate(() => ({ rows: rows.map(x => ({ ean: x.ean, loc: x.loc, qty: x.qty, sns: x.sns })), sid: eanSession }));
+    must(r.rows.length === 1 && r.rows[0].qty === 2 && r.rows[0].loc === rc.num, 'řádky: ' + JSON.stringify(r.rows));
+    await sleep(3000);
+    const sc = await db(sid => supa.from('scans').select('serial_no,location,placement_mode,quantity').eq('inv_session', sid).then(x => x.data || []), r.sid);
+    must(sc.length === 2 && sc.every(x => x.placement_mode === 'inv_doc_sn' && x.location === rc.num), 'skeny na serveru: ' + JSON.stringify(sc));
+    const li = await db(sid => supa.from('inventory_lists').select('kind,name').eq('session_uid', sid).single().then(x => x.data), r.sid);
+    must(li && li.kind === 'doc_sn' && li.name.indexOf(rc.num) >= 0, 'seznam: ' + JSON.stringify(li));
+    await s.evaluate(() => finishEanCount()); await sleep(1500);
+    await s.evaluate(() => { try { switchAppMode('wms'); } catch (e) {} });
+  }, s);
+
   await step('Scanner: bez chyb v prohlížeči', async () => { must(!serr.length, serr.slice(0, 4).join(' | ')); }, s);
 
   // data robota v DC 99 se schvalne nemazou - Jan si je prohlizi na webu

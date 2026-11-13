@@ -1480,6 +1480,7 @@ U SKU|For SKU|Pri SKU|Для SKU|Dla SKU|Voor SKU|Bei SKU|Pentru SKU|Az SKU-nál
     <button class="modal-btn info" data-inv="ean_loc" onclick="invPick('ean_loc')">📍 EAN + lokace</button>
     <button class="modal-btn info" data-inv="ean" onclick="invPick('ean')">🔢 Jen EAN</button>
     <button class="modal-btn info" data-inv="intl" onclick="invPick('intl')">🌍 Mezinárodka – slepá inventura</button>
+    <button class="modal-btn info" data-inv="sn" onclick="invPick('sn')">🏷️ S/N scanning (příjem / výdejka)</button>
     <button class="modal-btn secondary" data-inv="excel" onclick="invPick('excel')">📂 Seznam z Excelu/CSV v zařízení</button>
     <button class="modal-btn secondary" onclick="closeModal('modal-inv-source');openWhere()">🔎 Kde je zásilka?</button>
     <button class="modal-btn secondary" style="color:#8e44ad" onclick="closeModal('modal-inv-source');openExc(null)">⚠️ Výjimka / 📷 foto</button>
@@ -1567,6 +1568,17 @@ U SKU|For SKU|Pri SKU|Для SKU|Dla SKU|Voor SKU|Bei SKU|Pentru SKU|Az SKU-nál
 </div>
 
 <!-- Modal: Inventura - místnost -->
+<div class="modal-backdrop" id="modal-sn-doc" style="display:none">
+  <div class="modal">
+    <h2 class="info">🏷️ S/N scanning</h2>
+    <p>Ke kterému dokladu skenuješ sériová čísla? Zadej nebo naskenuj <b>číslo příjmu nebo výdejky</b>.</p>
+    <input id="sn-doc-input" type="text" placeholder="např. PRI-2026-0012 / VYD-2026-0034" maxlength="60" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();snDocGo();}">
+    <div id="sn-doc-info" style="font-size:13px;color:var(--muted);margin:8px 0 4px;min-height:18px"></div>
+    <button class="modal-btn info" id="sn-doc-go" onclick="snDocGo()">▶️ Začít skenovat</button>
+    <button class="modal-btn secondary" onclick="closeModal('modal-sn-doc');showInvMenu()">⬅️ Zpět</button>
+  </div>
+</div>
+
 <div class="modal-backdrop" id="modal-inv-room" style="display:none">
   <div class="modal">
     <h2 class="info">📍 Místnost</h2>
@@ -2105,7 +2117,7 @@ var currentUser = '';
 var useLocation = false;
 var eanIntl = false;
 var intlSeen = {}, intlFull = null; // Mezinárodka: už naskenované celé štítky (s +pořadím)    // Mezinárodka: z kódu se bere jen část před „+“ (číslo zásilky bez pořadí kusu)
-var APP_VERSION = '5-69';
+var APP_VERSION = '5-70';
 var eanCount = false;   // Inventory Tool: počítání EAN (s lokací nebo bez)
 var eanSession = null;  // session_uid volné inventury EAN – na serveru jako řádek inventory_lists (kind ean / ean_loc)
 var expectingLoc = false;
@@ -2487,7 +2499,7 @@ function invRunType() {
 }
 function invRunName() {
   return intlV ? ('Mezinárodka ' + intlV.name) : invList.length ? (invListMeta ? invListMeta.name : 'z Excelu v telefonu') :
-    (kitMode ? 'Průša dobalování' : eanIntl ? 'Mezinárodka' : (useLocation ? 'EAN + lokace' : 'jen EAN')) + ' (' + rows.length + ' řádků)';
+    (kitMode ? 'Průša dobalování' : (snMode && snDoc) ? 'S/N k dokladu ' + snDoc.num : snMode ? 'EAN + lokace + S/N' : eanIntl ? 'Mezinárodka' : (useLocation ? 'EAN + lokace' : 'jen EAN')) + ' (' + rows.length + ' řádků)';
 }
 function markInvMenu() {
   var rt = invRunType();
@@ -2513,6 +2525,7 @@ function invPick(type) {
   else if (type === 'kit') custPick('prusa');
   else if (type === 'ean') startEanCount(false);
   else if (type === 'intl') startEanCount(false, true);
+  else if (type === 'sn') openSnDoc();
   else if (type === 'excel') document.getElementById('inv-excel-input').click();
 }
 function showInvMenu() { markInvMenu(); document.getElementById('modal-inv-source').style.display = 'flex'; }
@@ -4519,6 +4532,53 @@ function looksLikeLoc(c) { c = String(c || '').trim().toUpperCase(); return c &&
 // Lokace se naskenuje jednou, produkt (EAN) jednou, pak se skenují sériová čísla – každé S/N = 1 ks.
 // Rozpoznání: lokace = krátký kód / lokace z WMS; produkt = EAN ze SKU Setup nebo platný GTIN (8/12/13/14 číslic); jinak S/N.
 var snMode = false, snProduct = '', snSeen = {}, snLog = [], snProducts = {};
+// S/N scanning k dokladu: snDoc = { num, type: 'receipt'|'delivery'|null, id, exp: celkem ks, codes: {kod: sku} }
+var snDoc = null;
+function openSnDoc() {
+  document.getElementById('sn-doc-input').value = '';
+  document.getElementById('sn-doc-info').textContent = '';
+  document.getElementById('sn-doc-go').disabled = false;
+  document.getElementById('modal-sn-doc').style.display = 'flex';
+  setTimeout(function(){ var i = document.getElementById('sn-doc-input'); if (i) i.focus(); }, 150);
+}
+function snDocOpen() { var m = document.getElementById('modal-sn-doc'); return m && m.style.display === 'flex'; }
+async function snDocGo(code) {
+  var inp = document.getElementById('sn-doc-input'), info = document.getElementById('sn-doc-info'), btn = document.getElementById('sn-doc-go');
+  if (code != null) inp.value = code;
+  var v = String(inp.value || '').trim().toUpperCase();
+  if (!v) { buzz(); info.innerHTML = '<span style="color:var(--danger)">Číslo dokladu je povinné.</span>'; inp.focus(); return; }
+  btn.disabled = true; info.textContent = 'Hledám doklad…';
+  var doc = { num: v, type: null, id: null, exp: 0, codes: {} };
+  try {
+    var r = await supa.from('receipts').select('id,receipt_number,status,receipt_items(sku,quantity)').ilike('receipt_number', v).limit(1);
+    var d = r.data && r.data[0];
+    if (d) { doc = { num: d.receipt_number, type: 'receipt', id: d.id, exp: 0, codes: {}, items: d.receipt_items || [] }; }
+    else {
+      r = await supa.from('deliveries').select('id,delivery_number,status,delivery_items(sku,quantity)').ilike('delivery_number', v).limit(1);
+      d = r.data && r.data[0];
+      if (d) doc = { num: d.delivery_number, type: 'delivery', id: d.id, exp: 0, codes: {}, items: d.delivery_items || [] };
+    }
+  } catch(e) {}
+  btn.disabled = false;
+  if (!doc.type) {
+    if (!confirm('Doklad ' + v + ' není ve WMS (nebo jsi offline). Skenovat S/N i tak pod tímto číslem?')) { info.innerHTML = '<span style="color:var(--danger)">Doklad nenalezen</span>'; inp.select(); return; }
+  } else {
+    var skus = {};
+    (doc.items || []).forEach(function(x){ var k = String(x.sku || '').trim().toUpperCase(); if (!k) return; skus[k] = 1; doc.codes[k] = k; doc.exp += Number(x.quantity || 0); });
+    try {
+      var ks = Object.keys(skus);
+      if (ks.length) {
+        var si = await supa.from('stock_items').select('sku,ean,gtin_inner,gtin_carton').in('sku', ks);
+        (si.data || []).forEach(function(x){ var k = String(x.sku).trim().toUpperCase(); ['ean','gtin_inner','gtin_carton'].forEach(function(f){ if (x[f]) doc.codes[String(x[f]).trim().toUpperCase()] = k; }); });
+      }
+    } catch(e) {}
+    delete doc.items;
+  }
+  closeModal('modal-sn-doc');
+  startEanCount(false, false, true, false, doc);
+}
+function snDocCount() { return rows.reduce(function(a, r){ return a + r.qty; }, 0); }
+function snDocProgress() { return snDoc && snDoc.exp ? ' · ' + snDocCount() + ' / ' + snDoc.exp + ' ks' : ''; }
 function snOn() { return eanCount && snMode && !intlV; }
 function gtinValid(c) {
   if (!/^(\d{8}|\d{12,14})$/.test(c)) return false;
@@ -4566,6 +4626,20 @@ function snPillClick() {
 async function handleSnCode(code) {
   var c = String(code || '').trim().toUpperCase();
   if (!c) return;
+  if (snDoc) {
+    // S/N k dokladu: první kód (nebo známý EAN/SKU dokladu) = produkt, ostatní = S/N
+    if (snDoc.codes[c] || snIsProduct(c) || !snProduct) {
+      if (c === snProduct) { beepOk(); setStatus('📦 Produkt ' + c + ' už je nastaven · skenuj S/N' + snDocProgress()); return; }
+      var inDoc = !snDoc.type || !Object.keys(snDoc.codes).length || !!snDoc.codes[c];
+      if (inDoc) beepOk(); else beepWarn();
+      snSetProduct(c);
+      setStatus('📦 Produkt: ' + c + (snDoc.codes[c] && snDoc.codes[c] !== c ? ' (SKU ' + snDoc.codes[c] + ')' : '') + (inDoc ? '' : ' ⚠️ NENÍ na dokladu ' + snDoc.num) + ' · teď skenuj S/N' + snDocProgress());
+      return;
+    }
+    if (snSeen[c]) { buzz(); setStatus('⚠️ S/N ' + c + ' už bylo naskenováno (' + snSeen[c] + ') – nepočítá se znovu'); return; }
+    snAddPiece(snProduct, snDoc.num, c);
+    return;
+  }
   // lokace
   // lokace: z číselníku WMS, nebo krátký tvar typu E1, C5, DS10 (S/N bývají delší)
   if (!snIsProduct(c) && (freeLocSet[c] || /^[A-Z]{1,3}\d{1,3}$/.test(c))) {
@@ -4591,9 +4665,10 @@ function snAddPiece(ean, loc, sn) {
   row.qty++; row.timestamps.push(nowStr()); if (sn) row.sns.push(sn);
   if (sn) snSeen[sn] = ean + ' / ' + loc;
   snLog.push({ ean: ean, loc: loc, sn: sn });
-  sendScan({ ean: ean, location: loc, quantity: 1, serial_no: sn || null, placement_mode: 'inv_ean_loc_sn', inv_session: eanSession });
-  setStatus('✅ ' + ean + ' · ' + loc + (sn ? ' · S/N ' + sn : ' · bez S/N') + ' → ' + row.qty + ' ks');
+  sendScan({ ean: ean, location: loc, quantity: 1, serial_no: sn || null, placement_mode: snDoc ? 'inv_doc_sn' : 'inv_ean_loc_sn', inv_session: eanSession });
+  setStatus('✅ ' + ean + ' · ' + loc + (sn ? ' · S/N ' + sn : ' · bez S/N') + ' → ' + row.qty + ' ks' + snDocProgress());
   renderTable(rows.indexOf(row));
+  if (snDoc) updateRoomPill();
 }
 function snRemoveLast(row) {
   // odebere poslední kus řádku (i jeho S/N)
@@ -4601,10 +4676,11 @@ function snRemoveLast(row) {
   row.qty = Math.max(0, row.qty - 1);
   if (sn) delete snSeen[sn];
   for (var i = snLog.length - 1; i >= 0; i--) if (snLog[i].ean === row.ean && snLog[i].loc === row.loc && snLog[i].sn === sn) { snLog.splice(i, 1); break; }
-  sendScan({ ean: row.ean, location: row.loc, quantity: -1, serial_no: sn, placement_mode: 'inv_ean_loc_sn', inv_session: eanSession });
+  sendScan({ ean: row.ean, location: row.loc, quantity: -1, serial_no: sn, placement_mode: snDoc ? 'inv_doc_sn' : 'inv_ean_loc_sn', inv_session: eanSession });
   if (row.qty <= 0) rows.splice(rows.indexOf(row), 1);
   setStatus('↩️ Odebráno: ' + row.ean + (sn ? ' · S/N ' + sn : '') + ' → ' + row.qty + ' ks');
   renderTable();
+  if (snDoc) updateRoomPill();
 }
 function snUndo() {
   if (!snLog.length) { setStatus('Není co vrátit'); return; }
@@ -4630,7 +4706,7 @@ function snShowSerials(idx) {
 }
 function renderSnTable() {
   var empty = document.getElementById('empty-state'), table = document.getElementById('main-table'), tbody = document.getElementById('tableBody');
-  document.getElementById('table-head-row').innerHTML = '<th>Produkt / S/N</th><th>Lokace</th><th style="text-align:center">Ks</th><th style="text-align:right"><button class="qty-btn" title="Vrátit poslední sken" onclick="snUndo()">↩️</button></th>';
+  document.getElementById('table-head-row').innerHTML = '<th>Produkt / S/N</th><th>' + (snDoc ? 'Doklad' : 'Lokace') + '</th><th style="text-align:center">Ks</th><th style="text-align:right"><button class="qty-btn" title="Vrátit poslední sken" onclick="snUndo()">↩️</button></th>';
   if (!rows.length) { empty.style.display = 'block'; table.style.display = 'none'; return; }
   empty.style.display = 'none'; table.style.display = 'table';
   var order = rows.map(function(r, i){ return i; }).sort(function(a, b){ return (rows[b]._t || 0) - (rows[a]._t || 0) || b - a; });
@@ -4646,12 +4722,12 @@ function renderSnTable() {
 function exportSnCSV() {
   if (!rows.length) { setStatus('⚠️ Žádná data k exportu'); return; }
   var q = function(v){ return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; };
-  var csv = 'EAN,Lokace,S/N,Kusy,Uzivatel\n';
+  var csv = (snDoc ? 'EAN,Doklad' : 'EAN,Lokace') + ',S/N,Kusy,Uzivatel\n';
   rows.forEach(function(r){
     r.sns.forEach(function(sn){ csv += [q(r.ean), q(r.loc), q(sn), 1, q(r.user)].join(',') + '\n'; });
     if (r.qty > r.sns.length) csv += [q(r.ean), q(r.loc), q(''), r.qty - r.sns.length, q(r.user)].join(',') + '\n';
   });
-  downloadCSV('\ufeff' + csv, 'ean_lokace_sn');
+  downloadCSV('\ufeff' + csv, snDoc ? 'sn_' + snDoc.num : 'ean_lokace_sn');
   setStatus('📥 S/N CSV exportováno');
 }
 
@@ -4742,14 +4818,14 @@ function exportKitCSV() {
   setStatus('📥 CSV exportováno (' + kitSets.length + ' sad)');
 }
 
-function eanLabel() { if (intlV) return intlLabel(); if (snOn()) return '🏷️ EAN + lok. + S/N'; if (kitOn()) return '📦 Průša ' + kitSets.filter(function(x){ return Object.keys(x.parts).length === KIT_PARTS.length; }).length + ' sad'; return eanIntl ? '🌍 Mezinárodka' : (useLocation ? '📍 EAN + lokace' : '🔢 Jen EAN'); }
+function eanLabel() { if (intlV) return intlLabel(); if (snOn()) return snDoc ? '🏷️ S/N ' + snDoc.num : '🏷️ EAN + lok. + S/N'; if (kitOn()) return '📦 Průša ' + kitSets.filter(function(x){ return Object.keys(x.parts).length === KIT_PARTS.length; }).length + ' sad'; return eanIntl ? '🌍 Mezinárodka' : (useLocation ? '📍 EAN + lokace' : '🔢 Jen EAN'); }
 // Mezinárodka: 43M0007578+0001 -> 43M0007578. Kód začínající „+“ se nemění.
 function intlCode(code) {
   code = String(code == null ? '' : code).trim();
   var i = code.indexOf('+');
   return i > 0 ? code.slice(0, i).trim() : code;
 }
-function startEanCount(withLoc, intl, sn, kit) {
+function startEanCount(withLoc, intl, sn, kit, doc) {
   closeModal('modal-inv-source');
   stopCam();
   intlStop();
@@ -4758,24 +4834,25 @@ function startEanCount(withLoc, intl, sn, kit) {
   eanCount = true;
   useLocation = withLoc;
   eanIntl = !!intl; intlSeen = {}; intlFull = null;
-  snMode = !!sn; snProduct = ''; snSeen = {}; snLog = [];
+  snMode = !!sn; snProduct = ''; snSeen = {}; snLog = []; snDoc = (sn && doc) ? doc : null;
   kitMode = !!kit; kitCur = null; kitSets = []; kitSeen = {};
   if (kitMode) { useLocation = false; rows = []; }
   if (snMode) useLocation = false;
   expectingLoc = false; pendingEAN = null;
   locPill.style.display = 'none';
   eanSessionStart(withLoc || !!intl);
-  if (snMode) { setRoom(''); loadFreeLocs(); loadSnProducts(); updateSnPill(); setTimeout(function(){ openRoomModal(); }, 300); }
+  if (snMode && snDoc) { invRoom = snDoc.num; loadSnProducts(); updateSnPill(); }
+  else if (snMode) { setRoom(''); loadFreeLocs(); loadSnProducts(); updateSnPill(); setTimeout(function(){ openRoomModal(); }, 300); }
   if (intl) { setRoom(''); loadFreeLocs(); loadFreeExport(); setTimeout(function(){ openRoomModal(); }, 300); }
   renderTableHead(); renderTable(); refreshModeUI(); updateScanBtn();
-  setStatus((kitMode ? '📦 Průša dobalování · ' + KIT_PARTS.length + ' kódů na sadu · naskenuj KÓD 1' : snMode ? '🏷️ EAN + lokace + S/N · naskenuj LOKACI, pak EAN a sériová čísla' : eanIntl ? '🌍 Mezinárodka · naskenuj LOKACI, pak jen zásilky' : (withLoc ? '📍 Inventura EAN + lokace' : '🔢 Inventura – jen EAN')) + ' · spouštím kameru');
+  setStatus((kitMode ? '📦 Průša dobalování · ' + KIT_PARTS.length + ' kódů na sadu · naskenuj KÓD 1' : (snMode && snDoc) ? '🏷️ S/N k dokladu ' + snDoc.num + (snDoc.type ? (snDoc.type === 'receipt' ? ' (příjem' : ' (výdejka') + (snDoc.exp ? ', ' + snDoc.exp + ' ks' : '') + ')' : ' (mimo WMS)') + ' · naskenuj EAN produktu, pak sériová čísla' : snMode ? '🏷️ EAN + lokace + S/N · naskenuj LOKACI, pak EAN a sériová čísla' : eanIntl ? '🌍 Mezinárodka · naskenuj LOKACI, pak jen zásilky' : (withLoc ? '📍 Inventura EAN + lokace' : '🔢 Inventura – jen EAN')) + ' · spouštím kameru');
   initCamera();
 }
 function eanSessionStart(withLoc) {
   eanSession = obUid();
   var d = new Date();
-  var row = { session_uid: eanSession, kind: kitMode ? 'prusa' : snMode ? 'ean_loc_sn' : (withLoc ? 'ean_loc' : 'ean'), status: 'active',
-    name: (kitMode ? 'Průša dobalování (' + KIT_PARTS.length + ' kódů)' : snMode ? 'EAN + lokace + S/N' : eanIntl ? 'Mezinárodka' : (withLoc ? 'EAN + lokace' : 'Jen EAN')) + ' · ' + currentUser + ' · ' + d.toLocaleString('cs-CZ', { day:'numeric', month:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
+  var row = { session_uid: eanSession, kind: kitMode ? 'prusa' : (snMode && snDoc) ? 'doc_sn' : snMode ? 'ean_loc_sn' : (withLoc ? 'ean_loc' : 'ean'), status: 'active',
+    name: (kitMode ? 'Průša dobalování (' + KIT_PARTS.length + ' kódů)' : (snMode && snDoc) ? 'S/N ' + snDoc.num : snMode ? 'EAN + lokace + S/N' : eanIntl ? 'Mezinárodka' : (withLoc ? 'EAN + lokace' : 'Jen EAN')) + ' · ' + currentUser + ' · ' + d.toLocaleString('cs-CZ', { day:'numeric', month:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }),
     started_by: currentUser, started_at: d.toISOString() };
   if (currentDcId != null) row.dc_id = currentDcId;
   var sid = eanSession;
@@ -4897,8 +4974,9 @@ function anyModalOpen() {
 function readerActive() { return inputMode === 'reader' && cameraReady && !!currentUserId; }
 function roomModalOpen() { return document.getElementById('modal-inv-room').style.display === 'flex'; }
 function focusWedge() {
-  if (!readerActive() || (anyModalOpen() && !roomModalOpen() && !whereOpen() && !printOpen() && !yardOpen())) return;
+  if (!readerActive() || (anyModalOpen() && !roomModalOpen() && !whereOpen() && !printOpen() && !yardOpen() && !snDocOpen())) return;
   if (whereOpen() && document.activeElement && document.activeElement.id === 'where-input') return;
+  if (snDocOpen() && document.activeElement && document.activeElement.id === 'sn-doc-input') return;
   if (printOpen() && document.activeElement && document.activeElement.id === 'pr-input') return;
   if (yardOpen() && document.activeElement && document.activeElement.id === 'yd-q') return;
   var a = document.activeElement;
@@ -4956,6 +5034,7 @@ function submitWedge(v) {
   if (roomModalOpen()) { var other = Array.prototype.some.call(document.querySelectorAll('.modal-backdrop'), function(m){ return m.id !== 'modal-inv-room' && m.style.display === 'flex'; });
     if (!other) { document.getElementById('inv-room-input').value = v.toUpperCase(); beepOk(); saveInvRoom(); return; } }
   if (whereOpen()) { beep(); whereLookup(v); return; }
+  if (snDocOpen()) { beep(); snDocGo(v); return; }
   if (printOpen()) { beep(); document.getElementById('pr-input').value = v; prLookup(v); return; }
   if (yardOpen()) { beep(); document.getElementById('yd-q').value = v.toUpperCase(); YD.open = null; ydRender(); return; }
   if (anyModalOpen()) return;
@@ -5917,7 +5996,7 @@ function updateRoomPill() {
   pill.style.display = (appMode === 'inventura' && (invMode || intlV || freeIntl())) ? 'block' : 'none';
   var snp = document.getElementById('sn-pill');
   document.getElementById('cam-wrap').classList.toggle('haspill', pill.style.display === 'block' || (snp && snp.style.display === 'block'));
-  pill.textContent = ((intlV || freeIntl()) ? '📍 Lokace: ' : '📍 Místnost: ') + (invRoom || 'nenastavena');
+  pill.textContent = (snOn() && snDoc) ? '🧾 Doklad: ' + snDoc.num + snDocProgress() : ((intlV || freeIntl()) ? '📍 Lokace: ' : '📍 Místnost: ') + (invRoom || 'nenastavena');
 }
 function setRoom(v) {
   invRoom = v || '';
@@ -5929,6 +6008,7 @@ function setRoom(v) {
   else if (freeIntl() && v) setStatus('📍 Lokace: ' + v + ' · skenuj zásilky');
 }
 function openRoomModal(cb) {
+  if (snOn() && snDoc) { setStatus('🧾 Skenuješ S/N k dokladu ' + snDoc.num + ' – jiný doklad: ukonči a začni znovu' + snDocProgress()); return; }
   roomCallback = (typeof cb === 'function') ? cb : null;
   var lm = (intlV || freeIntl());
   document.querySelector('#modal-inv-room h2').textContent = lm ? '📍 Lokace' : '📍 Místnost';
