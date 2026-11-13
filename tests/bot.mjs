@@ -300,6 +300,7 @@ function watch(page, bag) {
     await s.evaluate(() => tkOpenList('receipt')); await sleep(1500);
     must((await s.textContent('#task-panel')).includes(r.rma.number), 'vratka není v seznamu příjmů');
     await type(r.rma.number);
+    for (let i = 0; i < 10 && !(await s.textContent('#task-panel')).includes('VRATKA'); i++) await sleep(500);
     must((await s.textContent('#task-panel')).includes('VRATKA'), 'scanner neoznačil doklad jako vratku');
     await type('2999000000011'); await s.waitForSelector('#tk-sheet', { state: 'visible', timeout: 8000 });
     must(await s.inputValue('#tkf-cond') === 'QUARANTINE', 'výchozí stav vratky není karanténa: ' + await s.inputValue('#tkf-cond'));
