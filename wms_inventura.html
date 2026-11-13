@@ -347,6 +347,7 @@ async function loadInvPage(quiet){
 
   var lq=supa.from('inventory_lists').select('*').order('created_at',{ascending:false});if(window.PRG_DC)lq=PRG_DC.apply(lq,'dc_id');var lr=await lq;
   if(lr.error){
+    if(/Failed to fetch|NetworkError|Load failed/i.test(lr.error.message||''))lr.error.message='Nelze se spojit se serverem (výpadek sítě nebo internetu). Data jsou v pořádku – zkus za chvíli 🔄 Obnovit.';
     ut.innerHTML='<tr class="empty-row"><td colspan="4">Chyba: '+lr.error.message+'</td></tr>';
     at.innerHTML='<tr class="empty-row"><td colspan="7">Chyba: '+lr.error.message+'</td></tr>';
     ct.innerHTML='<tr class="empty-row"><td colspan="10">Chyba: '+lr.error.message+'</td></tr>';
